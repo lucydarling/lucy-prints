@@ -30,14 +30,14 @@ export function CropModal() {
   if (!previewUrl) return null;
 
   const cropWidth =
-    size === "4x6" ? 1200 : size === "4x4" ? 1200 : 900;
+    size === "4x6" ? 1200 : size === "4x3" ? 1200 : size === "4x4" ? 1200 : 900;
   const cropHeight =
-    size === "4x6" ? 1800 : size === "4x4" ? 1200 : 900;
-  const aspectRatio = size === "4x6" ? 2 / 3 : 1;
+    size === "4x6" ? 1800 : size === "4x3" ? 900 : size === "4x4" ? 1200 : 900;
+  const aspectRatio = size === "4x6" ? 2 / 3 : size === "4x3" ? 4 / 3 : 1;
 
   const handleDone = () => {
     const canvas = cropperRef.current?.getCanvas({
-      // 300 DPI: 3x3 = 900px, 4x4 = 1200px, 4x6 = 1200x1800px
+      // 300 DPI: 3x3 = 900px, 4x3 = 1200x900px, 4x4 = 1200px, 4x6 = 1200x1800px
       width: cropWidth,
       height: cropHeight,
     });
@@ -69,7 +69,7 @@ export function CropModal() {
         <div className="text-center">
           <p className="text-white text-sm font-medium">{label}</p>
           <p className="text-white/60 text-xs">
-            {size}&quot; {aspectRatio === 1 ? "square" : "portrait"} crop
+            {size}&quot; {aspectRatio === 1 ? "square" : aspectRatio > 1 ? "landscape" : "portrait"} crop
           </p>
         </div>
         <button

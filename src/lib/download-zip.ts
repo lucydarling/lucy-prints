@@ -137,6 +137,8 @@ function getSizeLabel(size: PrintSize): string {
   switch (size) {
     case "3x3":
       return '3x3"';
+    case "4x3":
+      return '4x3"';
     case "4x4":
       return '4x4"';
     case "4x6":
