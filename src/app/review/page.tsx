@@ -28,6 +28,25 @@ export default function ReviewPage() {
     }
   }, [bookTheme, router]);
 
+  // After save modal completes, auto-trigger the pending download
+  useEffect(() => {
+    if (!pendingDownload.current || !sessionId || !bookTheme) return;
+    pendingDownload.current = false;
+    setDownloading(true);
+    downloadPhotosZip(photos, extras, bookTheme, {
+      pad3x3to4x4: pad3x3 && (extras.filter((e) => e.size === "3x3" && e.croppedUrl).length +
+        PHOTO_SLOTS.filter((slot) => slot.size === "3x3" && photos[slot.key]?.status !== "empty").length) > 0,
+      babyName,
+      notes,
+    })
+      .catch((err) => {
+        console.error("Download error:", err);
+        alert("Something went wrong creating the download. Please try again.");
+      })
+      .finally(() => setDownloading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
   if (!bookTheme) {
     return null;
   }
@@ -55,7 +74,7 @@ export default function ReviewPage() {
   const executeDownload = async () => {
     setDownloading(true);
     try {
-      await downloadPhotosZip(photos, extras, bookTheme!, {
+      await downloadPhotosZip(photos, extras, bookTheme, {
         pad3x3to4x4: pad3x3 && count3x3 > 0,
         babyName,
         notes,
@@ -67,15 +86,6 @@ export default function ReviewPage() {
       setDownloading(false);
     }
   };
-
-  // After save modal completes, auto-trigger the pending download
-  useEffect(() => {
-    if (pendingDownload.current && sessionId) {
-      pendingDownload.current = false;
-      executeDownload();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
 
   const handleDownload = () => {
     if (downloading) return;
