@@ -30,10 +30,10 @@ export default function Home() {
             className="mx-auto"
             priority
           />
-          <p className="text-sm font-medium mt-2" style={{ color: "#FAB8A9" }}>Photo Prints</p>
+          <p className="text-sm font-medium mt-2" style={{ color: "#FAB8A9" }}>Photo Organizer</p>
           <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
-            Print beautiful photos sized perfectly for your memory book. We&apos;ll
-            guide you through every page.
+            Organize and crop your photos for every page of your memory book —
+            then download them ready to print at home or at any photo lab.
           </p>
         </div>
       </div>
@@ -71,9 +71,12 @@ export default function Home() {
             <li>Select your memory book theme below</li>
             <li>Upload photos — we&apos;ll tell you exactly which ones you need</li>
             <li>Crop each photo to the perfect size</li>
-            <li>Order your prints — they ship right to your door</li>
-            <li>Tape or glue your prints into your book</li>
+            <li>Download your ready-to-print photos</li>
+            <li>Print at home or any photo lab, then add them to your book</li>
           </ol>
+          <p className="text-xs text-[#FAB8A9] mt-3">
+            Print ordering coming soon — we&apos;re working on it!
+          </p>
         </div>
 
         {/* Theme selection */}
@@ -128,7 +131,7 @@ function ThemeCard({
         }`}
       >
         <Image
-          src={`/covers/${theme.id}.jpg`}
+          src={theme.id === "flower_child" ? `/covers/flower_child.png` : `/covers/${theme.id}.jpg`}
           alt={theme.name}
           fill
           className="object-cover"

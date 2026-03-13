@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
-import { buildCheckoutUrl } from "@/lib/shopify";
+import { PHOTO_SLOTS } from "@/lib/photo-slots";
 import { downloadPhotosZip } from "@/lib/download-zip";
 
 export default function ReviewPage() {
@@ -14,7 +13,6 @@ export default function ReviewPage() {
   const extras = usePhotoStore((s) => s.extras);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const notes = usePhotoStore((s) => s.notes);
-  const sessionToken = useSaveStore((s) => s.sessionToken);
   const babyName = useSaveStore((s) => s.babyName);
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
@@ -30,9 +28,6 @@ export default function ReviewPage() {
   if (!bookTheme) {
     return null;
   }
-
-  const themeConfig = BOOK_THEMES.find((t) => t.id === bookTheme);
-  const tier = themeConfig?.tier === "luxury" ? "luxury" : "standard";
 
   const uploadedSlots = PHOTO_SLOTS.filter((slot) => {
     const photo = photos[slot.key];
@@ -53,23 +48,6 @@ export default function ReviewPage() {
     extras.filter((e) => e.size === "3x3" && e.croppedUrl).length;
   const totalPhotos = count4x6 + count4x3 + count4x4 + count3x3;
   const missingCount = PHOTO_SLOTS.length - uploadedSlots.length;
-
-  const handleCheckout = () => {
-    if (!sessionToken) {
-      alert(
-        "Please save your progress first so your photos are connected to your order."
-      );
-      router.push("/upload");
-      return;
-    }
-    const url = buildCheckoutUrl({
-      tier,
-      sessionToken,
-      bookTheme,
-      photoCount: totalPhotos,
-    });
-    window.location.href = url;
-  };
 
   const handleDownload = async () => {
     if (downloading) return;
@@ -111,7 +89,7 @@ export default function ReviewPage() {
               />
             </svg>
           </button>
-          <h1 className="text-lg font-bold text-gray-900">Review Your Order</h1>
+          <h1 className="text-lg font-bold text-gray-900">Your Photos</h1>
         </div>
       </div>
 
@@ -210,23 +188,9 @@ export default function ReviewPage() {
           </div>
         </div>
 
-        {/* Checkout button */}
-        <button
-          onClick={handleCheckout}
-          disabled={totalPhotos === 0}
-          className="w-full py-3 bg-[#FAB8A9] text-white font-semibold rounded-xl text-sm hover:bg-[#f5a898] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          Proceed to Checkout
-        </button>
-        {!sessionToken && (
-          <p className="text-xs text-gray-400 text-center mt-2">
-            You&apos;ll need to save your progress before checking out
-          </p>
-        )}
-
-        {/* Download section */}
+        {/* Download section — primary action */}
         {totalPhotos > 0 && (
-          <div className="mt-4">
+          <div className="mb-4">
             {/* 3x3 print compatibility option */}
             {count3x3 > 0 && (
               <div className="mb-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
@@ -262,7 +226,7 @@ export default function ReviewPage() {
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="w-full py-3 bg-white text-gray-700 font-medium rounded-xl text-sm border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 bg-[#FAB8A9] text-white font-semibold rounded-xl text-sm hover:bg-[#f5a898] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {downloading ? (
                 <>
@@ -281,8 +245,21 @@ export default function ReviewPage() {
                 </>
               )}
             </button>
+            <p className="text-xs text-gray-400 text-center mt-2">
+              Print at home or drop into any photo lab
+            </p>
           </div>
         )}
+
+        {/* Coming soon note */}
+        <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-center">
+          <p className="text-xs text-rose-400 font-medium">
+            Direct print ordering coming soon
+          </p>
+          <p className="text-xs text-rose-300 mt-0.5">
+            We&apos;re working on connecting Lucy Darling prints directly — wanted to get this into your hands right away.
+          </p>
+        </div>
       </div>
     </div>
   );
