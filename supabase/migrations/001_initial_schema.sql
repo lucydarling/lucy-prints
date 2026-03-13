@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   photo_count INTEGER DEFAULT 0,
   status      TEXT DEFAULT 'active',         -- active | completed | expired
   created_at  TIMESTAMPTZ DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ DEFAULT NOW()
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW()  -- for inactivity-based expiration (2 years)
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);

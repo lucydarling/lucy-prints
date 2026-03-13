@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      // Update baby info if provided
+      // Update baby info and touch last_activity_at
       await supabaseAdmin
         .from("sessions")
         .update({
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
           baby_birthdate: babyBirthdate || undefined,
           phone: phone || undefined,
           sms_opt_in: smsOptIn || false,
+          last_activity_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
 
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
         phone: phone || null,
         sms_opt_in: smsOptIn || false,
         book_theme: bookTheme,
+        last_activity_at: new Date().toISOString(),
       })
       .select("id, token")
       .single();

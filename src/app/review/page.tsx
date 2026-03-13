@@ -14,6 +14,7 @@ export default function ReviewPage() {
   const extras = usePhotoStore((s) => s.extras);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const sessionToken = useSaveStore((s) => s.sessionToken);
+  const babyName = useSaveStore((s) => s.babyName);
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
   const [pad3x3, setPad3x3] = useState(false);
@@ -72,6 +73,7 @@ export default function ReviewPage() {
     try {
       await downloadPhotosZip(photos, extras, bookTheme, {
         pad3x3to4x4: pad3x3 && count3x3 > 0,
+        babyName,
       });
     } catch (err) {
       console.error("Download error:", err);

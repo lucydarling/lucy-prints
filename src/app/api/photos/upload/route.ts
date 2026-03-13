@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Update photo count on session
+    // Update photo count and touch last_activity_at
     const { count } = await supabaseAdmin
       .from("session_photos")
       .select("*", { count: "exact", head: true })
@@ -101,7 +101,10 @@ export async function POST(req: NextRequest) {
 
     await supabaseAdmin
       .from("sessions")
-      .update({ photo_count: count || 0 })
+      .update({
+        photo_count: count || 0,
+        last_activity_at: new Date().toISOString(),
+      })
       .eq("id", session.id);
 
     return NextResponse.json({ success: true, storagePath });

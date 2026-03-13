@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { PHOTO_SLOTS, type PrintSize } from "@/lib/photo-slots";
+import { PHOTO_SLOTS, type PrintSize, type PhotoSlot } from "@/lib/photo-slots";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
 
 export interface DownloadOptions {
@@ -7,23 +7,26 @@ export interface DownloadOptions {
    *  (1 inch top, 1 inch right at 300 DPI) so they can be printed as 4x4
    *  and trimmed to 3x3. */
   pad3x3to4x4?: boolean;
+  /** Baby's name for personalized filenames. Defaults to "Baby" if not set. */
+  babyName?: string | null;
 }
 
 /**
- * Build and trigger download of a ZIP file containing all cropped photos,
- * organized by section folder.
+ * Build and trigger download of a ZIP file containing all cropped photos.
  *
- * Folder structure:
+ * All images are flat in a single folder, numbered for book order, with
+ * personalized filenames using the baby's name:
+ *
  *   Lucy Darling Prints/
- *   ├── 01 - Baby's Photo/
- *   │   └── Baby's Photo (4x4).jpg
- *   ├── 02 - Before Baby/
- *   │   ├── Ultrasound Photo (4x6).jpg
- *   │   └── Baby Bump Photo (4x4).jpg
- *   ├── ...
- *   └── Extra Prints/
- *       ├── Extra 4x4 Print 1.jpg
- *       └── Extra 4x6 Print 2.jpg
+ *   ├── 01 Fred's Photo (4x4).jpg
+ *   ├── 02 Ultrasound Photo (4x6).jpg
+ *   ├── 03 Baby Bump Photo (4x4).jpg
+ *   ├── 06 Fred's Month 1 (4x4).jpg
+ *   ├── 18 Fred's First Bath (3x3).jpg
+ *   ├── 34 Fred's First Christmas (3x3).jpg
+ *   ├── 44 Fred's 1st Birthday (4x4).jpg
+ *   ├── Extra 4x4 Print 1.jpg
+ *   └── Extra 4x6 Print 2.jpg
  */
 export async function downloadPhotosZip(
   photos: Record<string, PhotoEntry>,
@@ -33,53 +36,38 @@ export async function downloadPhotosZip(
 ): Promise<void> {
   const zip = new JSZip();
   const root = zip.folder("Lucy Darling Prints")!;
+  const name = options.babyName?.trim() || "Baby";
 
-  // Group photo slots by section, in order
-  const sectionOrder: Map<string, { label: string; index: number }> = new Map();
-  let sectionIdx = 1;
-
-  for (const slot of PHOTO_SLOTS) {
-    if (!sectionOrder.has(slot.section)) {
-      sectionOrder.set(slot.section, {
-        label: slot.sectionLabel,
-        index: sectionIdx++,
-      });
-    }
-  }
-
-  // Add regular slot photos
+  // Add regular slot photos — flat, numbered, personalized
   for (const slot of PHOTO_SLOTS) {
     const photo = photos[slot.key];
     const imageData = photo?.croppedUrl;
     if (!imageData) continue;
 
-    const sectionInfo = sectionOrder.get(slot.section)!;
-    const folderName = `${String(sectionInfo.index).padStart(2, "0")} - ${sectionInfo.label}`;
-    const folder = root.folder(folderName)!;
-
     const shouldPad = options.pad3x3to4x4 && slot.size === "3x3";
-    const sizeLabel = shouldPad ? '3x3" on 4x4 trim sheet' : getSizeLabel(slot.size);
-    const fileName = `${slot.prompt} (${sizeLabel}).jpg`;
+    const sizeLabel = shouldPad ? '3x3 on 4x4 trim sheet' : getSizeLabel(slot.size);
+    const label = personalizeSlotName(slot, name, photo.customLabel);
+    const orderNum = String(slot.sortOrder).padStart(2, "0");
+    const fileName = `${orderNum} ${label} (${sizeLabel}).jpg`;
 
     const blob = shouldPad
       ? await padImageTo4x4(imageData)
       : await dataUrlToBlob(imageData);
-    folder.file(fileName, blob);
+    root.file(fileName, blob);
   }
 
-  // Add extras
+  // Add extras — no number prefix, just "Extra" label
   const croppedExtras = extras.filter((e) => e.croppedUrl);
   if (croppedExtras.length > 0) {
-    const extrasFolder = root.folder("Extra Prints")!;
     for (let i = 0; i < croppedExtras.length; i++) {
       const extra = croppedExtras[i];
       const shouldPad = options.pad3x3to4x4 && extra.size === "3x3";
-      const sizeLabel = shouldPad ? '3x3" on 4x4 trim sheet' : getSizeLabel(extra.size);
+      const sizeLabel = shouldPad ? '3x3 on 4x4 trim sheet' : getSizeLabel(extra.size);
       const fileName = `Extra ${sizeLabel} Print ${i + 1}.jpg`;
       const blob = shouldPad
         ? await padImageTo4x4(extra.croppedUrl!)
         : await dataUrlToBlob(extra.croppedUrl!);
-      extrasFolder.file(fileName, blob);
+      root.file(fileName, blob);
     }
   }
 
@@ -93,6 +81,56 @@ export async function downloadPhotosZip(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Generate a personalized filename label for a photo slot.
+ *
+ * Examples with babyName="Fred":
+ *   "Baby's Photo"       → "Fred's Photo"
+ *   "Month 3"            → "Fred's Month 3"
+ *   "First Bath"         → "Fred's First Bath"
+ *   "1st Birthday"       → "Fred's 1st Birthday"
+ *   "First Day of School"→ "Fred's First Day of School"
+ *   "First Holiday #1" (customLabel="Christmas") → "Fred's First Christmas"
+ *   "My First ___" (customLabel="Camping Trip")  → "Fred's First Camping Trip"
+ *   "Ultrasound Photo"   → "Ultrasound Photo" (unchanged)
+ *   "Our Home"           → "Our Home" (unchanged)
+ */
+function personalizeSlotName(
+  slot: PhotoSlot,
+  babyName: string,
+  customLabel?: string
+): string {
+  const possessive = `${babyName}'s`;
+
+  // Custom-labeled slots: "My First ___" or "First Holiday #1/#2"
+  if (slot.customLabel && customLabel) {
+    return `${possessive} First ${customLabel}`;
+  }
+
+  // "Baby's Photo" → "Fred's Photo"
+  if (slot.prompt.startsWith("Baby's")) {
+    return slot.prompt.replace("Baby's", possessive);
+  }
+
+  // Sections where we prepend the baby's name
+  const personalizedSections = [
+    "monthly_milestones", // "Month 1" → "Fred's Month 1"
+    "firsts",             // "First Bath" → "Fred's First Bath"
+    "milestones",         // "First Crawl" → "Fred's First Crawl"
+    "birthdays",          // "1st Birthday" → "Fred's 1st Birthday"
+    "school",             // "First Day of School" → "Fred's First Day of School"
+    "holidays",           // "First Holiday #1" (no custom label) → "Fred's First Holiday #1"
+  ];
+
+  if (personalizedSections.includes(slot.section)) {
+    return `${possessive} ${slot.prompt}`;
+  }
+
+  // Everything else stays as-is: "Ultrasound Photo", "Baby Bump Photo",
+  // "Birth / Arrival Photo", "Our Home"
+  return slot.prompt;
 }
 
 function getSizeLabel(size: PrintSize): string {
