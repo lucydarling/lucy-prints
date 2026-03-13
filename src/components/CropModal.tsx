@@ -4,26 +4,36 @@ import { useRef } from "react";
 import { Cropper, CropperRef } from "react-advanced-cropper";
 import "react-advanced-cropper/dist/style.css";
 import { usePhotoStore } from "@/store/photo-store";
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import { PHOTO_SLOTS, type PrintSize } from "@/lib/photo-slots";
 
 export function CropModal() {
   const editingSlot = usePhotoStore((s) => s.editingSlot);
   const photos = usePhotoStore((s) => s.photos);
+  const extras = usePhotoStore((s) => s.extras);
   const setCropped = usePhotoStore((s) => s.setCropped);
+  const setExtraCropped = usePhotoStore((s) => s.setExtraCropped);
   const setEditingSlot = usePhotoStore((s) => s.setEditingSlot);
   const cropperRef = useRef<CropperRef>(null);
 
   if (!editingSlot) return null;
 
+  // Check regular photo slots first, then extras
   const photo = photos[editingSlot];
   const slot = PHOTO_SLOTS.find((s) => s.key === editingSlot);
-  if (!photo?.previewUrl || !slot) return null;
+  const extra = !slot ? extras.find((e) => e.id === editingSlot) : null;
+
+  // Determine preview URL and size
+  const previewUrl = slot ? photo?.previewUrl : extra?.previewUrl;
+  const size: PrintSize = slot?.size || extra?.size || "4x4";
+  const label = slot?.prompt || `Extra ${size}" Print`;
+
+  if (!previewUrl) return null;
 
   const cropWidth =
-    slot.size === "4x6" ? 1200 : slot.size === "4x4" ? 1200 : 900;
+    size === "4x6" ? 1200 : size === "4x4" ? 1200 : 900;
   const cropHeight =
-    slot.size === "4x6" ? 1800 : slot.size === "4x4" ? 1200 : 900;
-  const aspectRatio = slot.size === "4x6" ? 2 / 3 : 1;
+    size === "4x6" ? 1800 : size === "4x4" ? 1200 : 900;
+  const aspectRatio = size === "4x6" ? 2 / 3 : 1;
 
   const handleDone = () => {
     const canvas = cropperRef.current?.getCanvas({
@@ -33,7 +43,11 @@ export function CropModal() {
     });
     if (canvas) {
       const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-      setCropped(editingSlot, dataUrl);
+      if (extra) {
+        setExtraCropped(editingSlot, dataUrl);
+      } else {
+        setCropped(editingSlot, dataUrl);
+      }
     }
     setEditingSlot(null);
   };
@@ -53,9 +67,9 @@ export function CropModal() {
           Cancel
         </button>
         <div className="text-center">
-          <p className="text-white text-sm font-medium">{slot.prompt}</p>
+          <p className="text-white text-sm font-medium">{label}</p>
           <p className="text-white/60 text-xs">
-            {slot.size}&quot; {aspectRatio === 1 ? "square" : "portrait"} crop
+            {size}&quot; {aspectRatio === 1 ? "square" : "portrait"} crop
           </p>
         </div>
         <button
@@ -70,7 +84,7 @@ export function CropModal() {
       <div className="flex-1 relative">
         <Cropper
           ref={cropperRef}
-          src={photo.previewUrl}
+          src={previewUrl}
           stencilProps={{
             aspectRatio,
           }}
@@ -81,7 +95,7 @@ export function CropModal() {
       {/* Footer hint */}
       <div className="px-4 py-3 bg-black/50 text-center">
         <p className="text-white/60 text-xs">
-          Pinch to zoom. Drag to position. Photo will print at {slot.size}
+          Pinch to zoom. Drag to position. Photo will print at {size}
           &quot; at 300 DPI.
         </p>
       </div>

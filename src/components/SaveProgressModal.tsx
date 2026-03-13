@@ -18,6 +18,7 @@ export function SaveProgressModal() {
   const [babyBirthdate, setBabyBirthdate] = useState("");
   const [phone, setPhone] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
+  const [birthdateOptOut, setBirthdateOptOut] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -158,18 +159,57 @@ export function SaveProgressModal() {
             />
           </div>
 
-          {/* Baby birthdate — optional */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Baby&apos;s Birthdate <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input
-              type="date"
-              value={babyBirthdate}
-              onChange={(e) => setBabyBirthdate(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#FAB8A9] focus:border-transparent"
-            />
-          </div>
+          {/* Baby birthdate — optional with explanation */}
+          {!birthdateOptOut && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Baby&apos;s Birthday <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="date"
+                value={babyBirthdate}
+                onChange={(e) => setBabyBirthdate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#FAB8A9] focus:border-transparent"
+              />
+              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                This helps us send gentle milestone reminders so you never miss a photo moment.
+                We never sell your info.{" "}
+                <a
+                  href="https://www.lucydarling.com/policies/privacy-policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-600"
+                >
+                  Privacy Policy
+                </a>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setBirthdateOptOut(true);
+                  setBabyBirthdate("");
+                }}
+                className="text-xs text-gray-400 hover:text-gray-500 mt-1 underline"
+              >
+                I don&apos;t want help remembering to take photos
+              </button>
+            </div>
+          )}
+
+          {birthdateOptOut && (
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <p className="text-xs text-gray-500">
+                No milestone reminders — got it! You can always change your mind later.
+              </p>
+              <button
+                type="button"
+                onClick={() => setBirthdateOptOut(false)}
+                className="text-xs text-[#FAB8A9] hover:text-[#f5a898] mt-1 underline font-medium"
+              >
+                Actually, I&apos;d like reminders
+              </button>
+            </div>
+          )}
 
           {/* Phone — optional */}
           <div>
@@ -227,6 +267,15 @@ export function SaveProgressModal() {
 
           <p className="text-xs text-center text-gray-400">
             Your photos are stored securely. No account needed.
+            <br />
+            <a
+              href="https://www.lucydarling.com/policies/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-gray-600"
+            >
+              Privacy Policy
+            </a>
           </p>
         </form>
       </div>

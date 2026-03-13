@@ -6,6 +6,7 @@ import { usePhotoStore } from "@/store/photo-store";
 import { getSlotsBySection } from "@/lib/photo-slots";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SectionGroup } from "@/components/SectionGroup";
+import { ExtraSlotCard } from "@/components/ExtraSlotCard";
 import { CropModal } from "@/components/CropModal";
 import { SaveButton } from "@/components/SaveButton";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
@@ -15,6 +16,7 @@ export default function UploadPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const initializeSlots = usePhotoStore((s) => s.initializeSlots);
   const photos = usePhotoStore((s) => s.photos);
+  const extras = usePhotoStore((s) => s.extras);
   const router = useRouter();
 
   // Background photo upload to cloud
@@ -74,13 +76,26 @@ export default function UploadPage() {
             </h2>
             <span className="text-xs text-gray-400 font-medium">Optional</span>
           </div>
+
+          {/* Existing extras */}
+          {extras.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {extras.map((extra) => (
+                <ExtraSlotCard key={extra.id} extra={extra} />
+              ))}
+            </div>
+          )}
+
           <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm text-center">
             <p className="text-sm text-gray-500 mb-3">
-              Need more prints for the blank pages at the back of your book?
+              {extras.length > 0
+                ? "Add another print?"
+                : "Need more prints for the blank pages at the back of your book?"}
             </p>
-            <div className="flex gap-2 justify-center">
+            <div className="flex gap-2 justify-center flex-wrap">
               <ExtraButton size="3x3" />
               <ExtraButton size="4x4" />
+              <ExtraButton size="4x6" />
             </div>
           </div>
         </div>
@@ -88,7 +103,7 @@ export default function UploadPage() {
 
       {/* Floating review button */}
       {uploaded > 0 && (
-        <div className="fixed bottom-0 inset-x-0 p-4 bg-white/95 backdrop-blur-sm border-t border-gray-100">
+        <div className="fixed bottom-0 inset-x-0 p-4 bg-white/95 backdrop-blur-sm border-t border-gray-100 safe-bottom">
           <div className="max-w-2xl mx-auto">
             <button
               onClick={() => router.push("/review")}
@@ -109,7 +124,7 @@ export default function UploadPage() {
   );
 }
 
-function ExtraButton({ size }: { size: "3x3" | "4x4" }) {
+function ExtraButton({ size }: { size: "3x3" | "4x4" | "4x6" }) {
   const addExtra = usePhotoStore((s) => s.addExtra);
 
   return (

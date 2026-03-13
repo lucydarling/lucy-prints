@@ -2,26 +2,22 @@
 
 import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
-import { type PhotoSlot } from "@/lib/photo-slots";
-import { usePhotoStore } from "@/store/photo-store";
+import { usePhotoStore, type ExtraPrint } from "@/store/photo-store";
 
-interface PhotoSlotCardProps {
-  slot: PhotoSlot;
+interface ExtraSlotCardProps {
+  extra: ExtraPrint;
 }
 
-export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
-  const photo = usePhotoStore((s) => s.photos[slot.key]);
-  const setPhoto = usePhotoStore((s) => s.setPhoto);
+export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
+  const setExtraPhoto = usePhotoStore((s) => s.setExtraPhoto);
   const setEditingSlot = usePhotoStore((s) => s.setEditingSlot);
-  const setCustomLabel = usePhotoStore((s) => s.setCustomLabel);
-  const setMilestoneDate = usePhotoStore((s) => s.setMilestoneDate);
-  const removePhoto = usePhotoStore((s) => s.removePhoto);
+  const removeExtra = usePhotoStore((s) => s.removeExtra);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const hasPhoto = photo && (photo.previewUrl || photo.croppedUrl);
-  const displayUrl = photo?.croppedUrl || photo?.previewUrl;
+  const hasPhoto = extra.previewUrl || extra.croppedUrl;
+  const displayUrl = extra.croppedUrl || extra.previewUrl;
+  const aspectRatio = extra.size === "4x6" ? "portrait" : "square";
 
   const handleFile = useCallback(
     (file: File) => {
@@ -31,10 +27,10 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
         return;
       }
       const url = URL.createObjectURL(file);
-      setPhoto(slot.key, url);
-      setEditingSlot(slot.key);
+      setExtraPhoto(extra.id, url);
+      setEditingSlot(extra.id);
     },
-    [slot.key, setPhoto, setEditingSlot]
+    [extra.id, setExtraPhoto, setEditingSlot]
   );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,14 +65,11 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
 
   const handleClick = () => {
     if (hasPhoto) {
-      setEditingSlot(slot.key);
+      setEditingSlot(extra.id);
     } else {
       fileInputRef.current?.click();
     }
   };
-
-  const promptText =
-    slot.customLabel && photo?.customLabel ? photo.customLabel : slot.prompt;
 
   return (
     <div
@@ -93,7 +86,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       <button
         onClick={handleClick}
         className={`relative flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center
-          ${slot.size === "4x6" ? "w-14 h-20" : slot.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
+          ${extra.size === "4x6" ? "w-14 h-20" : extra.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
           ${hasPhoto ? "bg-gray-100" : "bg-rose-50 border-2 border-dashed border-rose-200 hover:border-rose-300"}
           transition-colors`}
       >
@@ -101,12 +94,12 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
           <>
             <Image
               src={displayUrl}
-              alt={promptText}
+              alt={`Extra ${extra.size}" print`}
               fill
               unoptimized
               className="object-cover"
             />
-            {photo?.status === "cropped" && (
+            {extra.croppedUrl && (
               <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                 <svg
                   className="w-2.5 h-2.5 text-white"
@@ -141,53 +134,14 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
         )}
       </button>
 
-      {/* Label + size + date */}
+      {/* Label + size */}
       <div className="flex-1 min-w-0">
-        {slot.customLabel && !hasPhoto ? (
-          isEditingLabel ? (
-            <input
-              type="text"
-              autoFocus
-              placeholder="My First ___"
-              defaultValue={photo?.customLabel || ""}
-              onBlur={(e) => {
-                if (e.target.value.trim()) {
-                  setCustomLabel(slot.key, e.target.value.trim());
-                }
-                setIsEditingLabel(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              className="text-sm font-medium text-gray-800 w-full border-b border-rose-300 focus:border-rose-500 outline-none bg-transparent pb-0.5"
-            />
-          ) : (
-            <button
-              onClick={() => setIsEditingLabel(true)}
-              className="text-sm font-medium text-gray-400 italic hover:text-gray-600 text-left"
-            >
-              {photo?.customLabel || "Tap to name this first..."}
-            </button>
-          )
-        ) : (
-          <p className="text-sm font-medium text-gray-800 truncate">
-            {promptText}
-          </p>
-        )}
-        <p className="text-xs text-gray-400 mt-0.5">
-          {slot.size}&quot; print
+        <p className="text-sm font-medium text-gray-800 truncate">
+          Extra {extra.size}&quot; Print
         </p>
-        {slot.dateField && (
-          <input
-            type="date"
-            value={photo?.milestoneDate || ""}
-            onChange={(e) => setMilestoneDate(slot.key, e.target.value)}
-            className="mt-1 text-xs text-gray-500 border border-gray-200 rounded px-1.5 py-0.5 w-full max-w-[140px] focus:border-rose-300 focus:outline-none"
-            placeholder="Date (optional)"
-          />
-        )}
+        <p className="text-xs text-gray-400 mt-0.5">
+          {extra.size}&quot; {aspectRatio} print
+        </p>
       </div>
 
       {/* Actions */}
@@ -196,10 +150,10 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              removePhoto(slot.key);
+              removeExtra(extra.id);
             }}
             className="p-1.5 text-gray-300 hover:text-red-400 transition-colors"
-            aria-label="Remove photo"
+            aria-label="Remove extra print"
           >
             <svg
               className="w-4 h-4"

@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
 import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
 import { buildCheckoutUrl } from "@/lib/shopify";
+import { downloadPhotosZip } from "@/lib/download-zip";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
@@ -13,6 +15,15 @@ export default function ReviewPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const sessionToken = useSaveStore((s) => s.sessionToken);
   const router = useRouter();
+  const [downloading, setDownloading] = useState(false);
+  const [pad3x3, setPad3x3] = useState(false);
+  const [show3x3Info, setShow3x3Info] = useState(false);
+
+  useEffect(() => {
+    if (!bookTheme) {
+      router.replace("/");
+    }
+  }, [bookTheme, router]);
 
   if (!bookTheme) {
     return null;
@@ -53,6 +64,21 @@ export default function ReviewPage() {
       photoCount: totalPhotos,
     });
     window.location.href = url;
+  };
+
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadPhotosZip(photos, extras, bookTheme, {
+        pad3x3to4x4: pad3x3 && count3x3 > 0,
+      });
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("Something went wrong creating the download. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -181,6 +207,66 @@ export default function ReviewPage() {
           <p className="text-xs text-gray-400 text-center mt-2">
             You&apos;ll need to save your progress before checking out
           </p>
+        )}
+
+        {/* Download section */}
+        {totalPhotos > 0 && (
+          <div className="mt-4">
+            {/* 3x3 print compatibility option */}
+            {count3x3 > 0 && (
+              <div className="mb-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pad3x3}
+                    onChange={(e) => setPad3x3(e.target.checked)}
+                    className="w-4 h-4 rounded accent-[#FAB8A9] shrink-0"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Make 3x3&quot; photos printable as 4x4&quot;
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setShow3x3Info(!show3x3Info);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline shrink-0 ml-auto"
+                  >
+                    {show3x3Info ? "Hide" : "Why?"}
+                  </button>
+                </label>
+                {show3x3Info && (
+                  <p className="text-xs text-gray-400 mt-2 ml-[26px] leading-relaxed">
+                    Most print services don&apos;t offer a 3x3&quot; option. When this is checked, your 3x3&quot; photos will be placed on a 4x4&quot; sheet with trim guides — just order 4x4&quot; prints and cut along the lines.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="w-full py-3 bg-white text-gray-700 font-medium rounded-xl text-sm border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {downloading ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Creating ZIP...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Photos
+                </>
+              )}
+            </button>
+          </div>
         )}
       </div>
     </div>

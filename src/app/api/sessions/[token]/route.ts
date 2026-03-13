@@ -11,13 +11,28 @@ export async function GET(
     // Look up session
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id, token, email, baby_name, baby_birthdate, book_theme, photo_count")
+      .select("id, token, email, baby_name, baby_birthdate, book_theme, photo_count, created_at")
       .eq("token", token)
       .eq("status", "active")
       .maybeSingle();
 
     if (!session) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    // Check if session is older than 90 days
+    const createdAt = new Date(session.created_at);
+    const daysSinceCreated = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceCreated > 90) {
+      // Mark as expired
+      await supabaseAdmin
+        .from("sessions")
+        .update({ status: "expired" })
+        .eq("id", session.id);
+      return NextResponse.json(
+        { error: "This session has expired. Please start a new upload." },
+        { status: 410 }
+      );
     }
 
     // Fetch all photos for this session

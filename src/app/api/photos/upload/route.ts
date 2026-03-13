@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
 
       if (dbError) {
         console.error("DB upsert error (extras):", dbError);
+        return NextResponse.json({ error: "Failed to save photo record" }, { status: 500 });
       }
     } else {
       const { error: dbError } = await supabaseAdmin
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
 
       if (dbError) {
         console.error("DB upsert error:", dbError);
+        return NextResponse.json({ error: "Failed to save photo record" }, { status: 500 });
       }
     }
 

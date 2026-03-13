@@ -3,14 +3,18 @@
  *
  * Product: "Custom Photo Prints for Memory Book"
  * Created as Draft in Shopify admin — set pricing & activate when ready.
+ *
+ * Variant IDs and store domain come from env vars so they can differ
+ * between staging and production without a code change.
  */
 
-const SHOPIFY_STORE_DOMAIN = "www.lucydarling.com";
+const SHOPIFY_STORE_DOMAIN =
+  process.env.NEXT_PUBLIC_SHOPIFY_DOMAIN || "www.lucydarling.com";
 
 /** Shopify variant IDs for the photo print product */
 export const SHOPIFY_VARIANTS = {
-  standard: "48078680424673",
-  luxury: "48078680457441",
+  standard: process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD || "48078680424673",
+  luxury: process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY || "48078680457441",
 } as const;
 
 /**

@@ -184,11 +184,54 @@ export const usePhotoStore = create<PhotoStore>()(
     }),
     {
       name: "lucy-prints-photos",
-      partialize: (state) => ({
-        bookTheme: state.bookTheme,
-        photos: state.photos,
-        extras: state.extras,
-      }),
+      partialize: (state) => {
+        // Strip blob: previewUrls (invalid after page reload) to reduce storage size.
+        // CroppedUrls (base64) are kept for local display until uploaded to Supabase.
+        const cleanPhotos: Record<string, PhotoEntry> = {};
+        for (const [key, entry] of Object.entries(state.photos)) {
+          cleanPhotos[key] = {
+            ...entry,
+            previewUrl: null, // blob URLs can't survive reload
+          };
+        }
+
+        const cleanExtras = state.extras.map((e) => ({
+          ...e,
+          previewUrl: null,
+        }));
+
+        return {
+          bookTheme: state.bookTheme,
+          photos: cleanPhotos,
+          extras: cleanExtras,
+        };
+      },
+      storage: {
+        getItem: (name) => {
+          try {
+            const str = localStorage.getItem(name);
+            return str ? JSON.parse(str) : null;
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch (e) {
+            // Quota exceeded — silently fail rather than crashing.
+            // Photos are safe if session was saved (they're in Supabase).
+            console.warn("localStorage quota exceeded:", e);
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name);
+          } catch {
+            // ignore
+          }
+        },
+      },
     }
   )
 );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSaveStore } from "@/store/save-store";
 
 export function SaveButton() {
@@ -9,6 +10,8 @@ export function SaveButton() {
   const uploadingSlot = useSaveStore((s) => s.uploadingSlot);
   const uploadedSlots = useSaveStore((s) => s.uploadedSlots);
   const uploadErrors = useSaveStore((s) => s.uploadErrors);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   // No session yet — show "Save My Progress"
   if (!sessionToken) {
@@ -73,13 +76,40 @@ export function SaveButton() {
     );
   }
 
-  // All synced
+  // All synced — show saved status with resend link option
+  const handleResend = async () => {
+    if (!sessionToken || resending) return;
+    setResending(true);
+    try {
+      await fetch("/api/magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken }),
+      });
+      setResent(true);
+      setTimeout(() => setResent(false), 3000);
+    } catch {
+      // Silent fail — non-critical
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full shadow-sm border border-green-200">
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-      </svg>
-      {totalSynced > 0 ? `${totalSynced} saved` : "Saved"}
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full shadow-sm border border-green-200">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+        {totalSynced > 0 ? `${totalSynced} saved` : "Saved"}
+      </div>
+      <button
+        onClick={handleResend}
+        disabled={resending}
+        className="text-[10px] text-gray-400 hover:text-gray-600 underline transition-colors disabled:opacity-50"
+      >
+        {resent ? "Link sent!" : resending ? "Sending..." : "Resend my link"}
+      </button>
     </div>
   );
 }

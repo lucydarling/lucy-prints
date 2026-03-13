@@ -21,6 +21,7 @@ export function useAutoUpload() {
   const extras = usePhotoStore((s) => s.extras);
 
   const prevPhotosRef = useRef<typeof photos>({});
+  const prevExtrasRef = useRef<typeof extras>([]);
 
   // Watch for newly cropped photos and auto-queue them
   useEffect(() => {
@@ -45,6 +46,29 @@ export function useAutoUpload() {
 
     prevPhotosRef.current = photos;
   }, [photos, sessionToken, addToUploadQueue]);
+
+  // Watch for newly cropped extras and auto-queue them
+  useEffect(() => {
+    if (!sessionToken) return;
+
+    const prev = prevExtrasRef.current;
+    const newlyCropped: string[] = [];
+
+    for (const extra of extras) {
+      if (extra.croppedUrl) {
+        const prevExtra = prev.find((e) => e.id === extra.id);
+        if (!prevExtra?.croppedUrl || prevExtra.croppedUrl !== extra.croppedUrl) {
+          newlyCropped.push(extra.id);
+        }
+      }
+    }
+
+    if (newlyCropped.length > 0) {
+      addToUploadQueue(newlyCropped);
+    }
+
+    prevExtrasRef.current = extras;
+  }, [extras, sessionToken, addToUploadQueue]);
 
   // Process upload queue — one at a time
   useEffect(() => {
