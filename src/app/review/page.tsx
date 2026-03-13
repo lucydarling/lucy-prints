@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
@@ -14,8 +14,11 @@ export default function ReviewPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const notes = usePhotoStore((s) => s.notes);
   const babyName = useSaveStore((s) => s.babyName);
+  const sessionId = useSaveStore((s) => s.sessionId);
+  const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
+  const pendingDownload = useRef(false);
   const [pad3x3, setPad3x3] = useState(false);
   const [show3x3Info, setShow3x3Info] = useState(false);
 
@@ -49,11 +52,10 @@ export default function ReviewPage() {
   const totalPhotos = count4x6 + count4x3 + count4x4 + count3x3;
   const missingCount = PHOTO_SLOTS.length - uploadedSlots.length;
 
-  const handleDownload = async () => {
-    if (downloading) return;
+  const executeDownload = async () => {
     setDownloading(true);
     try {
-      await downloadPhotosZip(photos, extras, bookTheme, {
+      await downloadPhotosZip(photos, extras, bookTheme!, {
         pad3x3to4x4: pad3x3 && count3x3 > 0,
         babyName,
         notes,
@@ -64,6 +66,25 @@ export default function ReviewPage() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  // After save modal completes, auto-trigger the pending download
+  useEffect(() => {
+    if (pendingDownload.current && sessionId) {
+      pendingDownload.current = false;
+      executeDownload();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  const handleDownload = () => {
+    if (downloading) return;
+    if (!sessionId) {
+      pendingDownload.current = true;
+      setShowSaveModal(true);
+      return;
+    }
+    executeDownload();
   };
 
   return (
