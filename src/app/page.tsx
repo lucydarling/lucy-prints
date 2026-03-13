@@ -125,7 +125,9 @@ function ThemeCard({
     >
       <div
         className={`relative aspect-square ${
-          luxury
+          theme.id === "flower_child"
+            ? "bg-white"
+            : luxury
             ? "bg-gradient-to-br from-amber-50 to-amber-100"
             : "bg-gradient-to-br from-rose-50 to-pink-50"
         }`}
