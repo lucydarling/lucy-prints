@@ -9,6 +9,7 @@ interface SaveStore {
   sessionId: string | null;
   email: string | null;
   babyName: string | null;
+  babyBirthdate: string | null;
 
   /** Upload tracking */
   uploadQueue: string[];
@@ -21,7 +22,7 @@ interface SaveStore {
   saveStatus: "idle" | "saving" | "saved" | "error";
 
   /** Actions */
-  setSession: (token: string, sessionId: string, email: string, babyName?: string) => void;
+  setSession: (token: string, sessionId: string, email: string, babyName?: string, babyBirthdate?: string) => void;
   clearSession: () => void;
   setShowSaveModal: (show: boolean) => void;
   setSaveStatus: (status: "idle" | "saving" | "saved" | "error") => void;
@@ -40,6 +41,7 @@ export const useSaveStore = create<SaveStore>()(
       sessionId: null,
       email: null,
       babyName: null,
+      babyBirthdate: null,
 
       uploadQueue: [],
       uploadingSlot: null,
@@ -49,8 +51,8 @@ export const useSaveStore = create<SaveStore>()(
       showSaveModal: false,
       saveStatus: "idle",
 
-      setSession: (token, sessionId, email, babyName) =>
-        set({ sessionToken: token, sessionId, email, babyName: babyName || null }),
+      setSession: (token, sessionId, email, babyName, babyBirthdate) =>
+        set({ sessionToken: token, sessionId, email, babyName: babyName || null, babyBirthdate: babyBirthdate || null }),
 
       clearSession: () =>
         set({
@@ -58,6 +60,7 @@ export const useSaveStore = create<SaveStore>()(
           sessionId: null,
           email: null,
           babyName: null,
+          babyBirthdate: null,
           uploadQueue: [],
           uploadingSlot: null,
           uploadedSlots: [],
@@ -110,6 +113,7 @@ export const useSaveStore = create<SaveStore>()(
         sessionId: state.sessionId,
         email: state.email,
         babyName: state.babyName,
+        babyBirthdate: state.babyBirthdate,
         uploadedSlots: state.uploadedSlots,
       }),
     }

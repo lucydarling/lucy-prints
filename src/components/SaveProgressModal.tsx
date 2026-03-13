@@ -12,6 +12,8 @@ export function SaveProgressModal() {
   const addToUploadQueue = useSaveStore((s) => s.addToUploadQueue);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const photos = usePhotoStore((s) => s.photos);
+  const notes = usePhotoStore((s) => s.notes);
+  const detailsMode = usePhotoStore((s) => s.detailsMode);
 
   const [email, setEmail] = useState("");
   const [babyName, setBabyName] = useState("");
@@ -48,6 +50,8 @@ export function SaveProgressModal() {
           phone: phone.trim() || undefined,
           smsOptIn,
           bookTheme,
+          notes: Object.keys(notes).length > 0 ? notes : undefined,
+          detailsMode: detailsMode || undefined,
         }),
       });
 
@@ -59,7 +63,7 @@ export function SaveProgressModal() {
       const { token, sessionId } = await res.json();
 
       // Save session to store
-      setSession(token, sessionId, email.trim(), babyName.trim() || undefined);
+      setSession(token, sessionId, email.trim(), babyName.trim() || undefined, babyBirthdate || undefined);
       setSaveStatus("saving");
 
       // Queue all cropped photos for upload

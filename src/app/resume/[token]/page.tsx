@@ -10,8 +10,11 @@ interface SessionData {
     token: string;
     email: string;
     babyName: string | null;
+    babyBirthdate: string | null;
     bookTheme: string;
     photoCount: number;
+    notes: Record<string, Record<string, string>>;
+    detailsMode: boolean;
   };
   photos: Record<
     string,
@@ -166,12 +169,21 @@ export default function ResumePage({
         }
       }
 
+      // Restore notes and detailsMode to photo store
+      if (data.session.notes && Object.keys(data.session.notes).length > 0) {
+        usePhotoStore.setState({ notes: data.session.notes });
+      }
+      if (data.session.detailsMode) {
+        usePhotoStore.getState().setDetailsMode(true);
+      }
+
       // Save the session info to save-store
       useSaveStore.getState().setSession(
         data.session.token,
         "", // sessionId comes from the API but we don't expose it via GET
         data.session.email,
-        data.session.babyName || undefined
+        data.session.babyName || undefined,
+        data.session.babyBirthdate || undefined
       );
 
       // Mark all restored photos as already uploaded (no need to re-upload)
@@ -196,11 +208,13 @@ export default function ResumePage({
   // Conflict resolution: replace existing data
   function handleReplace() {
     if (sessionData) {
-      // Clear existing data
+      // Clear existing data including notes and detailsMode
       usePhotoStore.setState({
         bookTheme: null,
         photos: {},
         extras: [],
+        notes: {},
+        detailsMode: false,
       });
       useSaveStore.getState().clearSession();
 

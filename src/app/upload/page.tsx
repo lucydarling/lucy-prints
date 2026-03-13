@@ -10,7 +10,9 @@ import { ExtraSlotCard } from "@/components/ExtraSlotCard";
 import { CropModal } from "@/components/CropModal";
 import { SaveButton } from "@/components/SaveButton";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
+import { DetailsModeToggle } from "@/components/DetailsModeToggle";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
+import { useNotesSync } from "@/hooks/useNotesSync";
 
 export default function UploadPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
@@ -21,6 +23,8 @@ export default function UploadPage() {
 
   // Background photo upload to cloud
   useAutoUpload();
+  // Debounced sync of notes/detailsMode to cloud
+  useNotesSync();
 
   useEffect(() => {
     if (!bookTheme) {
@@ -55,6 +59,11 @@ export default function UploadPage() {
             <SaveButton />
           </div>
         </div>
+      </div>
+
+      {/* Details mode toggle */}
+      <div className="max-w-2xl mx-auto">
+        <DetailsModeToggle />
       </div>
 
       {/* Sections */}

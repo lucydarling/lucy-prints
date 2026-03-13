@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import { PHOTO_SLOTS, type PrintSize, type PhotoSlot } from "@/lib/photo-slots";
+import { BOOK_PROMPTS, getPromptsForSlot } from "@/lib/book-prompts";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
 
 export interface DownloadOptions {
@@ -9,6 +10,9 @@ export interface DownloadOptions {
   pad3x3to4x4?: boolean;
   /** Baby's name for personalized filenames. Defaults to "Baby" if not set. */
   babyName?: string | null;
+  /** Book detail notes (slotKey → promptKey → value). If any notes exist,
+   *  a book-details.txt reference sheet is included in the ZIP. */
+  notes?: Record<string, Record<string, string>>;
 }
 
 /**
@@ -68,6 +72,14 @@ export async function downloadPhotosZip(
         ? await padImageTo4x4(extra.croppedUrl!)
         : await dataUrlToBlob(extra.croppedUrl!);
       root.file(fileName, blob);
+    }
+  }
+
+  // Add book details reference sheet if notes exist
+  if (options.notes) {
+    const detailsText = generateBookDetailsText(options.notes, name);
+    if (detailsText) {
+      root.file("book-details.txt", detailsText);
     }
   }
 
@@ -214,4 +226,97 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+/**
+ * Generate a formatted text reference sheet from book detail notes.
+ * Returns null if no notes have been filled in.
+ */
+function generateBookDetailsText(
+  notes: Record<string, Record<string, string>>,
+  babyName: string
+): string | null {
+  const lines: string[] = [];
+  let hasAnyContent = false;
+
+  // Track which sections we've already printed a header for
+  const printedSections = new Set<string>();
+
+  // Section labels for nice headers
+  const sectionLabels: Record<string, string> = {
+    before_baby: "Before Baby",
+    arrival: "Baby's Arrival",
+    home: "Our Home",
+    time_capsule: "When You Were Born",
+    monthly_milestones: "Monthly Milestones",
+    favorite_things: "Favorite Things",
+    birthdays: "Birthdays",
+    school: "First Day of School",
+  };
+
+  for (const entry of BOOK_PROMPTS) {
+    const slotNotes = notes[entry.slotKey];
+    if (!slotNotes) continue;
+
+    const filledPrompts = entry.prompts.filter(
+      (p) => slotNotes[p.key] && slotNotes[p.key].trim().length > 0
+    );
+    if (filledPrompts.length === 0) continue;
+
+    hasAnyContent = true;
+
+    // Print section header if we haven't yet
+    if (!printedSections.has(entry.section)) {
+      if (lines.length > 0) lines.push(""); // blank line before new section
+      const sectionLabel =
+        sectionLabels[entry.section] || entry.section;
+      lines.push(`═══ ${sectionLabel} ═══`);
+      lines.push("");
+      printedSections.add(entry.section);
+    }
+
+    // Slot sub-header
+    const slotLabel = entry.standaloneLabel || getSlotDisplayName(entry.slotKey, babyName);
+    lines.push(`── ${slotLabel} ──`);
+
+    for (const prompt of filledPrompts) {
+      const value = slotNotes[prompt.key].trim();
+      lines.push(`  ${prompt.label}: ${value}`);
+    }
+    lines.push("");
+  }
+
+  if (!hasAnyContent) return null;
+
+  // Header
+  const header = [
+    `${babyName}'s Book Details`,
+    `Reference sheet for your Lucy Darling memory book`,
+    `Generated ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`,
+    "",
+    "─".repeat(50),
+    "",
+  ];
+
+  return [...header, ...lines].join("\n");
+}
+
+/** Get a friendly display name for a slot key */
+function getSlotDisplayName(slotKey: string, babyName: string): string {
+  const slot = PHOTO_SLOTS.find((s) => s.key === slotKey);
+  if (!slot) return slotKey;
+
+  // Monthly milestones
+  const monthMatch = slotKey.match(/^month_(\d+)$/);
+  if (monthMatch) return `${babyName}'s Month ${monthMatch[1]}`;
+
+  // Birthdays
+  const bdayMatch = slotKey.match(/^birthday_(\d+)$/);
+  if (bdayMatch) {
+    const n = parseInt(bdayMatch[1]);
+    const suffix = n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th";
+    return `${babyName}'s ${n}${suffix} Birthday`;
+  }
+
+  return slot.prompt;
 }

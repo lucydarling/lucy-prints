@@ -4,6 +4,7 @@ import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
 import { type PhotoSlot } from "@/lib/photo-slots";
 import { usePhotoStore } from "@/store/photo-store";
+import { SlotDetailsPanel } from "./SlotDetailsPanel";
 
 interface PhotoSlotCardProps {
   slot: PhotoSlot;
@@ -16,6 +17,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
   const setCustomLabel = usePhotoStore((s) => s.setCustomLabel);
   const setMilestoneDate = usePhotoStore((s) => s.setMilestoneDate);
   const removePhoto = usePhotoStore((s) => s.removePhoto);
+  const detailsMode = usePhotoStore((s) => s.detailsMode);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -79,6 +81,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
     slot.customLabel && photo?.customLabel ? photo.customLabel : slot.prompt;
 
   return (
+    <div>
     <div
       className={`flex items-center gap-3 p-3 rounded-xl bg-white border shadow-sm transition-colors ${
         isDragOver
@@ -232,6 +235,8 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
         onChange={handleFileSelect}
         className="hidden"
       />
+    </div>
+    {detailsMode && <SlotDetailsPanel slotKey={slot.key} />}
     </div>
   );
 }

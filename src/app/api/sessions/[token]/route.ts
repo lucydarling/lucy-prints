@@ -1,6 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
+/**
+ * PATCH /api/sessions/[token]
+ * Sync notes and detailsMode from client to database.
+ * Called by the useNotesSync hook with debounced updates.
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  try {
+    const { token } = await params;
+    const body = await req.json();
+    const { notes, detailsMode } = body;
+
+    // Look up session
+    const { data: session } = await supabaseAdmin
+      .from("sessions")
+      .select("id")
+      .eq("token", token)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    // Build update object — only include fields that were sent
+    const update: Record<string, unknown> = {};
+    if (notes !== undefined) update.notes = notes;
+    if (detailsMode !== undefined) update.details_mode = detailsMode;
+    update.last_activity_at = new Date().toISOString();
+
+    const { error } = await supabaseAdmin
+      .from("sessions")
+      .update(update)
+      .eq("id", session.id);
+
+    if (error) {
+      // If last_activity_at fails (stale schema cache), retry without it
+      if (error.message?.includes("last_activity_at")) {
+        const fallback: Record<string, unknown> = {};
+        if (notes !== undefined) fallback.notes = notes;
+        if (detailsMode !== undefined) fallback.details_mode = detailsMode;
+        if (Object.keys(fallback).length > 0) {
+          const { error: retryError } = await supabaseAdmin
+            .from("sessions")
+            .update(fallback)
+            .eq("id", session.id);
+          if (retryError) {
+            console.error("Notes sync retry error:", retryError);
+            return NextResponse.json({ error: "Failed to sync" }, { status: 500 });
+          }
+          return NextResponse.json({ ok: true });
+        }
+      }
+      console.error("Notes sync error:", error);
+      return NextResponse.json({ error: "Failed to sync" }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Notes sync error:", err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -8,10 +74,10 @@ export async function GET(
   try {
     const { token } = await params;
 
-    // Look up session
+    // Look up session — use * to avoid schema cache misses on newer columns
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id, token, email, baby_name, baby_birthdate, book_theme, photo_count, created_at, last_activity_at")
+      .select("*")
       .eq("token", token)
       .eq("status", "active")
       .maybeSingle();
@@ -25,7 +91,7 @@ export async function GET(
     // span years as moms add birthday and school photos over time. We expire
     // only after a long period of no activity, not from the creation date.
     const EXPIRY_DAYS = 730; // 2 years
-    const lastActivity = new Date(session.last_activity_at || session.created_at);
+    const lastActivity = new Date(session.last_activity_at || session.updated_at || session.created_at);
     const daysSinceActivity = (Date.now() - lastActivity.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceActivity > EXPIRY_DAYS) {
       await supabaseAdmin
@@ -38,11 +104,15 @@ export async function GET(
       );
     }
 
-    // Touch last_activity_at — this session is being actively used
-    await supabaseAdmin
-      .from("sessions")
-      .update({ last_activity_at: new Date().toISOString() })
-      .eq("id", session.id);
+    // Touch last_activity_at — non-critical, don't block on schema cache issues
+    try {
+      await supabaseAdmin
+        .from("sessions")
+        .update({ last_activity_at: new Date().toISOString() })
+        .eq("id", session.id);
+    } catch {
+      // Schema cache may be stale — session still works without activity touch
+    }
 
     // Fetch all photos for this session
     const { data: photoRows } = await supabaseAdmin
@@ -113,8 +183,11 @@ export async function GET(
         token: session.token,
         email: session.email,
         babyName: session.baby_name,
+        babyBirthdate: session.baby_birthdate,
         bookTheme: session.book_theme,
         photoCount: session.photo_count,
+        notes: session.notes || {},
+        detailsMode: session.details_mode || false,
       },
       photos,
       extras,

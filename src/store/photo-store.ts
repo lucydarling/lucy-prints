@@ -50,6 +50,14 @@ interface PhotoStore {
   /** Currently editing slot (for crop modal) */
   editingSlot: string | null;
   setEditingSlot: (slotKey: string | null) => void;
+
+  /** Whether "Book Details" mode is enabled */
+  detailsMode: boolean;
+  setDetailsMode: (on: boolean) => void;
+
+  /** Book detail notes keyed by slotKey → promptKey → value */
+  notes: Record<string, Record<string, string>>;
+  setNote: (slotKey: string, promptKey: string, value: string) => void;
 }
 
 export const usePhotoStore = create<PhotoStore>()(
@@ -181,6 +189,21 @@ export const usePhotoStore = create<PhotoStore>()(
 
       editingSlot: null,
       setEditingSlot: (slotKey) => set({ editingSlot: slotKey }),
+
+      detailsMode: false,
+      setDetailsMode: (on) => set({ detailsMode: on }),
+
+      notes: {},
+      setNote: (slotKey, promptKey, value) =>
+        set((state) => ({
+          notes: {
+            ...state.notes,
+            [slotKey]: {
+              ...state.notes[slotKey],
+              [promptKey]: value,
+            },
+          },
+        })),
     }),
     {
       name: "lucy-prints-photos",
@@ -204,6 +227,8 @@ export const usePhotoStore = create<PhotoStore>()(
           bookTheme: state.bookTheme,
           photos: cleanPhotos,
           extras: cleanExtras,
+          detailsMode: state.detailsMode,
+          notes: state.notes,
         };
       },
       storage: {

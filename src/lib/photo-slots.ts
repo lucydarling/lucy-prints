@@ -237,25 +237,14 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     customLabel: true,
   })),
 
-  // ── First Day of School (1 photo, 4x4) ──
-  {
-    key: "first_day_of_school",
-    prompt: "First Day of School",
-    size: "4x4",
-    section: "school",
-    sectionLabel: "First Day of School",
-    sortOrder: 43,
-    dateField: true,
-  },
-
-  // ── Birthdays (5 photos, 4x4) ──
+  // ── Birthdays (5 photos, 4x4) — before school, matching book order ──
   {
     key: "birthday_1",
     prompt: "1st Birthday",
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 44,
+    sortOrder: 43,
   },
   {
     key: "birthday_2",
@@ -263,7 +252,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 45,
+    sortOrder: 44,
   },
   {
     key: "birthday_3",
@@ -271,7 +260,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 46,
+    sortOrder: 45,
   },
   {
     key: "birthday_4",
@@ -279,7 +268,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 47,
+    sortOrder: 46,
   },
   {
     key: "birthday_5",
@@ -287,7 +276,18 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
+    sortOrder: 47,
+  },
+
+  // ── First Day of School (1 photo, 4x4) — after birthdays, matching book order ──
+  {
+    key: "first_day_of_school",
+    prompt: "First Day of School",
+    size: "4x4",
+    section: "school",
+    sectionLabel: "First Day of School",
     sortOrder: 48,
+    dateField: true,
   },
 ];
 
