@@ -136,7 +136,7 @@ function ThemeCard({
           src={theme.id === "flower_child" ? `/covers/flower_child.png` : `/covers/${theme.id}.jpg`}
           alt={theme.name}
           fill
-          className="object-cover"
+          className={theme.id === "flower_child" ? "object-contain p-3" : "object-cover"}
           sizes="(max-width: 640px) 50vw, 256px"
         />
       </div>
