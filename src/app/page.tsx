@@ -44,7 +44,8 @@ export default function Home() {
           <div className="mb-6">
             <button
               onClick={() => router.push("/upload")}
-              className="w-full py-4 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl transition-colors text-sm shadow-sm"
+              className="w-full py-4 text-white font-semibold rounded-xl transition-colors text-sm shadow-sm"
+              style={{ backgroundColor: "#FAB8A9" }}
             >
               Continue Your Photo Book
             </button>
