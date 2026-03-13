@@ -118,7 +118,7 @@ export default function UploadPage() {
               onClick={() => router.push("/review")}
               className="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl transition-colors text-sm"
             >
-              Review &amp; Order ({uploaded} photos)
+              Download Your Photos ({uploaded} photos)
             </button>
           </div>
         </div>
