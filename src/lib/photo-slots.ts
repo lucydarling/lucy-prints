@@ -1,4 +1,4 @@
-export type PrintSize = "3x3" | "4x4";
+export type PrintSize = "3x3" | "4x4" | "4x6";
 
 export interface PhotoSlot {
   key: string;
@@ -32,7 +32,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
   {
     key: "ultrasound",
     prompt: "Ultrasound Photo",
-    size: "4x4",
+    size: "4x6",
     section: "before_baby",
     sectionLabel: "Before Baby",
     sortOrder: 2,

@@ -20,13 +20,16 @@ export default function ReviewPage() {
     return photo && photo.status !== "empty";
   });
 
+  const count4x6 =
+    uploadedSlots.filter((s) => s.size === "4x6").length +
+    extras.filter((e) => e.size === "4x6" && e.croppedUrl).length;
   const count4x4 =
     uploadedSlots.filter((s) => s.size === "4x4").length +
     extras.filter((e) => e.size === "4x4" && e.croppedUrl).length;
   const count3x3 =
     uploadedSlots.filter((s) => s.size === "3x3").length +
     extras.filter((e) => e.size === "3x3" && e.croppedUrl).length;
-  const totalPhotos = count4x4 + count3x3;
+  const totalPhotos = count4x6 + count4x4 + count3x3;
   const missingCount = PHOTO_SLOTS.length - uploadedSlots.length;
 
   return (
@@ -69,7 +72,7 @@ export default function ReviewPage() {
               return (
                 <div
                   key={slot.key}
-                  className="aspect-square rounded-lg overflow-hidden bg-gray-100 relative"
+                  className={`${slot.size === "4x6" ? "aspect-[2/3]" : "aspect-square"} rounded-lg overflow-hidden bg-gray-100 relative`}
                 >
                   {url && (
                     <Image
@@ -110,6 +113,14 @@ export default function ReviewPage() {
             Order Summary
           </h2>
           <div className="space-y-2">
+            {count4x6 > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  4x6&quot; prints x {count4x6}
+                </span>
+                <span className="text-gray-400">Pricing TBD</span>
+              </div>
+            )}
             {count4x4 > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">

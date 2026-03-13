@@ -22,10 +22,15 @@ export default function Home() {
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
         <div className="max-w-2xl mx-auto px-4 py-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-            Lucy Darling
-          </h1>
-          <p className="text-sm text-rose-500 font-medium mt-1">Photo Prints</p>
+          <Image
+            src="/logo.png"
+            alt="Lucy Darling"
+            width={200}
+            height={160}
+            className="mx-auto"
+            priority
+          />
+          <p className="text-sm font-medium mt-2" style={{ color: "#FAB8A9" }}>Photo Prints</p>
           <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
             Print beautiful photos sized perfectly for your memory book. We&apos;ll
             guide you through every page.
@@ -56,6 +61,20 @@ export default function Home() {
           </div>
         )}
 
+        {/* How it works */}
+        <div className="mb-6 p-4 rounded-xl bg-white border border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-800 mb-2">
+            How it works
+          </h3>
+          <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
+            <li>Select your memory book theme below</li>
+            <li>Upload photos — we&apos;ll tell you exactly which ones you need</li>
+            <li>Crop each photo to the perfect size</li>
+            <li>Order your prints — they ship right to your door</li>
+            <li>Tape or glue your prints into your book</li>
+          </ol>
+        </div>
+
         {/* Theme selection */}
         <h2 className="text-base font-semibold text-gray-800 mb-3">
           {hasExisting ? "Start a New Book" : "Select Your Book Theme"}
@@ -76,20 +95,6 @@ export default function Home() {
           {BOOK_THEMES.filter((t) => t.tier === "luxury").map((theme) => (
             <ThemeCard key={theme.id} theme={theme} onSelect={handleSelect} luxury />
           ))}
-        </div>
-
-        {/* Info */}
-        <div className="mt-8 p-4 rounded-xl bg-white border border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">
-            How it works
-          </h3>
-          <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
-            <li>Select your memory book theme above</li>
-            <li>Upload photos — we&apos;ll tell you exactly which ones you need</li>
-            <li>Crop each photo to the perfect size</li>
-            <li>Order your prints — they ship right to your door</li>
-            <li>Tape or glue your prints into your book</li>
-          </ol>
         </div>
       </div>
     </div>

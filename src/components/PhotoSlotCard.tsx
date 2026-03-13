@@ -89,7 +89,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       <button
         onClick={handleClick}
         className={`relative flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center
-          ${slot.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
+          ${slot.size === "4x6" ? "w-14 h-20" : slot.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
           ${hasPhoto ? "bg-gray-100" : "bg-rose-50 border-2 border-dashed border-rose-200 hover:border-rose-300"}
           transition-colors`}
       >

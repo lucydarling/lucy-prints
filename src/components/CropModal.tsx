@@ -19,11 +19,17 @@ export function CropModal() {
   const slot = PHOTO_SLOTS.find((s) => s.key === editingSlot);
   if (!photo?.previewUrl || !slot) return null;
 
+  const cropWidth =
+    slot.size === "4x6" ? 1200 : slot.size === "4x4" ? 1200 : 900;
+  const cropHeight =
+    slot.size === "4x6" ? 1800 : slot.size === "4x4" ? 1200 : 900;
+  const aspectRatio = slot.size === "4x6" ? 2 / 3 : 1;
+
   const handleDone = () => {
     const canvas = cropperRef.current?.getCanvas({
-      // 300 DPI: 3x3 = 900px, 4x4 = 1200px
-      width: slot.size === "4x4" ? 1200 : 900,
-      height: slot.size === "4x4" ? 1200 : 900,
+      // 300 DPI: 3x3 = 900px, 4x4 = 1200px, 4x6 = 1200x1800px
+      width: cropWidth,
+      height: cropHeight,
     });
     if (canvas) {
       const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
@@ -48,7 +54,9 @@ export function CropModal() {
         </button>
         <div className="text-center">
           <p className="text-white text-sm font-medium">{slot.prompt}</p>
-          <p className="text-white/60 text-xs">{slot.size}&quot; square crop</p>
+          <p className="text-white/60 text-xs">
+            {slot.size}&quot; {aspectRatio === 1 ? "square" : "portrait"} crop
+          </p>
         </div>
         <button
           onClick={handleDone}
@@ -64,7 +72,7 @@ export function CropModal() {
           ref={cropperRef}
           src={photo.previewUrl}
           stencilProps={{
-            aspectRatio: 1,
+            aspectRatio,
           }}
           className="h-full"
         />
