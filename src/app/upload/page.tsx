@@ -7,12 +7,18 @@ import { getSlotsBySection } from "@/lib/photo-slots";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SectionGroup } from "@/components/SectionGroup";
 import { CropModal } from "@/components/CropModal";
+import { SaveButton } from "@/components/SaveButton";
+import { SaveProgressModal } from "@/components/SaveProgressModal";
+import { useAutoUpload } from "@/hooks/useAutoUpload";
 
 export default function UploadPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const initializeSlots = usePhotoStore((s) => s.initializeSlots);
   const photos = usePhotoStore((s) => s.photos);
   const router = useRouter();
+
+  // Background photo upload to cloud
+  useAutoUpload();
 
   useEffect(() => {
     if (!bookTheme) {
@@ -35,11 +41,18 @@ export default function UploadPage() {
 
       {/* Page header */}
       <div className="px-4 pt-4 pb-2 max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold text-gray-900">Your Photos</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Upload photos for each section of your memory book. We&apos;ll print
-          them at the perfect size.
-        </p>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-gray-900">Your Photos</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Upload photos for each section of your memory book. We&apos;ll print
+              them at the perfect size.
+            </p>
+          </div>
+          <div className="ml-3 mt-1 shrink-0">
+            <SaveButton />
+          </div>
+        </div>
       </div>
 
       {/* Sections */}
@@ -86,6 +99,9 @@ export default function UploadPage() {
           </div>
         </div>
       )}
+
+      {/* Save progress modal */}
+      <SaveProgressModal />
 
       {/* Crop modal */}
       <CropModal />

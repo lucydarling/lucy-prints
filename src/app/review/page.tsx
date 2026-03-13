@@ -3,17 +3,23 @@
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import { useSaveStore } from "@/store/save-store";
+import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
+import { buildCheckoutUrl } from "@/lib/shopify";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
   const extras = usePhotoStore((s) => s.extras);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
+  const sessionToken = useSaveStore((s) => s.sessionToken);
   const router = useRouter();
 
   if (!bookTheme) {
     return null;
   }
+
+  const themeConfig = BOOK_THEMES.find((t) => t.id === bookTheme);
+  const tier = themeConfig?.tier === "luxury" ? "luxury" : "standard";
 
   const uploadedSlots = PHOTO_SLOTS.filter((slot) => {
     const photo = photos[slot.key];
@@ -31,6 +37,23 @@ export default function ReviewPage() {
     extras.filter((e) => e.size === "3x3" && e.croppedUrl).length;
   const totalPhotos = count4x6 + count4x4 + count3x3;
   const missingCount = PHOTO_SLOTS.length - uploadedSlots.length;
+
+  const handleCheckout = () => {
+    if (!sessionToken) {
+      alert(
+        "Please save your progress first so your photos are connected to your order."
+      );
+      router.push("/upload");
+      return;
+    }
+    const url = buildCheckoutUrl({
+      tier,
+      sessionToken,
+      bookTheme,
+      photoCount: totalPhotos,
+    });
+    window.location.href = url;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -118,7 +141,7 @@ export default function ReviewPage() {
                 <span className="text-gray-600">
                   4x6&quot; prints x {count4x6}
                 </span>
-                <span className="text-gray-400">Pricing TBD</span>
+                <span className="text-gray-400">Included</span>
               </div>
             )}
             {count4x4 > 0 && (
@@ -126,7 +149,7 @@ export default function ReviewPage() {
                 <span className="text-gray-600">
                   4x4&quot; prints x {count4x4}
                 </span>
-                <span className="text-gray-400">Pricing TBD</span>
+                <span className="text-gray-400">Included</span>
               </div>
             )}
             {count3x3 > 0 && (
@@ -134,7 +157,7 @@ export default function ReviewPage() {
                 <span className="text-gray-600">
                   3x3&quot; prints x {count3x3}
                 </span>
-                <span className="text-gray-400">Pricing TBD</span>
+                <span className="text-gray-400">Included</span>
               </div>
             )}
             <div className="border-t border-gray-100 pt-2 mt-2">
@@ -148,14 +171,17 @@ export default function ReviewPage() {
 
         {/* Checkout button */}
         <button
-          disabled
-          className="w-full py-3 bg-rose-500 text-white font-semibold rounded-xl text-sm opacity-50 cursor-not-allowed"
+          onClick={handleCheckout}
+          disabled={totalPhotos === 0}
+          className="w-full py-3 bg-[#FAB8A9] text-white font-semibold rounded-xl text-sm hover:bg-[#f5a898] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Checkout Coming Soon
+          Proceed to Checkout
         </button>
-        <p className="text-xs text-gray-400 text-center mt-2">
-          Shopify checkout and Persnickety Prints fulfillment coming in Phase 2
-        </p>
+        {!sessionToken && (
+          <p className="text-xs text-gray-400 text-center mt-2">
+            You&apos;ll need to save your progress before checking out
+          </p>
+        )}
       </div>
     </div>
   );
