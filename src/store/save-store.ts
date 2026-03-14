@@ -11,6 +11,16 @@ interface SaveStore {
   babyName: string | null;
   babyBirthdate: string | null;
 
+  /** Pre-session baby info (collected before a session is created) */
+  pendingBabyName: string;
+  pendingBabyBirthdate: string;
+  birthdateOptOut: boolean;
+  setPendingBabyInfo: (name: string, birthdate: string, optOut: boolean) => void;
+
+  /** UI state — baby info modal */
+  showBabyInfoModal: boolean;
+  setShowBabyInfoModal: (show: boolean) => void;
+
   /** Upload tracking */
   uploadQueue: string[];
   uploadingSlot: string | null;
@@ -42,6 +52,15 @@ export const useSaveStore = create<SaveStore>()(
       email: null,
       babyName: null,
       babyBirthdate: null,
+
+      pendingBabyName: "",
+      pendingBabyBirthdate: "",
+      birthdateOptOut: false,
+      setPendingBabyInfo: (name, birthdate, optOut) =>
+        set({ pendingBabyName: name, pendingBabyBirthdate: birthdate, birthdateOptOut: optOut }),
+
+      showBabyInfoModal: false,
+      setShowBabyInfoModal: (show) => set({ showBabyInfoModal: show }),
 
       uploadQueue: [],
       uploadingSlot: null,
@@ -115,6 +134,9 @@ export const useSaveStore = create<SaveStore>()(
         babyName: state.babyName,
         babyBirthdate: state.babyBirthdate,
         uploadedSlots: state.uploadedSlots,
+        pendingBabyName: state.pendingBabyName,
+        pendingBabyBirthdate: state.pendingBabyBirthdate,
+        birthdateOptOut: state.birthdateOptOut,
       }),
     }
   )

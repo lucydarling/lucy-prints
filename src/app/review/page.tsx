@@ -7,6 +7,8 @@ import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
 import { PHOTO_SLOTS } from "@/lib/photo-slots";
 import { downloadPhotosZip } from "@/lib/download-zip";
+import { SaveProgressModal } from "@/components/SaveProgressModal";
+import { BabyInfoModal } from "@/components/BabyInfoModal";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
@@ -284,14 +286,18 @@ export default function ReviewPage() {
 
         {/* Coming soon note */}
         <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-center">
-          <p className="text-xs text-rose-400 font-medium">
+          <p className="text-xs text-rose-600 font-medium">
             Direct print ordering coming soon
           </p>
-          <p className="text-xs text-rose-300 mt-0.5">
+          <p className="text-xs text-rose-600 mt-0.5">
             We&apos;re working on connecting Lucy Darling prints directly — wanted to get this into your hands right away.
           </p>
         </div>
       </div>
+
+      {/* Modals */}
+      <BabyInfoModal />
+      <SaveProgressModal />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { ExtraSlotCard } from "@/components/ExtraSlotCard";
 import { CropModal } from "@/components/CropModal";
 import { SaveButton } from "@/components/SaveButton";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
+import { BabyInfoModal } from "@/components/BabyInfoModal";
 import { DetailsModeToggle } from "@/components/DetailsModeToggle";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { useNotesSync } from "@/hooks/useNotesSync";
@@ -123,6 +124,9 @@ export default function UploadPage() {
           </div>
         </div>
       )}
+
+      {/* Baby info modal (triggered by details mode toggle) */}
+      <BabyInfoModal />
 
       {/* Save progress modal */}
       <SaveProgressModal />

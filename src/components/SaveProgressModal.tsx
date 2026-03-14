@@ -4,39 +4,55 @@ import { useState } from "react";
 import { useSaveStore } from "@/store/save-store";
 import { usePhotoStore } from "@/store/photo-store";
 
+// Outer shell — only renders the form when the modal is open so useState
+// initializers always read fresh values from the store on each open.
 export function SaveProgressModal() {
   const showSaveModal = useSaveStore((s) => s.showSaveModal);
+  if (!showSaveModal) return null;
+  return <SaveProgressModalForm />;
+}
+
+function SaveProgressModalForm() {
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
   const setSession = useSaveStore((s) => s.setSession);
   const setSaveStatus = useSaveStore((s) => s.setSaveStatus);
   const addToUploadQueue = useSaveStore((s) => s.addToUploadQueue);
+  const setPendingBabyInfo = useSaveStore((s) => s.setPendingBabyInfo);
+
+  // Pre-fill from pending baby info captured via the toggle popup
+  const pendingBabyName = useSaveStore((s) => s.pendingBabyName);
+  const pendingBabyBirthdate = useSaveStore((s) => s.pendingBabyBirthdate);
+  const storedOptOut = useSaveStore((s) => s.birthdateOptOut);
+
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const photos = usePhotoStore((s) => s.photos);
   const notes = usePhotoStore((s) => s.notes);
   const detailsMode = usePhotoStore((s) => s.detailsMode);
 
   const [email, setEmail] = useState("");
-  const [babyName, setBabyName] = useState("");
-  const [babyBirthdate, setBabyBirthdate] = useState("");
+  const [babyName, setBabyName] = useState(pendingBabyName);
+  const [babyBirthdate, setBabyBirthdate] = useState(pendingBabyBirthdate);
   const [phone, setPhone] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
+  const [birthdateOptOut, setBirthdateOptOut] = useState(storedOptOut);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!showSaveModal) return null;
+  function handleOptOutChange(checked: boolean) {
+    setBirthdateOptOut(checked);
+    if (checked) setBabyBirthdate("");
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    // Validate email
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError("Please enter a valid email address.");
       return;
     }
 
-    // Validate birthdate
-    if (!babyBirthdate) {
+    if (!birthdateOptOut && !babyBirthdate) {
       setError("Baby's birthday is required so we can send milestone reminders.");
       return;
     }
@@ -44,14 +60,13 @@ export function SaveProgressModal() {
     setLoading(true);
 
     try {
-      // Create session via API
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
           babyName: babyName.trim() || undefined,
-          babyBirthdate: babyBirthdate || undefined,
+          babyBirthdate: birthdateOptOut ? undefined : babyBirthdate || undefined,
           phone: phone.trim() || undefined,
           smsOptIn,
           bookTheme,
@@ -67,11 +82,22 @@ export function SaveProgressModal() {
 
       const { token, sessionId } = await res.json();
 
-      // Save session to store
-      setSession(token, sessionId, email.trim(), babyName.trim() || undefined, babyBirthdate || undefined);
+      // Sync final baby info back to the pending store so it's remembered
+      setPendingBabyInfo(
+        babyName.trim(),
+        birthdateOptOut ? "" : babyBirthdate,
+        birthdateOptOut
+      );
+
+      setSession(
+        token,
+        sessionId,
+        email.trim(),
+        babyName.trim() || undefined,
+        birthdateOptOut ? undefined : babyBirthdate || undefined
+      );
       setSaveStatus("saving");
 
-      // Queue all cropped photos for upload
       const croppedSlotKeys = Object.entries(photos)
         .filter(([, p]) => p.status === "cropped" && p.croppedUrl)
         .map(([key]) => key);
@@ -80,10 +106,8 @@ export function SaveProgressModal() {
         addToUploadQueue(croppedSlotKeys);
       }
 
-      // Close modal
       setShowSaveModal(false);
 
-      // Send magic link email
       try {
         await fetch("/api/magic-link", {
           method: "POST",
@@ -91,7 +115,6 @@ export function SaveProgressModal() {
           body: JSON.stringify({ sessionToken: token }),
         });
       } catch {
-        // Non-critical — user can request another email later
         console.warn("Magic link email send failed (non-critical)");
       }
     } catch (err) {
@@ -168,30 +191,45 @@ export function SaveProgressModal() {
             />
           </div>
 
-          {/* Baby birthdate — required */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Baby&apos;s Birthday <span className="text-red-400">*</span>
-            </label>
+          {/* Baby birthdate */}
+          {!birthdateOptOut && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Baby&apos;s Birthday <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="date"
+                value={babyBirthdate}
+                onChange={(e) => setBabyBirthdate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#FAB8A9] focus:border-transparent"
+              />
+              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+                We&apos;ll send gentle milestone reminders so you never miss a photo moment.
+                We never sell your info.{" "}
+                <a
+                  href="https://www.lucydarling.com/policies/privacy-policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-gray-600"
+                >
+                  Privacy Policy
+                </a>
+              </p>
+            </div>
+          )}
+
+          {/* Milestone reminder opt-out */}
+          <label className="flex items-start gap-2.5 cursor-pointer">
             <input
-              type="date"
-              value={babyBirthdate}
-              onChange={(e) => setBabyBirthdate(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#FAB8A9] focus:border-transparent"
+              type="checkbox"
+              checked={birthdateOptOut}
+              onChange={(e) => handleOptOutChange(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 accent-[#FAB8A9] cursor-pointer"
             />
-            <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-              We&apos;ll send gentle milestone reminders so you never miss a photo moment.
-              We never sell your info.{" "}
-              <a
-                href="https://www.lucydarling.com/policies/privacy-policy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-gray-600"
-              >
-                Privacy Policy
-              </a>
-            </p>
-          </div>
+            <span className="text-sm text-gray-500 leading-snug">
+              I&apos;d rather skip milestone reminders
+            </span>
+          </label>
 
           {/* Phone — optional */}
           <div>

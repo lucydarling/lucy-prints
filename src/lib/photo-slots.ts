@@ -311,6 +311,9 @@ export const BOOK_THEMES = [
   { id: "teddy_bears_picnic", name: "Teddy Bear's Picnic", sku: "BB013MEM", tier: "luxury" },
   { id: "celestial_skies", name: "Celestial Skies", sku: "BB014MEM", tier: "luxury" },
   { id: "wildflower_meadow", name: "Wildflower Meadow", sku: "BB015MEM", tier: "luxury" },
+  // Retiring — still available while supplies last
+  { id: "golden_blossom", name: "Golden Blossom", sku: "BB021MEM", tier: "retiring" },
+  { id: "golden_stargazer", name: "Golden Stargazer", sku: "BB022MEM", tier: "retiring" },
 ] as const;
 
 export type BookThemeId = (typeof BOOK_THEMES)[number]["id"];

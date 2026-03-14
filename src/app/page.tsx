@@ -30,7 +30,7 @@ export default function Home() {
             className="mx-auto"
             priority
           />
-          <p className="text-sm font-medium mt-2" style={{ color: "#FAB8A9" }}>Photo Organizer</p>
+          <p className="text-sm font-medium mt-2 text-rose-600">Photo Organizer</p>
           <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
             Organize and crop your photos for every page of your memory book —
             then download them ready to print at home or at any photo lab.
@@ -44,8 +44,7 @@ export default function Home() {
           <div className="mb-6">
             <button
               onClick={() => router.push("/upload")}
-              className="w-full py-4 text-white font-semibold rounded-xl transition-colors text-sm shadow-sm"
-              style={{ backgroundColor: "#FAB8A9" }}
+              className="w-full py-4 text-white font-semibold rounded-xl transition-colors text-sm shadow-sm bg-rose-500 hover:bg-rose-600"
             >
               Continue Your Photo Book
             </button>
@@ -74,7 +73,7 @@ export default function Home() {
             <li>Download your ready-to-print photos</li>
             <li>Print at home or any photo lab, then add them to your book</li>
           </ol>
-          <p className="text-xs text-[#FAB8A9] mt-3">
+          <p className="text-xs text-rose-600 mt-3">
             Print ordering coming soon — we&apos;re working on it!
           </p>
         </div>
@@ -100,6 +99,17 @@ export default function Home() {
             <ThemeCard key={theme.id} theme={theme} onSelect={handleSelect} luxury />
           ))}
         </div>
+
+        {/* Retiring titles */}
+        <h3 className="text-sm font-semibold text-gray-400 mt-6 mb-1">
+          Limited Availability
+        </h3>
+        <p className="text-xs text-gray-400 mb-3">These titles are being retired — available while supplies last.</p>
+        <div className="grid grid-cols-2 gap-3">
+          {BOOK_THEMES.filter((t) => t.tier === "retiring").map((theme) => (
+            <ThemeCard key={theme.id} theme={theme} onSelect={handleSelect} retiring />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -109,10 +119,12 @@ function ThemeCard({
   theme,
   onSelect,
   luxury,
+  retiring,
 }: {
   theme: (typeof BOOK_THEMES)[number];
   onSelect: (id: string) => void;
   luxury?: boolean;
+  retiring?: boolean;
 }) {
   return (
     <button
@@ -120,6 +132,8 @@ function ThemeCard({
       className={`group relative rounded-xl overflow-hidden border transition-all text-left ${
         luxury
           ? "border-amber-200 hover:border-amber-300 hover:shadow-md"
+          : retiring
+          ? "border-gray-200 hover:border-gray-300 hover:shadow-sm opacity-80 hover:opacity-100"
           : "border-gray-100 hover:border-rose-200 hover:shadow-md"
       }`}
     >
@@ -129,6 +143,8 @@ function ThemeCard({
             ? "bg-white"
             : luxury
             ? "bg-gradient-to-br from-amber-50 to-amber-100"
+            : retiring
+            ? "bg-gradient-to-br from-gray-50 to-gray-100"
             : "bg-gradient-to-br from-rose-50 to-pink-50"
         }`}
       >
