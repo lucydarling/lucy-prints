@@ -259,7 +259,7 @@ export default function ReviewPage() {
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="w-full py-3 bg-[#FAB8A9] text-white font-semibold rounded-xl text-sm hover:bg-[#f5a898] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              className="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {downloading ? (
                 <>

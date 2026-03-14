@@ -269,8 +269,7 @@ function SaveProgressModalForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 text-white font-semibold rounded-xl transition-colors text-sm disabled:opacity-60"
-            style={{ backgroundColor: "#FAB8A9" }}
+            className="w-full py-3 text-white font-semibold rounded-xl transition-colors text-sm disabled:opacity-60 bg-rose-500 hover:bg-rose-600"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
