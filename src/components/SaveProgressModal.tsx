@@ -231,34 +231,36 @@ function SaveProgressModalForm() {
             </span>
           </label>
 
-          {/* Phone — optional */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number <span className="text-gray-400 font-normal">(optional)</span>
+          {/* Phone — milestone reminders */}
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-100">
+            <label className="block text-sm font-medium text-gray-800 mb-1">
+              Phone Number
+              <span className="ml-1.5 text-xs font-normal text-rose-500">Recommended</span>
             </label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(555) 123-4567"
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#FAB8A9] focus:border-transparent"
+              className="w-full px-3 py-2.5 border border-rose-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-transparent bg-white"
             />
-          </div>
+            <p className="text-xs text-rose-700 mt-1.5 leading-relaxed">
+              We&apos;ll text you when it&apos;s time for each monthly photo — so you never miss a milestone moment.
+            </p>
 
-          {/* SMS opt-in */}
-          {phone && (
-            <label className="flex items-start gap-2.5 cursor-pointer">
+            {/* SMS opt-in — always visible when phone shown */}
+            <label className="flex items-start gap-2.5 cursor-pointer mt-2.5">
               <input
                 type="checkbox"
                 checked={smsOptIn}
                 onChange={(e) => setSmsOptIn(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded accent-[#FAB8A9]"
+                className="mt-0.5 w-4 h-4 rounded accent-rose-500 cursor-pointer"
               />
-              <span className="text-xs text-gray-500 leading-tight">
-                Send me milestone reminders via text so I never miss a photo moment!
+              <span className="text-xs text-rose-700 leading-snug font-medium">
+                Yes, send me monthly photo reminders via text
               </span>
             </label>
-          )}
+          </div>
 
           {/* Error */}
           {error && (

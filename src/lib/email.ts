@@ -4,6 +4,77 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : (null as unknown as Resend);
 
+export async function sendMyBooksEmail({
+  to,
+  sessions,
+}: {
+  to: string;
+  sessions: Array<{ token: string; themeName: string; babyName?: string | null; photoCount: number }>;
+}) {
+  const subject =
+    sessions.length === 1
+      ? sessions[0].babyName
+        ? `Your photo book for ${sessions[0].babyName}`
+        : "Your Lucy Darling photo book"
+      : `Your ${sessions.length} Lucy Darling photo books`;
+
+  const booksHtml = sessions
+    .map((s) => {
+      const resumeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/resume/${s.token}`;
+      const label = s.babyName ? `${s.babyName} — ${s.themeName}` : s.themeName;
+      return `
+        <div style="border:1px solid #F3F4F6;border-radius:10px;padding:16px 20px;margin-bottom:12px;">
+          <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 2px 0;">${label}</p>
+          <p style="font-size:13px;color:#9CA3AF;margin:0 0 12px 0;">${s.photoCount} photo${s.photoCount !== 1 ? "s" : ""} saved</p>
+          <a href="${resumeUrl}" style="display:inline-block;background-color:#F43F5E;color:#FFFFFF;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
+            Continue This Book
+          </a>
+        </div>`;
+    })
+    .join("");
+
+  await resend.emails.send({
+    from: "Lucy Darling Prints <prints@lucydarling.com>",
+    to,
+    subject,
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#F9FAFB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;padding:32px 16px;">
+    <tr>
+      <td align="center" style="padding-bottom:24px;">
+        <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="Lucy Darling" width="150" style="display:block;" />
+        <p style="font-size:12px;color:#FAB8A9;margin:4px 0 0 0;font-weight:500;">Photo Prints</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#FFFFFF;border-radius:12px;padding:32px 24px;border:1px solid #F3F4F6;">
+        <h1 style="font-size:20px;color:#1F2937;margin:0 0 8px 0;font-weight:600;">Your saved photo books</h1>
+        <p style="font-size:14px;color:#6B7280;line-height:1.6;margin:0 0 20px 0;">
+          Here ${sessions.length === 1 ? "is" : "are"} your saved book${sessions.length !== 1 ? "s" : ""}. Each link picks up right where you left off.
+        </p>
+        ${booksHtml}
+        <p style="font-size:12px;color:#9CA3AF;margin:16px 0 0 0;line-height:1.5;text-align:center;">
+          Bookmark this email to come back anytime.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding-top:24px;">
+        <p style="font-size:11px;color:#D1D5DB;margin:0;">Lucy Darling &mdash; Premium Baby Keepsakes</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim(),
+  });
+}
+
 export async function sendMagicLinkEmail({
   to,
   babyName,

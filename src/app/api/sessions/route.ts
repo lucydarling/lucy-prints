@@ -3,6 +3,34 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 
+export async function GET(req: NextRequest) {
+  const email = req.nextUrl.searchParams.get("email");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: "Valid email required" }, { status: 400 });
+  }
+
+  const { data: sessions } = await supabaseAdmin
+    .from("sessions")
+    .select("token, book_theme, baby_name, photo_count, last_activity_at, updated_at")
+    .eq("email", email.toLowerCase().trim())
+    .eq("status", "active")
+    .order("last_activity_at", { ascending: false, nullsFirst: false });
+
+  const enriched = (sessions || []).map((s) => {
+    const theme = BOOK_THEMES.find((t) => t.id === s.book_theme);
+    return {
+      token: s.token,
+      bookTheme: s.book_theme,
+      themeName: theme?.name ?? s.book_theme,
+      babyName: s.baby_name as string | null,
+      photoCount: s.photo_count || 0,
+      lastActivity: s.last_activity_at || s.updated_at,
+    };
+  });
+
+  return NextResponse.json({ sessions: enriched });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

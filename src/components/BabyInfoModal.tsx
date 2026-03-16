@@ -3,20 +3,43 @@
 import { useState } from "react";
 import { useSaveStore } from "@/store/save-store";
 
+// Outer shell — remounts the form on each open so useState reads fresh store values
 export function BabyInfoModal() {
   const showBabyInfoModal = useSaveStore((s) => s.showBabyInfoModal);
-  const setShowBabyInfoModal = useSaveStore((s) => s.setShowBabyInfoModal);
-  const setPendingBabyInfo = useSaveStore((s) => s.setPendingBabyInfo);
-
-  const [name, setName] = useState("");
-  const [birthdate, setBirthdate] = useState("");
-  const [optOut, setOptOut] = useState(false);
-
   if (!showBabyInfoModal) return null;
+  return <BabyInfoModalForm />;
+}
+
+function BabyInfoModalForm() {
+  const setShowBabyInfoModal = useSaveStore((s) => s.setShowBabyInfoModal);
+  const updateBabyInfo = useSaveStore((s) => s.updateBabyInfo);
+  const sessionToken = useSaveStore((s) => s.sessionToken);
+
+  const pendingBabyName = useSaveStore((s) => s.pendingBabyName);
+  const pendingBabyBirthdate = useSaveStore((s) => s.pendingBabyBirthdate);
+  const storedOptOut = useSaveStore((s) => s.birthdateOptOut);
+
+  const [name, setName] = useState(pendingBabyName);
+  const [birthdate, setBirthdate] = useState(pendingBabyBirthdate);
+  const [optOut, setOptOut] = useState(storedOptOut);
 
   function handleSave() {
-    setPendingBabyInfo(name.trim(), optOut ? "" : birthdate, optOut);
+    const trimmedName = name.trim();
+    const finalBirthdate = optOut ? "" : birthdate;
+    updateBabyInfo(trimmedName, finalBirthdate, optOut);
     setShowBabyInfoModal(false);
+
+    // Sync to server if session exists (non-critical)
+    if (sessionToken) {
+      fetch(`/api/sessions/${sessionToken}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          babyName: trimmedName || null,
+          babyBirthdate: finalBirthdate || null,
+        }),
+      }).catch(() => {});
+    }
   }
 
   function handleOptOutChange(checked: boolean) {
@@ -30,6 +53,8 @@ export function BabyInfoModal() {
     setShowBabyInfoModal(false);
   }
 
+  const isEditing = !!(pendingBabyName || pendingBabyBirthdate || storedOptOut);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
@@ -42,7 +67,7 @@ export function BabyInfoModal() {
         {/* Header */}
         <div className="mb-5">
           <h2 className="text-lg font-semibold text-gray-900">
-            Tell us about your baby
+            {isEditing ? "Edit baby details" : "Tell us about your baby"}
           </h2>
           <p className="text-sm text-gray-500 mt-1 leading-relaxed">
             We&apos;ll use this to personalize your experience and keep you on
@@ -64,6 +89,7 @@ export function BabyInfoModal() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Olive"
+            autoFocus
             className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-300 focus:border-transparent"
           />
           <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
@@ -114,7 +140,7 @@ export function BabyInfoModal() {
           disabled={!canSave}
           className="w-full py-2.5 rounded-xl bg-rose-400 text-white text-sm font-semibold hover:bg-rose-500 active:bg-rose-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Save details
+          {isEditing ? "Update details" : "Save details"}
         </button>
       </div>
     </div>

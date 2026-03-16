@@ -13,7 +13,7 @@ export async function PATCH(
   try {
     const { token } = await params;
     const body = await req.json();
-    const { notes, detailsMode } = body;
+    const { notes, detailsMode, babyName, babyBirthdate } = body;
 
     // Look up session
     const { data: session } = await supabaseAdmin
@@ -31,6 +31,8 @@ export async function PATCH(
     const update: Record<string, unknown> = {};
     if (notes !== undefined) update.notes = notes;
     if (detailsMode !== undefined) update.details_mode = detailsMode;
+    if (babyName !== undefined) update.baby_name = babyName || null;
+    if (babyBirthdate !== undefined) update.baby_birthdate = babyBirthdate || null;
     update.last_activity_at = new Date().toISOString();
 
     const { error } = await supabaseAdmin

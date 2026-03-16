@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
 import { downloadPhotosZip } from "@/lib/download-zip";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
@@ -20,6 +20,7 @@ export default function ReviewPage() {
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
   const pendingDownload = useRef(false);
   const [pad3x3, setPad3x3] = useState(false);
   const [show3x3Info, setShow3x3Info] = useState(false);
@@ -41,6 +42,7 @@ export default function ReviewPage() {
       babyName,
       notes,
     })
+      .then(() => setDownloaded(true))
       .catch((err) => {
         console.error("Download error:", err);
         alert("Something went wrong creating the download. Please try again.");
@@ -81,6 +83,7 @@ export default function ReviewPage() {
         babyName,
         notes,
       });
+      setDownloaded(true);
     } catch (err) {
       console.error("Download error:", err);
       alert("Something went wrong creating the download. Please try again.");
@@ -269,6 +272,13 @@ export default function ReviewPage() {
                   </svg>
                   Creating ZIP...
                 </>
+              ) : downloaded ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Again
+                </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -278,9 +288,51 @@ export default function ReviewPage() {
                 </>
               )}
             </button>
-            <p className="text-xs text-gray-400 text-center mt-2">
-              Print at home or drop into any photo lab
-            </p>
+
+            {/* Post-download guidance */}
+            {downloaded ? (
+              <div className="mt-3 p-4 rounded-xl bg-green-50 border border-green-100">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800">Your photos downloaded!</p>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  File saved as{" "}
+                  <span className="font-mono text-gray-700 bg-gray-100 px-1 py-0.5 rounded">
+                    lucy-darling-prints-{bookTheme}.zip
+                  </span>
+                </p>
+                <div className="space-y-2 mb-3">
+                  <p className="text-xs font-semibold text-gray-700">Where to find it:</p>
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm shrink-0">📱</span>
+                    <p className="text-xs text-gray-600">
+                      <span className="font-semibold">iPhone / iPad:</span> Tap the download notification at the top of your screen, or open the <span className="font-semibold">Files app</span> → Browse → Downloads
+                    </p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm shrink-0">💻</span>
+                    <p className="text-xs text-gray-600">
+                      <span className="font-semibold">Mac / PC:</span> Open your <span className="font-semibold">Downloads</span> folder — it&apos;s the ZIP file at the top
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-green-100">
+                  <p className="text-xs font-semibold text-gray-700 mb-1">Where to print:</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Walgreens · CVS · Costco · Target Photo · Shutterfly · Any local photo lab
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Downloads as a ZIP file · Print at home or any photo lab
+              </p>
+            )}
           </div>
         )}
 

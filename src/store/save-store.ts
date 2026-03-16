@@ -33,6 +33,7 @@ interface SaveStore {
 
   /** Actions */
   setSession: (token: string, sessionId: string, email: string, babyName?: string, babyBirthdate?: string) => void;
+  updateBabyInfo: (name: string, birthdate: string, optOut: boolean) => void;
   clearSession: () => void;
   setShowSaveModal: (show: boolean) => void;
   setSaveStatus: (status: "idle" | "saving" | "saved" | "error") => void;
@@ -72,6 +73,15 @@ export const useSaveStore = create<SaveStore>()(
 
       setSession: (token, sessionId, email, babyName, babyBirthdate) =>
         set({ sessionToken: token, sessionId, email, babyName: babyName || null, babyBirthdate: babyBirthdate || null }),
+
+      updateBabyInfo: (name, birthdate, optOut) =>
+        set({
+          pendingBabyName: name,
+          pendingBabyBirthdate: birthdate,
+          birthdateOptOut: optOut,
+          babyName: name || null,
+          babyBirthdate: optOut ? null : birthdate || null,
+        }),
 
       clearSession: () =>
         set({
