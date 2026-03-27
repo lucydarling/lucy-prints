@@ -13,6 +13,15 @@ export function OnboardingModal() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!show) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") dismiss();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [show]);
+
   function dismiss() {
     localStorage.setItem(ONBOARDED_KEY, "1");
     setShow(false);
@@ -21,12 +30,31 @@ export function OnboardingModal() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={dismiss}
+    >
+      <div
+        className="w-full max-w-sm bg-white rounded-2xl shadow-xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Top accent */}
         <div className="h-1.5 bg-gradient-to-r from-rose-300 to-pink-300" />
 
         <div className="p-6">
+          {/* Dismiss X */}
+          <div className="flex justify-end -mt-2 -mr-2 mb-2">
+            <button
+              onClick={dismiss}
+              className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
           {/* Header */}
           <div className="text-center mb-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-rose-400 mb-2">
@@ -73,7 +101,7 @@ export function OnboardingModal() {
               <div>
                 <p className="text-sm font-semibold text-gray-800">Download &amp; print</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  You&apos;ll get a ZIP of perfectly sized files. Print at home or drop them at any photo lab — Walgreens, CVS, Costco, or Shutterfly.
+                  You&apos;ll get a ZIP of perfectly sized files. Print at home or drop them at any photo lab — Walgreens, CVS, Target Photo, Shutterfly, or any local lab.
                 </p>
               </div>
             </div>

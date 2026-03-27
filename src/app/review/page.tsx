@@ -21,9 +21,9 @@ export default function ReviewPage() {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+  const [showTrimExample, setShowTrimExample] = useState(false);
   const pendingDownload = useRef(false);
   const [pad3x3, setPad3x3] = useState(false);
-  const [show3x3Info, setShow3x3Info] = useState(false);
 
   useEffect(() => {
     if (!bookTheme) {
@@ -194,7 +194,7 @@ export default function ReviewPage() {
             {count4x3 > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">
-                  4x3&quot; prints x {count4x3}
+                  4x3&quot; prints x {count4x3} <span className="text-gray-400">(padded to 4x4&quot;)</span>
                 </span>
                 <span className="text-gray-400">Included</span>
               </div>
@@ -227,34 +227,49 @@ export default function ReviewPage() {
         {/* Download section — primary action */}
         {totalPhotos > 0 && (
           <div className="mb-4">
-            {/* 3x3 print compatibility option */}
-            {count3x3 > 0 && (
-              <div className="mb-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={pad3x3}
-                    onChange={(e) => setPad3x3(e.target.checked)}
-                    className="w-4 h-4 rounded accent-[#FAB8A9] shrink-0"
-                  />
-                  <span className="text-sm text-gray-700">
-                    Make 3x3&quot; photos printable as 4x4&quot;
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setShow3x3Info(!show3x3Info);
-                    }}
-                    className="text-xs text-gray-400 hover:text-gray-600 underline shrink-0 ml-auto"
-                  >
-                    {show3x3Info ? "Hide" : "Why?"}
-                  </button>
-                </label>
-                {show3x3Info && (
-                  <p className="text-xs text-gray-400 mt-2 ml-[26px] leading-relaxed">
-                    Most print services don&apos;t offer a 3x3&quot; option. When this is checked, your 3x3&quot; photos will be placed on a 4x4&quot; sheet with trim guides — just order 4x4&quot; prints and cut along the lines.
-                  </p>
+            {/* Print compatibility notice */}
+            {(count3x3 > 0 || count4x3 > 0) && (
+              <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
+                <p className="text-xs font-semibold text-amber-800 mb-1">About your print sizes</p>
+                <p className="text-xs text-amber-700 leading-relaxed mb-2">
+                  Most print services only offer standard sizes like 4x4&quot; and 4x6&quot;.
+                  {count4x3 > 0 && <> Your 4x3&quot; photos are automatically padded to 4x4&quot; with a trim guide — order as 4x4&quot; and cut along the line.</>}
+                  {count3x3 > 0 && <> Your 3x3&quot; photos can optionally be padded the same way.</>}
+                </p>
+                <p className="text-xs text-amber-600 leading-relaxed mb-2">
+                  We recommend downloading once to check, then confirming with your printer before ordering. When in doubt, download both versions.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowTrimExample(!showTrimExample)}
+                  className="text-xs text-amber-700 underline hover:text-amber-900"
+                >
+                  {showTrimExample ? "Hide example" : "See what this looks like"}
+                </button>
+                {showTrimExample && (
+                  <div className="mt-2">
+                    <Image
+                      src="/trim-guide-example.svg"
+                      alt="Diagram showing how 3x3 and 4x3 photos are padded to 4x4 with a dashed trim line"
+                      width={280}
+                      height={160}
+                      className="w-full rounded-lg border border-amber-100"
+                      unoptimized
+                    />
+                  </div>
+                )}
+                {count3x3 > 0 && (
+                  <label className="flex items-center gap-2.5 cursor-pointer mt-3 pt-2 border-t border-amber-100">
+                    <input
+                      type="checkbox"
+                      checked={pad3x3}
+                      onChange={(e) => setPad3x3(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#FAB8A9] shrink-0"
+                    />
+                    <span className="text-xs text-amber-800 font-medium">
+                      Also pad 3x3&quot; photos to 4x4&quot; with trim guides
+                    </span>
+                  </label>
                 )}
               </div>
             )}
@@ -324,7 +339,7 @@ export default function ReviewPage() {
                 <div className="pt-3 border-t border-green-100">
                   <p className="text-xs font-semibold text-gray-700 mb-1">Where to print:</p>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    Walgreens · CVS · Costco · Target Photo · Shutterfly · Any local photo lab
+                    Walgreens · CVS · Target Photo · Shutterfly · Any local photo lab
                   </p>
                 </div>
               </div>
