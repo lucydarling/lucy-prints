@@ -24,7 +24,7 @@ export const SHOPIFY_VARIANTS = {
  * URL format:
  *   https://www.lucydarling.com/cart/{variantId}:1?attributes[session_token]=xxx&attributes[book_theme]=xxx&attributes[photo_count]=xx
  *
- * Cart attributes appear on the Shopify order, so fulfillment (Persnickety Prints)
+ * Cart attributes appear on the Shopify order, so fulfillment
  * can pull the photos from Supabase using the session token.
  */
 export function buildCheckoutUrl({
