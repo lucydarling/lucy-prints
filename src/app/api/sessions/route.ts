@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
+import { syncProfileToKlaviyo, trackPhotoAppSignup, subscribeToEmailList } from "@/lib/klaviyo";
 
 export async function GET(req: NextRequest) {
   const email = req.nextUrl.searchParams.get("email");
@@ -75,6 +76,19 @@ export async function POST(req: NextRequest) {
         // Schema cache may be stale — session still works
       }
 
+      // Sync updated profile to Klaviyo (fire-and-forget)
+      syncProfileToKlaviyo({
+        email,
+        babyName,
+        babyBirthdate,
+        phone,
+        smsOptIn,
+        bookTheme,
+      }).catch(() => {});
+
+      // Ensure they're on the milestone reminder list
+      subscribeToEmailList(email).catch(() => {});
+
       return NextResponse.json({
         token: existing.token,
         sessionId: existing.id,
@@ -113,6 +127,33 @@ export async function POST(req: NextRequest) {
         { error: `Failed to create session: ${error.message}` },
         { status: 500 }
       );
+    }
+
+    // Sync new profile to Klaviyo and fire signup event (fire-and-forget)
+    syncProfileToKlaviyo({
+      email,
+      babyName,
+      babyBirthdate,
+      phone,
+      smsOptIn,
+      bookTheme,
+    }).catch(() => {});
+
+    // Add to the milestone reminder email list
+    subscribeToEmailList(email).catch(() => {});
+
+    // Fire the "Photo App Signup" event only when we have a birthdate —
+    // this is what triggers the monthly milestone reminder flow in Klaviyo.
+    if (babyBirthdate) {
+      trackPhotoAppSignup({
+        email,
+        babyName,
+        babyBirthdate,
+        phone,
+        smsOptIn,
+        bookTheme,
+        sessionToken: session.token,
+      }).catch(() => {});
     }
 
     return NextResponse.json({
