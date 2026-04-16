@@ -84,10 +84,10 @@ export default function Home() {
             className="mx-auto"
             priority
           />
-          <p className="text-sm font-medium mt-2 text-rose-600">Photo Organizer</p>
+          <p className="text-sm font-medium mt-2 text-rose-600">Photo Lab</p>
           <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
-            Organize and crop your photos for every page of your memory book —
-            then download them ready to print at home or at any photo lab.
+            Get your photos perfectly sized for every page of your memory book
+            — then print at home or at any photo lab.
           </p>
         </div>
       </div>
@@ -217,17 +217,17 @@ export default function Home() {
             <li>Print at home or any photo lab, then add them to your book</li>
           </ol>
           <p className="text-xs text-rose-600 mt-3">
-            Print ordering coming soon — we&apos;re working on it!
+            Direct print ordering is on its way.
           </p>
         </div>
 
         {/* Theme selection */}
         <h2 className="text-base font-semibold text-gray-800 mb-3">
-          {hasExisting ? "Start a New Book" : "Select Your Book Theme"}
+          {hasExisting ? "Start a New Book" : "Choose Your Book"}
         </h2>
 
         {/* Standard Memory Books */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {BOOK_THEMES.filter((t) => t.tier === "standard").map((theme) => (
             <ThemeCard key={theme.id} theme={theme} onSelect={handleSelect} />
           ))}
@@ -237,7 +237,7 @@ export default function Home() {
         <h3 className="text-sm font-semibold text-gray-700 mt-6 mb-3">
           Luxury Collection
         </h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {BOOK_THEMES.filter((t) => t.tier === "luxury").map((theme) => (
             <ThemeCard key={theme.id} theme={theme} onSelect={handleSelect} luxury />
           ))}
@@ -248,7 +248,7 @@ export default function Home() {
           Limited Availability
         </h3>
         <p className="text-xs text-gray-400 mb-3">These titles are being retired — available while supplies last.</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {BOOK_THEMES.filter((t) => t.tier === "retiring").map((theme) => (
             <ThemeCard key={theme.id} theme={theme} onSelect={handleSelect} retiring />
           ))}
