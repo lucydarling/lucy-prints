@@ -27,8 +27,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      // Update baby info — last_activity_at and other added columns are set
-      // only if PostgREST schema cache knows about them (graceful degradation).
+      // Update baby info + refresh the activity timestamp.
       const updateData: Record<string, unknown> = {};
       if (babyName !== undefined) updateData.baby_name = babyName || null;
       if (babyBirthdate !== undefined) updateData.baby_birthdate = babyBirthdate || null;
@@ -38,14 +37,13 @@ export async function POST(req: NextRequest) {
       if (detailsMode !== undefined) updateData.details_mode = detailsMode;
       updateData.last_activity_at = new Date().toISOString();
 
-      // Non-critical — don't let update failure block the response
-      try {
-        await supabaseAdmin
-          .from("sessions")
-          .update(updateData)
-          .eq("id", existing.id);
-      } catch {
-        // Schema cache may be stale — session still works
+      // Non-critical to the response — log a failure but still return the token.
+      const { error: updateError } = await supabaseAdmin
+        .from("sessions")
+        .update(updateData)
+        .eq("id", existing.id);
+      if (updateError) {
+        console.error("Session update error (existing):", updateError);
       }
 
       // Sync updated profile to Klaviyo (fire-and-forget)
@@ -82,8 +80,7 @@ export async function POST(req: NextRequest) {
       book_theme: bookTheme,
       // last_activity_at omitted — DEFAULT NOW() in database handles it
     };
-    // Only include notes/details_mode if non-default — gracefully handles
-    // databases where migration 003 hasn't been applied yet.
+    // Only include notes/details_mode when non-default to keep the insert lean.
     if (notes && Object.keys(notes).length > 0) insertData.notes = notes;
     if (detailsMode) insertData.details_mode = detailsMode;
 

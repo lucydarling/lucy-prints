@@ -187,18 +187,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Update photo count and touch last_activity_at
-    const { count } = await supabaseAdmin
-      .from("session_photos")
-      .select("*", { count: "exact", head: true })
-      .eq("session_id", session.id);
-
+    // photo_count is maintained automatically by the session_photos_count_sync
+    // trigger (migration 004) — no manual recompute needed here. We only touch
+    // last_activity_at to keep the session's inactivity-expiry clock fresh.
     await supabaseAdmin
       .from("sessions")
-      .update({
-        photo_count: count || 0,
-        last_activity_at: new Date().toISOString(),
-      })
+      .update({ last_activity_at: new Date().toISOString() })
       .eq("id", session.id);
 
     return NextResponse.json({ success: true, storagePath });

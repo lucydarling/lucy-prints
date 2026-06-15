@@ -11,10 +11,39 @@
 const SHOPIFY_STORE_DOMAIN =
   process.env.NEXT_PUBLIC_SHOPIFY_DOMAIN || "www.lucydarling.com";
 
-/** Shopify variant IDs for the photo print product */
+/**
+ * Throw a clear, actionable error when a required Shopify variant id is missing,
+ * rather than silently building a checkout link to a nonexistent variant (which
+ * fails opaquely at Shopify's cart).
+ *
+ * The env reads below are written as static `process.env.NEXT_PUBLIC_*` accesses
+ * (not dynamic lookups) so Next.js can inline them into the client bundle.
+ */
+function requireVariant(envName: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(
+      `Missing required env var ${envName}. Set the Shopify photo-print variant ids ` +
+        `(NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD and NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY) ` +
+        `in your environment before building checkout links.`
+    );
+  }
+  return value;
+}
+
+/** Shopify variant IDs for the photo print product (required env vars) */
 export const SHOPIFY_VARIANTS = {
-  standard: process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD || "48078680424673",
-  luxury: process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY || "48078680457441",
+  get standard() {
+    return requireVariant(
+      "NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD",
+      process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD
+    );
+  },
+  get luxury() {
+    return requireVariant(
+      "NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY",
+      process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY
+    );
+  },
 } as const;
 
 /**

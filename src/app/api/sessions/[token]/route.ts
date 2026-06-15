@@ -164,15 +164,31 @@ export async function GET(
       status: string;
     }> = {};
 
-    if (photoRows) {
-      for (const row of photoRows) {
-        const { data: signedData } = await supabaseAdmin.storage
-          .from("photos")
-          .createSignedUrl(row.storage_path, 3600);
+    if (photoRows && photoRows.length > 0) {
+      // Batch all signed-URL requests into a single call instead of one
+      // round-trip per photo (a session can have up to 48 slots).
+      const { data: signedList } = await supabaseAdmin.storage
+        .from("photos")
+        .createSignedUrls(
+          photoRows.map((row) => row.storage_path),
+          3600
+        );
 
-        if (signedData?.signedUrl) {
+      // createSignedUrls returns results in the same order as the input paths.
+      const urlByPath = new Map<string, string>();
+      if (signedList) {
+        signedList.forEach((entry, i) => {
+          if (entry.signedUrl && !entry.error) {
+            urlByPath.set(photoRows[i].storage_path, entry.signedUrl);
+          }
+        });
+      }
+
+      for (const row of photoRows) {
+        const signedUrl = urlByPath.get(row.storage_path);
+        if (signedUrl) {
           photos[row.slot_key] = {
-            signedUrl: signedData.signedUrl,
+            signedUrl,
             customLabel: row.custom_label,
             milestoneDate: row.milestone_date,
             printSize: row.print_size,
@@ -189,19 +205,33 @@ export async function GET(
       quantity: number;
     }> = [];
 
-    if (extraRows) {
-      for (const row of extraRows) {
-        let signedUrl: string | null = null;
-        if (row.storage_path) {
-          const { data: signedData } = await supabaseAdmin.storage
-            .from("photos")
-            .createSignedUrl(row.storage_path, 3600);
-          signedUrl = signedData?.signedUrl || null;
+    if (extraRows && extraRows.length > 0) {
+      // Batch signed-URL requests for extras with a stored file into one call.
+      const extraPaths = extraRows
+        .map((row) => row.storage_path)
+        .filter((p): p is string => Boolean(p));
+
+      const extraUrlByPath = new Map<string, string>();
+      if (extraPaths.length > 0) {
+        const { data: signedList } = await supabaseAdmin.storage
+          .from("photos")
+          .createSignedUrls(extraPaths, 3600);
+        if (signedList) {
+          signedList.forEach((entry, i) => {
+            if (entry.signedUrl && !entry.error) {
+              extraUrlByPath.set(extraPaths[i], entry.signedUrl);
+            }
+          });
         }
+      }
+
+      for (const row of extraRows) {
         extras.push({
           extraId: row.extra_id,
           printSize: row.print_size,
-          signedUrl,
+          signedUrl: row.storage_path
+            ? extraUrlByPath.get(row.storage_path) || null
+            : null,
           quantity: row.quantity,
         });
       }
