@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { syncProfileToKlaviyo, trackPhotoAppSignup } from "@/lib/klaviyo";
 
 /**
  * PATCH /api/sessions/[token]
@@ -35,10 +36,12 @@ export async function PATCH(
     if (babyBirthdate !== undefined) update.baby_birthdate = babyBirthdate || null;
     update.last_activity_at = new Date().toISOString();
 
-    const { error } = await supabaseAdmin
+    const { data: updatedSession, error } = await supabaseAdmin
       .from("sessions")
       .update(update)
-      .eq("id", session.id);
+      .eq("id", session.id)
+      .select("email, baby_name, baby_birthdate, phone, sms_opt_in, book_theme")
+      .single();
 
     if (error) {
       // If last_activity_at fails (stale schema cache), retry without it
@@ -60,6 +63,30 @@ export async function PATCH(
       }
       console.error("Notes sync error:", error);
       return NextResponse.json({ error: "Failed to sync" }, { status: 500 });
+    }
+
+    // Sync updated profile to Klaviyo (fire-and-forget)
+    if (updatedSession) {
+      const klaviyoData = {
+        email: updatedSession.email,
+        babyName: updatedSession.baby_name,
+        babyBirthdate: updatedSession.baby_birthdate,
+        phone: updatedSession.phone,
+        smsOptIn: updatedSession.sms_opt_in,
+        bookTheme: updatedSession.book_theme,
+      };
+
+      syncProfileToKlaviyo(klaviyoData).catch(() => {});
+
+      // If a birthdate was just added for the first time, fire the signup event
+      // so the milestone flow starts. We check `babyBirthdate` from the request
+      // body — if it was sent in this PATCH and is now set, fire the event.
+      if (babyBirthdate && updatedSession.baby_birthdate) {
+        trackPhotoAppSignup({
+          ...klaviyoData,
+          sessionToken: token,
+        }).catch(() => {});
+      }
     }
 
     return NextResponse.json({ ok: true });
