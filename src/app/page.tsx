@@ -7,15 +7,6 @@ import { usePhotoStore } from "@/store/photo-store";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
-type BookSession = {
-  token: string;
-  bookTheme: string;
-  themeName: string;
-  babyName: string | null;
-  photoCount: number;
-  lastActivity: string;
-};
-
 export default function Home() {
   const setBookTheme = usePhotoStore((s) => s.setBookTheme);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
@@ -24,14 +15,12 @@ export default function Home() {
   const [showFindBooks, setShowFindBooks] = useState(false);
   const [lookupEmail, setLookupEmail] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupBooks, setLookupBooks] = useState<BookSession[] | null>(null);
   const [lookupError, setLookupError] = useState("");
   const [emailSent, setEmailSent] = useState(false);
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLookupError("");
-    setLookupBooks(null);
     setEmailSent(false);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lookupEmail)) {
       setLookupError("Enter a valid email address.");
@@ -39,26 +28,19 @@ export default function Home() {
     }
     setLookupLoading(true);
     try {
-      const res = await fetch(`/api/sessions?email=${encodeURIComponent(lookupEmail)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Lookup failed");
-      setLookupBooks(data.sessions);
-    } catch {
-      setLookupError("Something went wrong. Please try again.");
-    } finally {
-      setLookupLoading(false);
-    }
-  };
-
-  const handleSendMyBooks = async () => {
-    try {
+      // Never return session tokens to the page. Email the resume links to the
+      // address on file instead — the response is neutral and never reveals
+      // whether any books exist for that email.
       await fetch("/api/my-books-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: lookupEmail }),
       });
-    } finally {
       setEmailSent(true);
+    } catch {
+      setLookupError("Something went wrong. Please try again.");
+    } finally {
+      setLookupLoading(false);
     }
   };
 
@@ -129,7 +111,7 @@ export default function Home() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-800">Find My Saved Books</h3>
                 <button
-                  onClick={() => { setShowFindBooks(false); setLookupBooks(null); setLookupError(""); }}
+                  onClick={() => { setShowFindBooks(false); setEmailSent(false); setLookupError(""); }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -164,41 +146,10 @@ export default function Home() {
                 <p className="text-xs text-red-500 mt-2">{lookupError}</p>
               )}
 
-              {lookupBooks !== null && (
-                <div className="mt-3">
-                  {lookupBooks.length === 0 ? (
-                    <p className="text-xs text-gray-500">No saved books found for that email.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {lookupBooks.map((book) => (
-                        <button
-                          key={book.token}
-                          onClick={() => router.push(`/resume/${book.token}`)}
-                          className="w-full text-left p-3 rounded-xl border border-gray-100 hover:border-rose-200 hover:bg-rose-50 transition-colors flex items-center justify-between gap-3"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">
-                              {book.babyName ? `${book.babyName} — ` : ""}{book.themeName}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {book.photoCount} photo{book.photoCount !== 1 ? "s" : ""} saved
-                            </p>
-                          </div>
-                          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      ))}
-                      <button
-                        onClick={handleSendMyBooks}
-                        disabled={emailSent}
-                        className="w-full text-xs text-gray-400 hover:text-gray-600 underline mt-1 disabled:no-underline disabled:cursor-default"
-                      >
-                        {emailSent ? "✓ Links sent — check your email" : "Email me links instead"}
-                      </button>
-                    </div>
-                  )}
-                </div>
+              {emailSent && (
+                <p className="text-xs text-gray-500 mt-3">
+                  If we found books for that email, we&apos;ve sent the links to your inbox.
+                </p>
               )}
             </div>
           )}

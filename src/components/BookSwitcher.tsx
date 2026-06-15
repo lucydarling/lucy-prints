@@ -51,7 +51,13 @@ export function BookSwitcher() {
     if (!open && books === null) {
       setLoading(true);
       try {
-        const res = await fetch(`/api/sessions?email=${encodeURIComponent(email)}`);
+        // Token-gated: the server lists sibling books only for the email that
+        // owns this active session token — no email-based lookup.
+        const res = await fetch(`/api/sessions/siblings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionToken }),
+        });
         const data = await res.json();
         setBooks(data.sessions || []);
       } catch {
