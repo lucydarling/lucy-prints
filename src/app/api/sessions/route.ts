@@ -3,9 +3,21 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 import { syncProfileToKlaviyo, trackPhotoAppSignup, subscribeToEmailList } from "@/lib/klaviyo";
+import {
+  checkRateLimit,
+  RATE_LIMITS,
+  getClientIp,
+  tooManyRequestsResponse,
+} from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit per IP — session creation is unauthenticated.
+    const rl = await checkRateLimit(getClientIp(req), RATE_LIMITS.sessions);
+    if (!rl.success) {
+      return tooManyRequestsResponse(rl.retryAfterSeconds);
+    }
+
     const body = await req.json();
     const { email, babyName, babyBirthdate, phone, smsOptIn, bookTheme, notes, detailsMode } = body;
 

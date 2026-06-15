@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import {
+  checkRateLimit,
+  RATE_LIMITS,
+  tooManyRequestsResponse,
+} from "@/lib/rate-limit";
 
 export const maxDuration = 30;
 
@@ -8,8 +13,6 @@ const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
 
 // The 48 fixed book slots — a known, closed set used as a strict allowlist.
 const SLOT_KEYS = new Set<string>(PHOTO_SLOTS.map((s) => s.key));
-
-// TODO: rate limiting via Upstash/Vercel KV
 
 /**
  * Sniff the leading bytes to confirm the file is actually an image we accept,
@@ -71,6 +74,12 @@ export async function POST(req: NextRequest) {
         { error: "sessionToken, slotKey, and image are required" },
         { status: 400 }
       );
+    }
+
+    // Rate limit per session token before any heavy work (storage + DB).
+    const rl = await checkRateLimit(sessionToken, RATE_LIMITS.upload);
+    if (!rl.success) {
+      return tooManyRequestsResponse(rl.retryAfterSeconds);
     }
 
     // Validate slotKey / extraId before they're used to build a storage path,

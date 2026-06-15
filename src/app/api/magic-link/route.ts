@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendMagicLinkEmail } from "@/lib/email";
+import {
+  checkRateLimit,
+  RATE_LIMITS,
+  getClientIp,
+  tooManyRequestsResponse,
+} from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +14,13 @@ export async function POST(req: NextRequest) {
 
     if (!sessionToken) {
       return NextResponse.json({ error: "sessionToken required" }, { status: 400 });
+    }
+
+    // Per-IP cap on top of the existing 60s per-email throttle below — limits
+    // how many magic-link emails one client can fan out across sessions.
+    const rl = await checkRateLimit(getClientIp(req), RATE_LIMITS.magicLinkPerIp);
+    if (!rl.success) {
+      return tooManyRequestsResponse(rl.retryAfterSeconds);
     }
 
     // Look up session

@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendMyBooksEmail } from "@/lib/email";
 import { BOOK_THEMES } from "@/lib/photo-slots";
+import {
+  checkRateLimits,
+  RATE_LIMITS,
+  getClientIp,
+  tooManyRequestsResponse,
+} from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,6 +15,17 @@ export async function POST(req: NextRequest) {
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
+    }
+
+    // Email-sending route — abuse vector is email spam, so key on BOTH the
+    // normalized email and the IP; whichever trips first blocks.
+    const normalizedEmail = email.toLowerCase().trim();
+    const rl = await checkRateLimits([
+      { identifier: normalizedEmail, rule: RATE_LIMITS.myBooksEmailPerEmail },
+      { identifier: getClientIp(req), rule: RATE_LIMITS.myBooksEmailPerIp },
+    ]);
+    if (!rl.success) {
+      return tooManyRequestsResponse(rl.retryAfterSeconds);
     }
 
     const { data: sessions } = await supabaseAdmin

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { BOOK_THEMES } from "@/lib/photo-slots";
+import {
+  checkRateLimit,
+  RATE_LIMITS,
+  tooManyRequestsResponse,
+} from "@/lib/rate-limit";
 
 /**
  * List the other active books that belong to the same email as a session the
@@ -19,6 +24,12 @@ export async function POST(req: NextRequest) {
 
     if (!sessionToken || typeof sessionToken !== "string") {
       return NextResponse.json({ error: "Session token required" }, { status: 400 });
+    }
+
+    // Rate limit per session token.
+    const rl = await checkRateLimit(sessionToken, RATE_LIMITS.siblings);
+    if (!rl.success) {
+      return tooManyRequestsResponse(rl.retryAfterSeconds);
     }
 
     // Resolve the token to its email. Unknown/expired token → neutral empty list.
