@@ -24,6 +24,7 @@ export default function ReviewPage() {
   const [showTrimExample, setShowTrimExample] = useState(false);
   const pendingDownload = useRef(false);
   const [pad3x3, setPad3x3] = useState(false);
+  const [padAllTo4x6, setPadAllTo4x6] = useState(false);
 
   useEffect(() => {
     if (!bookTheme) {
@@ -37,8 +38,9 @@ export default function ReviewPage() {
     pendingDownload.current = false;
     setDownloading(true);
     downloadPhotosZip(photos, extras, bookTheme, {
-      pad3x3to4x4: pad3x3 && (extras.filter((e) => e.size === "3x3" && e.croppedUrl).length +
+      pad3x3to4x4: !padAllTo4x6 && pad3x3 && (extras.filter((e) => e.size === "3x3" && e.croppedUrl).length +
         PHOTO_SLOTS.filter((slot) => slot.size === "3x3" && photos[slot.key]?.status !== "empty").length) > 0,
+      padAllTo4x6,
       babyName,
       notes,
     })
@@ -79,7 +81,8 @@ export default function ReviewPage() {
     setDownloading(true);
     try {
       await downloadPhotosZip(photos, extras, bookTheme, {
-        pad3x3to4x4: pad3x3 && count3x3 > 0,
+        pad3x3to4x4: !padAllTo4x6 && pad3x3 && count3x3 > 0,
+        padAllTo4x6,
         babyName,
         notes,
       });
@@ -274,6 +277,24 @@ export default function ReviewPage() {
               </div>
             )}
 
+            {/* 4x6 universal option */}
+            <div className="mb-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={padAllTo4x6}
+                  onChange={(e) => setPadAllTo4x6(e.target.checked)}
+                  className="w-4 h-4 rounded accent-[#FAB8A9] shrink-0"
+                />
+                <span className="text-xs text-gray-700 font-medium">
+                  Download all photos as 4x6&quot; with trim guides
+                </span>
+              </label>
+              <p className="text-xs text-gray-400 mt-1.5 ml-[26px] leading-relaxed">
+                Every photo gets placed on a standard 4x6&quot; sheet — order one size at any print service and trim to fit. Great if your printer only offers 4x6&quot;.
+              </p>
+            </div>
+
             <button
               onClick={handleDownload}
               disabled={downloading}
@@ -339,7 +360,7 @@ export default function ReviewPage() {
                 <div className="pt-3 border-t border-green-100">
                   <p className="text-xs font-semibold text-gray-700 mb-1">Where to print:</p>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    Walgreens · CVS · Target Photo · Shutterfly · Any local photo lab
+                    Walgreens · CVS · Target · Shutterfly · Any local photo lab
                   </p>
                 </div>
               </div>

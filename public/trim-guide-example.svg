@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 160" width="280" height="160">
+  <!-- Background: represents the 4x4" sheet you order -->
+  <rect width="280" height="160" fill="#f8fafc" rx="6" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- ── 3x3 example (left) ── -->
+  <!-- 4x4 sheet area -->
+  <rect x="12" y="20" width="100" height="100" fill="white" stroke="#e2e8f0" stroke-width="1" rx="2"/>
+  <!-- White padding areas (top and right) -->
+  <rect x="12" y="20" width="75" height="25" fill="#f1f5f9"/>
+  <rect x="87" y="20" width="25" height="100" fill="#f1f5f9"/>
+  <!-- Photo area (3x3 = 75×75 of the 100×100 box) -->
+  <rect x="12" y="45" width="75" height="75" fill="#fce7f3" rx="1"/>
+  <!-- Photo icon suggestion -->
+  <rect x="28" y="58" width="44" height="35" fill="#fbcfe8" rx="2"/>
+  <circle cx="50" cy="64" r="5" fill="#f9a8d4"/>
+  <polygon points="28,93 42,73 52,83 62,68 84,93" fill="#f472b6" opacity="0.5"/>
+  <!-- Dashed trim lines -->
+  <line x1="12" y1="45" x2="112" y2="45" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,2"/>
+  <line x1="87" y1="20" x2="87" y2="120" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,2"/>
+  <!-- Trim scissors labels -->
+  <text x="89" y="83" fill="#94a3b8" font-size="7" font-family="system-ui,sans-serif">✂</text>
+  <text x="42" y="43" fill="#94a3b8" font-size="7" font-family="system-ui,sans-serif">✂</text>
+  <!-- Label: "Order 4×4"" -->
+  <text x="62" y="14" text-anchor="middle" fill="#64748b" font-size="8" font-family="system-ui,sans-serif" font-weight="500">order 4×4"</text>
+  <!-- Label: "photo" -->
+  <text x="49" y="108" text-anchor="middle" fill="#ec4899" font-size="7" font-family="system-ui,sans-serif">3×3" photo</text>
+  <!-- Title -->
+  <text x="62" y="132" text-anchor="middle" fill="#475569" font-size="8" font-family="system-ui,sans-serif">3×3" → 4×4"</text>
+
+  <!-- Divider -->
+  <line x1="140" y1="16" x2="140" y2="144" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- ── 4x3 example (right) ── -->
+  <!-- 4x4 sheet area (wider photo, only top padding) -->
+  <rect x="152" y="20" width="116" height="100" fill="white" stroke="#e2e8f0" stroke-width="1" rx="2"/>
+  <!-- White padding area (top only) -->
+  <rect x="152" y="20" width="116" height="25" fill="#f1f5f9"/>
+  <!-- Photo area (4x3 = full width × 75 of the 100-tall box) -->
+  <rect x="152" y="45" width="116" height="75" fill="#fce7f3" rx="1"/>
+  <!-- Photo icon suggestion -->
+  <rect x="168" y="58" width="84" height="45" fill="#fbcfe8" rx="2"/>
+  <circle cx="210" cy="67" r="7" fill="#f9a8d4"/>
+  <polygon points="168,103 190,78 208,90 228,68 252,103" fill="#f472b6" opacity="0.5"/>
+  <!-- Dashed trim line (top only) -->
+  <line x1="152" y1="45" x2="268" y2="45" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,2"/>
+  <!-- Trim scissors label -->
+  <text x="202" y="43" fill="#94a3b8" font-size="7" font-family="system-ui,sans-serif">✂</text>
+  <!-- Label: "Order 4×4"" -->
+  <text x="210" y="14" text-anchor="middle" fill="#64748b" font-size="8" font-family="system-ui,sans-serif" font-weight="500">order 4×4"</text>
+  <!-- Label: "photo" -->
+  <text x="210" y="108" text-anchor="middle" fill="#ec4899" font-size="7" font-family="system-ui,sans-serif">4×3" photo</text>
+  <!-- Title -->
+  <text x="210" y="132" text-anchor="middle" fill="#475569" font-size="8" font-family="system-ui,sans-serif">4×3" → 4×4"</text>
+
+  <!-- Legend -->
+  <rect x="12" y="144" width="10" height="7" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="0.5" rx="1"/>
+  <text x="25" y="151" fill="#94a3b8" font-size="7" font-family="system-ui,sans-serif">white padding (trim off)</text>
+  <rect x="140" y="144" width="10" height="7" fill="#fce7f3" rx="1"/>
+  <text x="153" y="151" fill="#94a3b8" font-size="7" font-family="system-ui,sans-serif">your photo</text>
+</svg>
