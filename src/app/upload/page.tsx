@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
 import { getSlotsBySection } from "@/lib/photo-slots";
@@ -12,6 +13,7 @@ import { SaveButton } from "@/components/SaveButton";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
 import { DetailsModeToggle } from "@/components/DetailsModeToggle";
+import { BookSwitcher } from "@/components/BookSwitcher";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { useNotesSync } from "@/hooks/useNotesSync";
 
@@ -44,6 +46,16 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Nav header */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+          <button onClick={() => router.push("/")} className="flex items-center gap-2 shrink-0">
+            <Image src="/logo.png" alt="Lucy Darling" width={80} height={64} />
+          </button>
+          <BookSwitcher />
+        </div>
+      </div>
+
       <ProgressBar />
 
       {/* Page header */}
@@ -52,8 +64,8 @@ export default function UploadPage() {
           <div className="flex-1">
             <h1 className="text-xl font-bold text-gray-900">Your Photos</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Upload photos for each section of your memory book. We&apos;ll print
-              them at the perfect size.
+              Upload photos for each section of your memory book. We&apos;ll size
+              them perfectly for printing.
             </p>
           </div>
           <div className="ml-3 mt-1 shrink-0">
