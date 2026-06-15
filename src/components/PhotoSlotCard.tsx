@@ -95,7 +95,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       {/* Thumbnail / Upload area */}
       <button
         onClick={handleClick}
-        className={`relative flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center
+        className={`group relative flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center
           ${slot.size === "4x6" ? "w-14 h-20" : slot.size === "4x3" ? "w-20 h-14" : slot.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
           ${hasPhoto ? "bg-gray-100" : "bg-rose-50 border-2 border-dashed border-rose-200 hover:border-rose-300"}
           transition-colors`}
@@ -109,6 +109,10 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
               unoptimized
               className="object-cover"
             />
+            {/* Re-crop hover overlay */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <span className="text-white text-[10px] font-semibold leading-tight text-center">Re-crop</span>
+            </div>
             {photo?.status === "cropped" && (
               <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                 <svg
@@ -171,7 +175,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
               onClick={() => setIsEditingLabel(true)}
               className="text-sm font-medium text-gray-400 italic hover:text-gray-600 text-left"
             >
-              {photo?.customLabel || "Tap to name this first..."}
+              {photo?.customLabel || "Name this holiday..."}
             </button>
           )
         ) : (
@@ -196,6 +200,14 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       {/* Actions */}
       <div className="flex-shrink-0 flex items-center gap-1">
         {hasPhoto ? (
+          <>
+          <button
+            onClick={() => setEditingSlot(slot.key)}
+            className="px-2 py-1.5 text-xs font-medium text-gray-400 hover:text-rose-500 transition-colors"
+            aria-label="Re-crop photo"
+          >
+            Re-crop
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -218,6 +230,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
               />
             </svg>
           </button>
+          </>
         ) : (
           <button
             onClick={() => fileInputRef.current?.click()}

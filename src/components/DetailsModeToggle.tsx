@@ -28,8 +28,8 @@ export function DetailsModeToggle() {
             Capture book details too?
           </p>
           <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-            Jot down details while they&apos;re fresh — we&apos;ll include a
-            reference sheet in your download.
+            Record details like weight, height, and favorite things — we&apos;ll
+            include a reference sheet in your download.
           </p>
         </div>
         <button

@@ -63,7 +63,7 @@ export function ProgressBar() {
               ) : null}
             </div>
           ) : (
-            <span className="text-xs text-gray-400">No baby info added yet</span>
+            <span className="text-xs text-gray-400">Add your baby&apos;s name</span>
           )}
           <button
             onClick={() => setShowBabyInfoModal(true)}

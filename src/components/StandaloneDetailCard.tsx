@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
@@ -28,17 +28,24 @@ export function StandaloneDetailCard({ entry }: StandaloneDetailCardProps) {
   const isTimeCapsule = entry.slotKey === "time_capsule";
   const suggestions = isTimeCapsule ? lookupTimeCapsule(babyBirthdate) : null;
 
-  // Auto-fill empty Time Capsule fields when suggestions become available
+  // Track previous suggestions to know which fields were auto-filled vs manually entered
+  const prevSuggestionsRef = useRef<typeof suggestions>(null);
+
+  // Auto-fill Time Capsule fields when suggestions become available or birthdate changes
   useEffect(() => {
     if (!suggestions || !isTimeCapsule) return;
     const slotNotes = notes[entry.slotKey] || {};
+    const prevSuggestions = prevSuggestionsRef.current;
     for (const [promptKey, suggestionField] of Object.entries(TIME_CAPSULE_PROMPT_MAP)) {
       const suggestion = suggestions[suggestionField];
-      // Only fill if field is empty and we have a suggestion
-      if (suggestion && !slotNotes[promptKey]?.trim()) {
+      const currentValue = slotNotes[promptKey]?.trim() || "";
+      const prevSuggestion = prevSuggestions?.[suggestionField] || "";
+      // Fill if: field is empty, OR field still has the previous auto-fill value (not manually edited)
+      if (suggestion && (!currentValue || currentValue === prevSuggestion)) {
         setNote(entry.slotKey, promptKey, suggestion);
       }
     }
+    prevSuggestionsRef.current = suggestions;
     // Only run when suggestions change (birthdate changes), not on every notes update
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suggestions?.breadCost, suggestions?.fuelCost, suggestions?.popularSong, suggestions?.nationsLeader]);
@@ -182,6 +189,11 @@ function StandaloneField({
   onSave: (slotKey: string, promptKey: string, value: string) => void;
 }) {
   const [localValue, setLocalValue] = useState(value);
+
+  // Sync local state when the store value changes (e.g. birthdate-driven auto-fill)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
 
   const handleBlur = useCallback(() => {
     if (localValue !== value) {
