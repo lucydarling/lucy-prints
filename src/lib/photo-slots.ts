@@ -206,34 +206,14 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     dateField: true,
   },
 
-  // ── First Holidays (2 photos, 4x4) ──
-  {
-    key: "first_holiday_1",
-    prompt: "First Holiday #1",
-    size: "4x4",
-    section: "holidays",
-    sectionLabel: "First Holidays",
-    sortOrder: 32,
-    customLabel: true,
-  },
-  {
-    key: "first_holiday_2",
-    prompt: "First Holiday #2",
-    size: "4x4",
-    section: "holidays",
-    sectionLabel: "First Holidays",
-    sortOrder: 33,
-    customLabel: true,
-  },
-
-  // ── My Firsts (9 photos, 3x3 — customer labels them, part of First Holidays) ──
-  ...Array.from({ length: 9 }, (_, i) => ({
+  // ── First Holidays (12 photos, 3x3 — customer labels each one) ──
+  ...Array.from({ length: 12 }, (_, i) => ({
     key: `my_first_${i + 1}`,
     prompt: `My First ___`,
     size: "3x3" as PrintSize,
     section: "holidays",
     sectionLabel: "First Holidays",
-    sortOrder: 34 + i,
+    sortOrder: 32 + i,
     customLabel: true,
   })),
 
@@ -244,7 +224,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 43,
+    sortOrder: 44,
   },
   {
     key: "birthday_2",
@@ -252,7 +232,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 44,
+    sortOrder: 45,
   },
   {
     key: "birthday_3",
@@ -260,7 +240,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 45,
+    sortOrder: 46,
   },
   {
     key: "birthday_4",
@@ -268,7 +248,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 46,
+    sortOrder: 47,
   },
   {
     key: "birthday_5",
@@ -276,7 +256,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "birthdays",
     sectionLabel: "Birthdays",
-    sortOrder: 47,
+    sortOrder: 48,
   },
 
   // ── First Day of School (1 photo, 4x4) — after birthdays, matching book order ──
@@ -286,7 +266,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     size: "4x4",
     section: "school",
     sectionLabel: "First Day of School",
-    sortOrder: 48,
+    sortOrder: 49,
     dateField: true,
   },
 ];
