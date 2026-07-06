@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
-import { syncProfileToKlaviyo, trackPhotoAppSignup, subscribeToEmailList } from "@/lib/klaviyo";
+import { syncProfileToKlaviyo, trackPhotoAppSignup, subscribeToEmailList, buildSyncStatus } from "@/lib/klaviyo";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -58,18 +58,27 @@ export async function POST(req: NextRequest) {
         console.error("Session update error (existing):", updateError);
       }
 
-      // Sync updated profile to Klaviyo (fire-and-forget)
-      syncProfileToKlaviyo({
-        email,
-        babyName,
-        babyBirthdate,
-        phone,
-        smsOptIn,
-        bookTheme,
-      }).catch(() => {});
+      // Sync profile + real subscription outcomes to Klaviyo, then persist
+      // the confirmed result so failures are visible without console access.
+      const [klaviyoResult, emailResult] = await Promise.all([
+        syncProfileToKlaviyo({
+          email,
+          babyName,
+          babyBirthdate,
+          phone,
+          smsOptIn,
+          bookTheme,
+        }),
+        subscribeToEmailList(email),
+      ]);
 
-      // Ensure they're on the milestone reminder list
-      subscribeToEmailList(email).catch(() => {});
+      const { error: syncStatusError } = await supabaseAdmin
+        .from("sessions")
+        .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
+        .eq("id", existing.id);
+      if (syncStatusError) {
+        console.error("Klaviyo sync status persist error (existing):", syncStatusError);
+      }
 
       return NextResponse.json({
         token: existing.token,
@@ -110,18 +119,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Sync new profile to Klaviyo and fire signup event (fire-and-forget)
-    syncProfileToKlaviyo({
-      email,
-      babyName,
-      babyBirthdate,
-      phone,
-      smsOptIn,
-      bookTheme,
-    }).catch(() => {});
+    // Sync new profile + real subscription outcomes to Klaviyo, then persist
+    // the confirmed result so failures are visible without console access.
+    const [klaviyoResult, emailResult] = await Promise.all([
+      syncProfileToKlaviyo({
+        email,
+        babyName,
+        babyBirthdate,
+        phone,
+        smsOptIn,
+        bookTheme,
+      }),
+      subscribeToEmailList(email),
+    ]);
 
-    // Add to the milestone reminder email list
-    subscribeToEmailList(email).catch(() => {});
+    const { error: syncStatusError } = await supabaseAdmin
+      .from("sessions")
+      .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
+      .eq("id", session.id);
+    if (syncStatusError) {
+      console.error("Klaviyo sync status persist error (new):", syncStatusError);
+    }
 
     // Fire the "Photo App Signup" event only when we have a birthdate —
     // this is what triggers the monthly milestone reminder flow in Klaviyo.

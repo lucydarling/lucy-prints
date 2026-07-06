@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { syncProfileToKlaviyo, trackPhotoAppSignup } from "@/lib/klaviyo";
+import {
+  syncProfileToKlaviyo,
+  subscribeToEmailList,
+  trackPhotoAppSignup,
+  buildSyncStatus,
+} from "@/lib/klaviyo";
 
 /**
  * PATCH /api/sessions/[token]
@@ -65,7 +70,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Failed to sync" }, { status: 500 });
     }
 
-    // Sync updated profile to Klaviyo (fire-and-forget)
+    // Sync profile + real subscription outcomes to Klaviyo, then persist the
+    // confirmed result so failures are visible without console access. This
+    // also covers sessions that only get a birthdate/details added later via
+    // this PATCH — they still get an email-subscribe attempt.
     if (updatedSession) {
       const klaviyoData = {
         email: updatedSession.email,
@@ -76,7 +84,18 @@ export async function PATCH(
         bookTheme: updatedSession.book_theme,
       };
 
-      syncProfileToKlaviyo(klaviyoData).catch(() => {});
+      const [klaviyoResult, emailResult] = await Promise.all([
+        syncProfileToKlaviyo(klaviyoData),
+        subscribeToEmailList(updatedSession.email),
+      ]);
+
+      const { error: syncStatusError } = await supabaseAdmin
+        .from("sessions")
+        .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
+        .eq("id", session.id);
+      if (syncStatusError) {
+        console.error("Klaviyo sync status persist error (patch):", syncStatusError);
+      }
 
       // If a birthdate was just added for the first time, fire the signup event
       // so the milestone flow starts. We check `babyBirthdate` from the request
