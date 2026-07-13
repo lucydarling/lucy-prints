@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cropper, CropperRef } from "react-advanced-cropper";
 import "react-advanced-cropper/dist/style.css";
 import { usePhotoStore } from "@/store/photo-store";
@@ -13,7 +13,15 @@ export function CropModal() {
   const setCropped = usePhotoStore((s) => s.setCropped);
   const setExtraCropped = usePhotoStore((s) => s.setExtraCropped);
   const setEditingSlot = usePhotoStore((s) => s.setEditingSlot);
+  const removePhoto = usePhotoStore((s) => s.removePhoto);
+  const removeExtra = usePhotoStore((s) => s.removeExtra);
   const cropperRef = useRef<CropperRef>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  // Reset the error state whenever a different slot opens the modal.
+  useEffect(() => {
+    setLoadError(false);
+  }, [editingSlot]);
 
   if (!editingSlot) return null;
 
@@ -41,18 +49,34 @@ export function CropModal() {
       width: cropWidth,
       height: cropHeight,
     });
-    if (canvas) {
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
-      if (extra) {
-        setExtraCropped(editingSlot, dataUrl);
-      } else {
-        setCropped(editingSlot, dataUrl);
-      }
+    // getCanvas returns null when the image never decoded — don't close
+    // silently (that's what produced empty ZIPs). Surface the failure instead.
+    if (!canvas) {
+      setLoadError(true);
+      return;
+    }
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    if (extra) {
+      setExtraCropped(editingSlot, dataUrl);
+    } else {
+      setCropped(editingSlot, dataUrl);
     }
     setEditingSlot(null);
   };
 
   const handleCancel = () => {
+    setEditingSlot(null);
+  };
+
+  // Remove the un-openable photo entirely so it can't linger as an
+  // uploaded-but-uncroppable slot (which would otherwise inflate counts
+  // and produce an empty ZIP).
+  const handleRemoveAndClose = () => {
+    if (extra) {
+      removeExtra(editingSlot);
+    } else {
+      removePhoto(editingSlot);
+    }
     setEditingSlot(null);
   };
 
@@ -72,33 +96,60 @@ export function CropModal() {
             {size}&quot; {aspectRatio === 1 ? "square" : aspectRatio > 1 ? "landscape" : "portrait"} crop
           </p>
         </div>
-        <button
-          onClick={handleDone}
-          className="text-rose-400 hover:text-rose-300 text-sm font-semibold"
-        >
-          Done
-        </button>
+        {loadError ? (
+          <span className="text-sm font-semibold text-white/30 select-none">Done</span>
+        ) : (
+          <button
+            onClick={handleDone}
+            className="text-rose-400 hover:text-rose-300 text-sm font-semibold"
+          >
+            Done
+          </button>
+        )}
       </div>
 
-      {/* Cropper */}
+      {/* Cropper — or an inline error if the photo couldn't be opened */}
       <div className="flex-1 relative">
-        <Cropper
-          ref={cropperRef}
-          src={previewUrl}
-          stencilProps={{
-            aspectRatio,
-          }}
-          className="h-full"
-        />
+        {loadError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+            <svg className="w-12 h-12 text-rose-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <p className="text-white text-sm font-medium mb-1">
+              We couldn&apos;t open this photo
+            </p>
+            <p className="text-white/60 text-xs max-w-xs mb-5">
+              This file type isn&apos;t supported for cropping. Please try a JPG or PNG version of the photo.
+            </p>
+            <button
+              onClick={handleRemoveAndClose}
+              className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold rounded-full transition-colors"
+            >
+              Remove &amp; pick another
+            </button>
+          </div>
+        ) : (
+          <Cropper
+            ref={cropperRef}
+            src={previewUrl}
+            stencilProps={{
+              aspectRatio,
+            }}
+            onError={() => setLoadError(true)}
+            className="h-full"
+          />
+        )}
       </div>
 
       {/* Footer hint */}
-      <div className="px-4 py-3 bg-black/50 text-center">
-        <p className="text-white/60 text-xs">
-          Pinch to zoom. Drag to position. Photo will print at {size}
-          &quot; at 300 DPI.
-        </p>
-      </div>
+      {!loadError && (
+        <div className="px-4 py-3 bg-black/50 text-center">
+          <p className="text-white/60 text-xs">
+            Pinch to zoom. Drag to position. Photo will print at {size}
+            &quot; at 300 DPI.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

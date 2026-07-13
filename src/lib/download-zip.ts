@@ -45,6 +45,7 @@ export async function downloadPhotosZip(
   const zip = new JSZip();
   const root = zip.folder("Lucy Darling Prints")!;
   const name = options.babyName?.trim() || "Baby";
+  let addedImages = 0;
 
   // Add regular slot photos — flat, numbered, personalized
   for (const slot of PHOTO_SLOTS) {
@@ -75,6 +76,7 @@ export async function downloadPhotosZip(
 
     const fileName = `${orderNum} ${label} (${sizeLabel}).jpg`;
     root.file(fileName, blob);
+    addedImages++;
   }
 
   // Add extras — no number prefix, just "Extra" label
@@ -102,7 +104,14 @@ export async function downloadPhotosZip(
 
       const fileName = `Extra ${sizeLabel} Print ${i + 1}.jpg`;
       root.file(fileName, blob);
+      addedImages++;
     }
+  }
+
+  // Never produce a ZIP with no photos in it — surface the failure to the
+  // caller (review page shows an alert) instead of downloading an empty folder.
+  if (addedImages === 0) {
+    throw new Error("No cropped photos to download");
   }
 
   // Add book details reference sheet if notes exist

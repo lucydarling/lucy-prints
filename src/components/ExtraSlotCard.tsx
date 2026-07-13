@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
 import { usePhotoStore, type ExtraPrint } from "@/store/photo-store";
+import { prepareImageFile } from "@/lib/image-prep";
 
 interface ExtraSlotCardProps {
   extra: ExtraPrint;
@@ -14,20 +15,22 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
   const removeExtra = usePhotoStore((s) => s.removeExtra);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   const hasPhoto = extra.previewUrl || extra.croppedUrl;
   const displayUrl = extra.croppedUrl || extra.previewUrl;
   const aspectRatio = extra.size === "4x6" ? "portrait" : "square";
 
   const handleFile = useCallback(
-    (file: File) => {
-      if (!file.type.startsWith("image/")) return;
-      if (file.size > 15 * 1024 * 1024) {
-        alert("Photo is too large (max 15 MB). Please try a smaller file.");
+    async (file: File) => {
+      setIsConverting(true);
+      const result = await prepareImageFile(file);
+      setIsConverting(false);
+      if (!result.ok) {
+        alert(result.error);
         return;
       }
-      const url = URL.createObjectURL(file);
-      setExtraPhoto(extra.id, url);
+      setExtraPhoto(extra.id, result.url);
       setEditingSlot(extra.id);
     },
     [extra.id, setExtraPhoto, setEditingSlot]
@@ -117,6 +120,11 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
               </div>
             )}
           </>
+        ) : isConverting ? (
+          <svg className="w-6 h-6 text-rose-400 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
         ) : (
           <svg
             className={`w-6 h-6 ${isDragOver ? "text-rose-500" : "text-rose-300"}`}
@@ -172,9 +180,10 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
         ) : (
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100 transition-colors"
+            disabled={isConverting}
+            className="px-3 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Upload
+            {isConverting ? "Converting…" : "Upload"}
           </button>
         )}
       </div>
@@ -182,7 +191,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         onChange={handleFileSelect}
         className="hidden"
       />

@@ -77,6 +77,15 @@ export default function ReviewPage() {
   const totalPhotos = count4x6 + count4x3 + count4x4 + count3x3;
   const missingCount = PHOTO_SLOTS.length - uploadedSlots.length;
 
+  // What will actually land in the ZIP: only photos that have been cropped
+  // (downloadPhotosZip bundles croppedUrl only). Uploaded-but-not-cropped
+  // photos count toward totalPhotos but produce nothing — gate the download
+  // on this so an empty ZIP can never be created silently.
+  const downloadableCount =
+    PHOTO_SLOTS.filter((slot) => photos[slot.key]?.croppedUrl).length +
+    extras.filter((e) => e.croppedUrl).length;
+  const uncroppedCount = totalPhotos - downloadableCount;
+
   const executeDownload = async () => {
     setDownloading(true);
     try {
@@ -97,6 +106,12 @@ export default function ReviewPage() {
 
   const handleDownload = () => {
     if (downloading) return;
+    if (downloadableCount === 0) {
+      alert(
+        "None of your photos are ready to download yet. Open each photo and tap Done to crop it first."
+      );
+      return;
+    }
     if (!sessionId) {
       pendingDownload.current = true;
       setShowSaveModal(true);
@@ -295,9 +310,31 @@ export default function ReviewPage() {
               </p>
             </div>
 
+            {/* Not-yet-cropped warning — the ZIP only contains cropped photos */}
+            {uncroppedCount > 0 && (
+              <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <p className="text-xs font-semibold text-amber-800 mb-0.5">
+                  {downloadableCount === 0
+                    ? "No photos are ready to download yet"
+                    : `${uncroppedCount} photo${uncroppedCount > 1 ? "s" : ""} won't be included`}
+                </p>
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  {downloadableCount === 0
+                    ? "Open each photo and tap Done to crop it — only cropped photos can be downloaded."
+                    : "Photos need to be cropped before they can be downloaded. Open each one and tap Done."}
+                </p>
+                <button
+                  onClick={() => router.push("/upload")}
+                  className="mt-1.5 text-xs font-medium text-amber-700 underline"
+                >
+                  Go back and finish cropping
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleDownload}
-              disabled={downloading}
+              disabled={downloading || downloadableCount === 0}
               className="w-full py-3 bg-rose-500 hover:bg-rose-600 text-white font-semibold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {downloading ? (
