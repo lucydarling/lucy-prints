@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { sendMagicLinkEmail } from "@/lib/email";
+import { sendMagicLinkEmail, EmailSendError } from "@/lib/email";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -32,6 +32,9 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (!session) {
+      console.warn(
+        `[magic-link] outcome=lookup-miss token=${sessionToken} — no active session; no email attempted`
+      );
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -48,12 +51,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Send magic link email
-    await sendMagicLinkEmail({
-      to: session.email,
-      babyName: session.baby_name || undefined,
-      token: session.token,
-      photoCount: session.photo_count || 0,
-    });
+    try {
+      await sendMagicLinkEmail({
+        to: session.email,
+        babyName: session.baby_name || undefined,
+        token: session.token,
+        photoCount: session.photo_count || 0,
+      });
+    } catch (sendErr) {
+      const detail =
+        sendErr instanceof EmailSendError
+          ? `provider=${sendErr.providerName} status=${sendErr.providerStatus ?? "n/a"} reason=${sendErr.message}`
+          : `reason=${sendErr instanceof Error ? sendErr.message : String(sendErr)}`;
+      console.error(
+        `[magic-link] outcome=send-failed token=${session.token} ${detail}`
+      );
+      // Do NOT stamp last_emailed_at — nothing was sent, so the 60s throttle
+      // must not lock the customer out of retrying.
+      return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
+    }
+
+    console.log(`[magic-link] outcome=sent token=${session.token}`);
 
     // Update last emailed timestamp
     await supabaseAdmin

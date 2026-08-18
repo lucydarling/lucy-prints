@@ -4,6 +4,71 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : (null as unknown as Resend);
 
+export const FROM_ADDRESS = "Lucy Darling Prints <prints@lucydarling.com>";
+
+/**
+ * Base URL for resume links. Falls back to the real production host so a
+ * missing env var can never render links as "undefined/resume/<token>".
+ */
+export function resolveAppUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ||
+    "https://memories.lucydarling.com"
+  );
+}
+
+/**
+ * Thrown when Resend rejects a send. Carries the provider's own error so
+ * callers can log the real reason (unverified domain, bad key, rate limit)
+ * instead of a generic failure.
+ */
+export class EmailSendError extends Error {
+  readonly providerName: string;
+  readonly providerStatus?: number;
+
+  constructor(providerName: string, providerMessage: string, providerStatus?: number) {
+    super(`Resend rejected the send [${providerName}]: ${providerMessage}`);
+    this.name = "EmailSendError";
+    this.providerName = providerName;
+    this.providerStatus = providerStatus;
+  }
+}
+
+/**
+ * Send via Resend and surface failures.
+ *
+ * The Resend SDK does NOT throw on API errors — it resolves with
+ * `{ data: null, error }`. Awaiting it without inspecting the result makes a
+ * rejected send indistinguishable from a delivered one, which is exactly how
+ * the 403 "domain is not verified" failure stayed invisible: the route kept
+ * returning 200 while zero mail left the building. Always check `error`.
+ */
+async function sendEmail(params: { to: string; subject: string; html: string }) {
+  if (!resend) {
+    throw new EmailSendError(
+      "missing_api_key",
+      "RESEND_API_KEY is not set in this environment"
+    );
+  }
+
+  const { data, error } = await resend.emails.send({
+    from: FROM_ADDRESS,
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+  });
+
+  if (error) {
+    throw new EmailSendError(
+      error.name ?? "unknown_error",
+      error.message ?? "no message returned",
+      (error as { statusCode?: number }).statusCode
+    );
+  }
+
+  return data;
+}
+
 export async function sendMyBooksEmail({
   to,
   sessions,
@@ -18,9 +83,11 @@ export async function sendMyBooksEmail({
         : "Your Lucy Darling photo book"
       : `Your ${sessions.length} Lucy Darling photo books`;
 
+  const appUrl = resolveAppUrl();
+
   const booksHtml = sessions
     .map((s) => {
-      const resumeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/resume/${s.token}`;
+      const resumeUrl = `${appUrl}/resume/${s.token}`;
       const label = s.babyName ? `${s.babyName} — ${s.themeName}` : s.themeName;
       return `
         <div style="border:1px solid #F3F4F6;border-radius:10px;padding:16px 20px;margin-bottom:12px;">
@@ -33,8 +100,7 @@ export async function sendMyBooksEmail({
     })
     .join("");
 
-  await resend.emails.send({
-    from: "Lucy Darling Prints <prints@lucydarling.com>",
+  await sendEmail({
     to,
     subject,
     html: `
@@ -48,7 +114,7 @@ export async function sendMyBooksEmail({
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;padding:32px 16px;">
     <tr>
       <td align="center" style="padding-bottom:24px;">
-        <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="Lucy Darling" width="150" style="display:block;" />
+        <img src="${appUrl}/logo.png" alt="Lucy Darling" width="150" style="display:block;" />
         <p style="font-size:12px;color:#FAB8A9;margin:4px 0 0 0;font-weight:500;">Photo Prints</p>
       </td>
     </tr>
@@ -86,15 +152,15 @@ export async function sendMagicLinkEmail({
   token: string;
   photoCount: number;
 }) {
-  const resumeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/resume/${token}`;
+  const appUrl = resolveAppUrl();
+  const resumeUrl = `${appUrl}/resume/${token}`;
   const subject = babyName
     ? `Your photo book for ${babyName} is saved`
     : "Your Lucy Darling photo book is saved";
 
   const greeting = babyName ? `${babyName}'s` : "Your";
 
-  await resend.emails.send({
-    from: "Lucy Darling Prints <prints@lucydarling.com>",
+  await sendEmail({
     to,
     subject,
     html: `
@@ -108,7 +174,7 @@ export async function sendMagicLinkEmail({
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;padding:32px 16px;">
     <tr>
       <td align="center" style="padding-bottom:24px;">
-        <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="Lucy Darling" width="150" style="display:block;" />
+        <img src="${appUrl}/logo.png" alt="Lucy Darling" width="150" style="display:block;" />
         <p style="font-size:12px;color:#FAB8A9;margin:4px 0 0 0;font-weight:500;">Photo Prints</p>
       </td>
     </tr>
