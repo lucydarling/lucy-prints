@@ -28,7 +28,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
     sortOrder: 1,
   },
 
-  // ── Before Baby (2 photos, 4x4) ──
+  // ── Before Baby (2 photos: 4x3 + 3x3) ──
   {
     key: "ultrasound",
     prompt: "Ultrasound Photo",
@@ -40,7 +40,7 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
   {
     key: "baby_bump",
     prompt: "Baby Bump Photo",
-    size: "4x4",
+    size: "3x3",
     section: "before_baby",
     sectionLabel: "Before Baby",
     sortOrder: 3,
