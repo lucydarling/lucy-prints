@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { PHOTO_SLOTS, type PrintSize } from "@/lib/photo-slots";
+import {
+  PHOTO_SLOTS,
+  type PrintOrientation,
+  type PrintSize,
+} from "@/lib/photo-slots";
 
 export interface PhotoEntry {
   slotKey: string;
@@ -18,6 +22,11 @@ export interface PhotoEntry {
 export interface ExtraPrint {
   id: string;
   size: PrintSize;
+  /**
+   * Always "portrait" for a new extra. Only changes the shape of the
+   * rectangular sizes (4x3, 4x6) — squares ignore it.
+   */
+  orientation: PrintOrientation;
   previewUrl: string | null;
   croppedUrl: string | null;
   quantity: number;
@@ -39,9 +48,10 @@ interface PhotoStore {
 
   /** Extra prints for blank pages */
   extras: ExtraPrint[];
-  addExtra: (size: PrintSize) => void;
+  addExtra: (size: PrintSize, orientation?: PrintOrientation) => void;
   setExtraPhoto: (id: string, previewUrl: string) => void;
   setExtraCropped: (id: string, croppedUrl: string) => void;
+  setExtraOrientation: (id: string, orientation: PrintOrientation) => void;
   removeExtra: (id: string) => void;
 
   /** Progress */
@@ -141,13 +151,14 @@ export const usePhotoStore = create<PhotoStore>()(
         })),
 
       extras: [],
-      addExtra: (size) =>
+      addExtra: (size, orientation = "portrait") =>
         set((state) => ({
           extras: [
             ...state.extras,
             {
               id: `extra_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
               size,
+              orientation,
               previewUrl: null,
               croppedUrl: null,
               quantity: 1,
@@ -167,6 +178,22 @@ export const usePhotoStore = create<PhotoStore>()(
           extras: state.extras.map((e) =>
             e.id === id ? { ...e, croppedUrl } : e
           ),
+        })),
+
+      setExtraOrientation: (id, orientation) =>
+        set((state) => ({
+          extras: state.extras.map((e) => {
+            if (e.id !== id || e.orientation === orientation) return e;
+            // A crop made for the old shape can't be reused — drop it so the
+            // customer re-crops. Blob previewUrls don't survive a reload, so
+            // fall back to the cropped image as the source to re-crop from.
+            return {
+              ...e,
+              orientation,
+              previewUrl: e.previewUrl ?? e.croppedUrl,
+              croppedUrl: null,
+            };
+          }),
         })),
 
       removeExtra: (id) =>
@@ -207,6 +234,21 @@ export const usePhotoStore = create<PhotoStore>()(
     }),
     {
       name: "lucy-prints-photos",
+      merge: (persisted, current) => {
+        const merged = {
+          ...current,
+          ...(persisted as Partial<PhotoStore>),
+        } as PhotoStore;
+
+        // Extras saved before orientation existed come back without it —
+        // treat those as portrait, the default for every new extra.
+        merged.extras = (merged.extras ?? []).map((e) => ({
+          ...e,
+          orientation: e.orientation === "landscape" ? "landscape" : "portrait",
+        }));
+
+        return merged;
+      },
       partialize: (state) => {
         // Strip blob: previewUrls (invalid after page reload) to reduce storage size.
         // CroppedUrls (base64) are kept for local display until uploaded to Supabase.

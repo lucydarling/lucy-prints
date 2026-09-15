@@ -171,7 +171,7 @@ export async function GET(
     // Fetch extras
     const { data: extraRows } = await supabaseAdmin
       .from("session_extras")
-      .select("extra_id, print_size, storage_path, quantity")
+      .select("extra_id, print_size, orientation, storage_path, quantity")
       .eq("session_id", session.id);
 
     // Generate signed URLs for each photo (valid 1 hour)
@@ -185,7 +185,7 @@ export async function GET(
 
     if (photoRows && photoRows.length > 0) {
       // Batch all signed-URL requests into a single call instead of one
-      // round-trip per photo (a session can have up to 48 slots).
+      // round-trip per photo (a session can have up to 49 slots).
       const { data: signedList } = await supabaseAdmin.storage
         .from("photos")
         .createSignedUrls(
@@ -220,6 +220,7 @@ export async function GET(
     const extras: Array<{
       extraId: string;
       printSize: string;
+      orientation: "portrait" | "landscape";
       signedUrl: string | null;
       quantity: number;
     }> = [];
@@ -248,6 +249,8 @@ export async function GET(
         extras.push({
           extraId: row.extra_id,
           printSize: row.print_size,
+          // Rows saved before orientation existed come back null — portrait.
+          orientation: row.orientation === "landscape" ? "landscape" : "portrait",
           signedUrl: row.storage_path
             ? extraUrlByPath.get(row.storage_path) || null
             : null,

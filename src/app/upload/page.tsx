@@ -4,7 +4,12 @@ import { useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
-import { getSlotsBySection } from "@/lib/photo-slots";
+import {
+  EXTRA_PRINT_SIZES,
+  getPrintSizeLabel,
+  getSlotsBySection,
+  type PrintSize,
+} from "@/lib/photo-slots";
 import { ProgressBar } from "@/components/ProgressBar";
 import { SectionGroup } from "@/components/SectionGroup";
 import { ExtraSlotCard } from "@/components/ExtraSlotCard";
@@ -115,10 +120,14 @@ export default function UploadPage() {
                 : "Need more prints for the blank pages at the back of your book?"}
             </p>
             <div className="flex gap-2 justify-center flex-wrap">
-              <ExtraButton size="3x3" />
-              <ExtraButton size="4x4" />
-              <ExtraButton size="4x6" />
+              {EXTRA_PRINT_SIZES.map((size) => (
+                <ExtraButton key={size} size={size} />
+              ))}
             </div>
+            <p className="text-xs text-gray-400 mt-3">
+              Rectangular prints start out portrait — switch one to landscape
+              any time after you add it.
+            </p>
           </div>
         </div>
       </div>
@@ -149,15 +158,18 @@ export default function UploadPage() {
   );
 }
 
-function ExtraButton({ size }: { size: "3x3" | "4x4" | "4x6" }) {
+function ExtraButton({ size }: { size: PrintSize }) {
   const addExtra = usePhotoStore((s) => s.addExtra);
+  // Every extra is added portrait, so label the button with the portrait
+  // reading of the size (4x3 → 3x4").
+  const label = getPrintSizeLabel(size, "portrait");
 
   return (
     <button
-      onClick={() => addExtra(size)}
+      onClick={() => addExtra(size, "portrait")}
       className="px-4 py-2 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100 transition-colors"
     >
-      + Add {size}&quot; print
+      + Add {label}&quot; print
     </button>
   );
 }

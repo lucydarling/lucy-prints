@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
+import { type PrintSize } from "@/lib/photo-slots";
 
 interface SessionData {
   session: {
@@ -29,6 +30,7 @@ interface SessionData {
   extras: Array<{
     extraId: string;
     printSize: string;
+    orientation?: "portrait" | "landscape";
     signedUrl: string | null;
     quantity: number;
   }>;
@@ -153,7 +155,10 @@ export default function ResumePage({
 
             usePhotoStore
               .getState()
-              .addExtra(extra.printSize as "3x3" | "4x4");
+              .addExtra(
+                (extra.printSize as PrintSize) || "4x4",
+                extra.orientation === "landscape" ? "landscape" : "portrait"
+              );
             const extras = usePhotoStore.getState().extras;
             const lastExtra = extras[extras.length - 1];
             if (lastExtra) {

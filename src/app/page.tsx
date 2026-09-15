@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
-import { BOOK_THEMES } from "@/lib/photo-slots";
+import { BOOK_THEMES, PHOTO_SLOTS } from "@/lib/photo-slots";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
 export default function Home() {
@@ -254,7 +254,9 @@ function ThemeCard({
         <p className="text-sm font-medium text-gray-800 truncate">
           {theme.name}
         </p>
-        <p className="text-xs text-gray-400 mt-0.5">48 photos</p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          {PHOTO_SLOTS.length} photos
+        </p>
       </div>
     </button>
   );

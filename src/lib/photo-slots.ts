@@ -1,5 +1,68 @@
 export type PrintSize = "3x3" | "4x3" | "4x4" | "4x6";
 
+/** Which way up a rectangular print is cropped and printed. */
+export type PrintOrientation = "portrait" | "landscape";
+
+/** Sizes offered in the Extra Prints section, in the order they're shown. */
+export const EXTRA_PRINT_SIZES = ["3x3", "4x3", "4x4", "4x6"] as const;
+
+/**
+ * Pixel dimensions at 300 DPI, read as the size name does — width first.
+ * "4x6" is 4" wide × 6" tall (1200×1800px); "4x3" is 4" wide × 3" tall.
+ */
+const PRINT_DIMENSIONS: Record<PrintSize, { width: number; height: number }> = {
+  "3x3": { width: 900, height: 900 },
+  "4x3": { width: 1200, height: 900 },
+  "4x4": { width: 1200, height: 1200 },
+  "4x6": { width: 1200, height: 1800 },
+};
+
+/** True for sizes where portrait and landscape are the same shape. */
+export function isSquarePrintSize(size: PrintSize): boolean {
+  const { width, height } = PRINT_DIMENSIONS[size];
+  return width === height;
+}
+
+/**
+ * Pixel dimensions at 300 DPI. Pass an orientation to force the print
+ * portrait or landscape (rectangular sizes only); omit it to get a book
+ * slot's natural shape, which never rotates.
+ */
+export function getPrintDimensions(
+  size: PrintSize,
+  orientation?: PrintOrientation
+): { width: number; height: number } {
+  const base = PRINT_DIMENSIONS[size];
+  if (!orientation || base.width === base.height) return base;
+
+  const wantsLandscape = orientation === "landscape";
+  const isLandscape = base.width > base.height;
+  return wantsLandscape === isLandscape
+    ? base
+    : { width: base.height, height: base.width };
+}
+
+/**
+ * The size as it reads on the finished print:
+ * 4x6 portrait → "4x6", 4x6 landscape → "6x4", 4x3 portrait → "3x4".
+ */
+export function getPrintSizeLabel(
+  size: PrintSize,
+  orientation?: PrintOrientation
+): string {
+  const { width, height } = getPrintDimensions(size, orientation);
+  return `${width / 300}x${height / 300}`;
+}
+
+/** Crop aspect ratio (width ÷ height) for a size + orientation. */
+export function getPrintAspectRatio(
+  size: PrintSize,
+  orientation?: PrintOrientation
+): number {
+  const { width, height } = getPrintDimensions(size, orientation);
+  return width / height;
+}
+
 export interface PhotoSlot {
   key: string;
   prompt: string;
@@ -14,7 +77,7 @@ export interface PhotoSlot {
 }
 
 /**
- * All 48 required photo slots in a Lucy Darling memory book.
+ * All 49 required photo slots in a Lucy Darling memory book.
  * Every book theme shares this exact same layout — only the illustrations differ.
  */
 export const PHOTO_SLOTS: PhotoSlot[] = [

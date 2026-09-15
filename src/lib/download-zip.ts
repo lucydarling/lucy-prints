@@ -1,5 +1,12 @@
 import JSZip from "jszip";
-import { PHOTO_SLOTS, type PrintSize, type PhotoSlot } from "@/lib/photo-slots";
+import {
+  PHOTO_SLOTS,
+  getPrintDimensions,
+  getPrintSizeLabel,
+  type PrintOrientation,
+  type PrintSize,
+  type PhotoSlot,
+} from "@/lib/photo-slots";
 import { BOOK_PROMPTS, getPromptsForSlot } from "@/lib/book-prompts";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
 
@@ -56,23 +63,13 @@ export async function downloadPhotosZip(
     const label = personalizeSlotName(slot, name, photo.customLabel);
     const orderNum = String(slot.sortOrder).padStart(2, "0");
 
-    let sizeLabel: string;
-    let blob: Blob;
-
-    if (options.padAllTo4x6) {
-      // Everything goes on a 4x6 canvas
-      sizeLabel = `${getSizeLabel(slot.size)} on 4x6 trim sheet`;
-      blob = await padTo4x6(imageData, slot.size);
-    } else {
-      const shouldPad3x3 = options.pad3x3to4x4 && slot.size === "3x3";
-      const shouldPad3x4 = slot.size === "4x3"; // always padded — most printers don't offer 4x3
-      sizeLabel = shouldPad3x3 ? '3x3 on 4x4 trim sheet' : shouldPad3x4 ? '4x3 on 4x4 trim sheet' : getSizeLabel(slot.size);
-      blob = shouldPad3x3
-        ? await padTo4x4(imageData, "3x3")
-        : shouldPad3x4
-        ? await padTo4x4(imageData, "4x3")
-        : await dataUrlToBlob(imageData);
-    }
+    // Book slots always print in their natural shape — no orientation.
+    const { sizeLabel, blob } = await preparePrint(
+      imageData,
+      slot.size,
+      undefined,
+      options
+    );
 
     const fileName = `${orderNum} ${label} (${sizeLabel}).jpg`;
     root.file(fileName, blob);
@@ -85,22 +82,12 @@ export async function downloadPhotosZip(
     for (let i = 0; i < croppedExtras.length; i++) {
       const extra = croppedExtras[i];
 
-      let sizeLabel: string;
-      let blob: Blob;
-
-      if (options.padAllTo4x6) {
-        sizeLabel = `${getSizeLabel(extra.size)} on 4x6 trim sheet`;
-        blob = await padTo4x6(extra.croppedUrl!, extra.size);
-      } else {
-        const shouldPad3x3 = options.pad3x3to4x4 && extra.size === "3x3";
-        const shouldPad3x4 = extra.size === "4x3";
-        sizeLabel = shouldPad3x3 ? '3x3 on 4x4 trim sheet' : shouldPad3x4 ? '4x3 on 4x4 trim sheet' : getSizeLabel(extra.size);
-        blob = shouldPad3x3
-          ? await padTo4x4(extra.croppedUrl!, "3x3")
-          : shouldPad3x4
-          ? await padTo4x4(extra.croppedUrl!, "4x3")
-          : await dataUrlToBlob(extra.croppedUrl!);
-      }
+      const { sizeLabel, blob } = await preparePrint(
+        extra.croppedUrl!,
+        extra.size,
+        extra.orientation,
+        options
+      );
 
       const fileName = `Extra ${sizeLabel} Print ${i + 1}.jpg`;
       root.file(fileName, blob);
@@ -184,17 +171,59 @@ function personalizeSlotName(
   return slot.prompt;
 }
 
-function getSizeLabel(size: PrintSize): string {
-  switch (size) {
-    case "3x3":
-      return '3x3"';
-    case "4x3":
-      return '4x3"';
-    case "4x4":
-      return '4x4"';
-    case "4x6":
-      return '4x6"';
+function getSizeLabel(size: PrintSize, orientation?: PrintOrientation): string {
+  return `${getPrintSizeLabel(size, orientation)}"`;
+}
+
+/**
+ * Turn one cropped image into the blob that goes in the ZIP, applying whatever
+ * white padding and trim guides the chosen print options call for, and the
+ * size label that ends up in the filename.
+ *
+ * `orientation` is only passed for extra prints — book slots always keep
+ * their natural shape.
+ */
+async function preparePrint(
+  imageData: string,
+  size: PrintSize,
+  orientation: PrintOrientation | undefined,
+  options: DownloadOptions
+): Promise<{ sizeLabel: string; blob: Blob }> {
+  const { width, height } = getPrintDimensions(size, orientation);
+  const label = getSizeLabel(size, orientation);
+
+  if (options.padAllTo4x6) {
+    // Everything goes on a 4x6 sheet — turned landscape when the print is
+    // too wide to sit upright on it (a 6x4 extra).
+    const sheet =
+      width > 1200
+        ? { width: 1800, height: 1200 }
+        : { width: 1200, height: 1800 };
+
+    // Already exactly a 4x6 sheet, either way up — nothing to trim.
+    if (width === sheet.width && height === sheet.height) {
+      return { sizeLabel: label, blob: await dataUrlToBlob(imageData) };
+    }
+
+    return {
+      sizeLabel: `${label} on 4x6 trim sheet`,
+      blob: await padOntoSheet(imageData, sheet.width, sheet.height),
+    };
   }
+
+  // 4x3 / 3x4 is never printed as-is — most printers don't offer it — so it
+  // always goes on a 4x4 sheet. 3x3 does too when the option is on.
+  const padTo4x4 = size === "4x3" || (options.pad3x3to4x4 && size === "3x3");
+  if (padTo4x4) {
+    return {
+      // No inch mark here — matches the trim-sheet filenames customers and
+      // print labs have been getting all along.
+      sizeLabel: `${getPrintSizeLabel(size, orientation)} on 4x4 trim sheet`,
+      blob: await padOntoSheet(imageData, 1200, 1200),
+    };
+  }
+
+  return { sizeLabel: label, blob: await dataUrlToBlob(imageData) };
 }
 
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
@@ -203,140 +232,76 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 }
 
 /**
- * Place a 3x3" or 4x3" image onto a 4x4" canvas (1200×1200px @ 300 DPI)
- * with white padding and dashed trim guides.
+ * Place a print on a larger sheet (1200×1200px = 4x4", 1200×1800px = 4x6",
+ * or 1800×1200px = 6x4", all at 300 DPI) with white padding and dashed trim
+ * guides. The image sits in the bottom-left corner and a guide runs along
+ * each edge that has padding, so the customer orders a standard size and
+ * trims along the dashes.
  *
- * 3x3 (900×900px): 1" padding on top + 1" on right. Image at bottom-left.
- * 4x3 (1200×900px): 1" padding on top. Image at bottom, full width.
- *
- * Customer prints at 4x4 and trims along the guides.
+ * Examples: 3x3 (900×900) on a 4x4 sheet gets 1" on top and 1" on the right;
+ * 3x4 (900×1200) on a 4x4 sheet gets 1" on the right only; 6x4 (1800×1200)
+ * on a 6x4 sheet needs nothing.
  */
-async function padTo4x4(dataUrl: string, size: "3x3" | "4x3"): Promise<Blob> {
+async function padOntoSheet(
+  dataUrl: string,
+  sheetWidth: number,
+  sheetHeight: number
+): Promise<Blob> {
   const img = await loadImage(dataUrl);
-  const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 1200;
-  const ctx = canvas.getContext("2d")!;
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
 
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(0, 0, 1200, 1200);
-
-  ctx.strokeStyle = "#DDDDDD";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([8, 4]);
-
-  if (size === "3x3") {
-    // Horizontal guide at y=300 (top of 3x3 image area)
-    ctx.beginPath();
-    ctx.moveTo(0, 300);
-    ctx.lineTo(1200, 300);
-    ctx.stroke();
-    // Vertical guide at x=900 (right edge of 3x3 image area)
-    ctx.beginPath();
-    ctx.moveTo(900, 0);
-    ctx.lineTo(900, 1200);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = "#CCCCCC";
-    ctx.font = "20px sans-serif";
-    ctx.fillText("✂ trim", 920, 620);
-    ctx.fillText("✂ trim", 380, 280);
-
-    // Image at bottom-left: x=0, y=300 (900×900px)
-    ctx.drawImage(img, 0, 300, 900, 900);
-  } else {
-    // 4x3: image is 1200×900px — full width, needs 1" (300px) on top
-    // Horizontal guide at y=300
-    ctx.beginPath();
-    ctx.moveTo(0, 300);
-    ctx.lineTo(1200, 300);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    ctx.fillStyle = "#CCCCCC";
-    ctx.font = "20px sans-serif";
-    ctx.fillText("✂ trim", 530, 280);
-
-    // Image at bottom: x=0, y=300 (1200×900px)
-    ctx.drawImage(img, 0, 300, 1200, 900);
+  // Nothing to pad, or the print is bigger than the sheet — hand back the
+  // image untouched rather than silently cropping someone's photo.
+  if (
+    (width === sheetWidth && height === sheetHeight) ||
+    width > sheetWidth ||
+    height > sheetHeight
+  ) {
+    return dataUrlToBlob(dataUrl);
   }
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("Canvas toBlob failed"))),
-      "image/jpeg",
-      0.95
-    );
-  });
-}
-
-/**
- * Place any image onto a 4x6" canvas (1200×1800px @ 300 DPI)
- * with white padding and dashed trim guides. Image is centered
- * horizontally and placed at the bottom of the canvas.
- *
- * 4x6 (1200×1800px): no padding needed — already 4x6.
- * 4x4 (1200×1200px): 600px white padding on top.
- * 4x3 (1200×900px):  900px white padding on top.
- * 3x3 (900×900px):   900px top, 300px right.
- */
-async function padTo4x6(dataUrl: string, size: PrintSize): Promise<Blob> {
-  // 4x6 images don't need padding
-  if (size === "4x6") return dataUrlToBlob(dataUrl);
-
-  const img = await loadImage(dataUrl);
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;  // 4" at 300 DPI
-  canvas.height = 1800; // 6" at 300 DPI
+  canvas.width = sheetWidth;
+  canvas.height = sheetHeight;
   const ctx = canvas.getContext("2d")!;
 
-  // White background
   ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(0, 0, 1200, 1800);
+  ctx.fillRect(0, 0, sheetWidth, sheetHeight);
+
+  // Image sits at the bottom-left; padding goes on top and to the right.
+  const yOffset = sheetHeight - height;
+  const hasTopPadding = yOffset > 0;
+  const hasRightPadding = width < sheetWidth;
 
   ctx.strokeStyle = "#DDDDDD";
   ctx.lineWidth = 1;
   ctx.setLineDash([8, 4]);
+
+  if (hasTopPadding) {
+    ctx.beginPath();
+    ctx.moveTo(0, yOffset);
+    ctx.lineTo(sheetWidth, yOffset);
+    ctx.stroke();
+  }
+  if (hasRightPadding) {
+    ctx.beginPath();
+    ctx.moveTo(width, 0);
+    ctx.lineTo(width, sheetHeight);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
   ctx.fillStyle = "#CCCCCC";
   ctx.font = "20px sans-serif";
-
-  if (size === "4x4") {
-    // 4x4 = 1200×1200px → place at bottom, 600px padding on top
-    const yOffset = 600;
-    ctx.beginPath();
-    ctx.moveTo(0, yOffset);
-    ctx.lineTo(1200, yOffset);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillText("✂ trim", 530, yOffset - 20);
-    ctx.drawImage(img, 0, yOffset, 1200, 1200);
-  } else if (size === "4x3") {
-    // 4x3 = 1200×900px → place at bottom, 900px padding on top
-    const yOffset = 900;
-    ctx.beginPath();
-    ctx.moveTo(0, yOffset);
-    ctx.lineTo(1200, yOffset);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillText("✂ trim", 530, yOffset - 20);
-    ctx.drawImage(img, 0, yOffset, 1200, 900);
-  } else {
-    // 3x3 = 900×900px → place at bottom-left, 900px top + 300px right
-    const yOffset = 900;
-    ctx.beginPath();
-    ctx.moveTo(0, yOffset);
-    ctx.lineTo(1200, yOffset);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(900, 0);
-    ctx.lineTo(900, 1800);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillText("✂ trim", 530, yOffset - 20);
-    ctx.fillText("✂ trim", 920, 1350);
-    ctx.drawImage(img, 0, yOffset, 900, 900);
+  if (hasTopPadding) {
+    ctx.fillText("\u2702 trim", sheetWidth / 2 - 70, yOffset - 20);
   }
+  if (hasRightPadding) {
+    ctx.fillText("\u2702 trim", width + 20, yOffset + height / 2);
+  }
+
+  ctx.drawImage(img, 0, yOffset, width, height);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(

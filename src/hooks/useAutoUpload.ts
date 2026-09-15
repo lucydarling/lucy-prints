@@ -83,6 +83,7 @@ export function useAutoUpload() {
     let customLabel: string | undefined;
     let milestoneDate: string | undefined;
     let printSize: string | undefined;
+    let orientation: string | undefined;
     let extraId: string | undefined;
 
     if (isExtra) {
@@ -94,6 +95,7 @@ export function useAutoUpload() {
       }
       croppedUrl = extra.croppedUrl;
       printSize = extra.size;
+      orientation = extra.orientation;
       extraId = extra.id;
     } else {
       const photo = photos[nextSlotKey];
@@ -121,6 +123,7 @@ export function useAutoUpload() {
       customLabel,
       milestoneDate,
       printSize,
+      orientation,
       isExtra,
       extraId,
     })
@@ -140,6 +143,7 @@ async function uploadPhoto({
   customLabel,
   milestoneDate,
   printSize,
+  orientation,
   isExtra,
   extraId,
 }: {
@@ -149,6 +153,7 @@ async function uploadPhoto({
   customLabel?: string;
   milestoneDate?: string;
   printSize?: string;
+  orientation?: string;
   isExtra: boolean;
   extraId?: string;
 }) {
@@ -163,6 +168,7 @@ async function uploadPhoto({
   if (customLabel) formData.append("customLabel", customLabel);
   if (milestoneDate) formData.append("milestoneDate", milestoneDate);
   if (printSize) formData.append("printSize", printSize);
+  if (orientation) formData.append("orientation", orientation);
   if (isExtra) formData.append("isExtra", "true");
   if (extraId) formData.append("extraId", extraId);
 

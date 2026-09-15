@@ -38,7 +38,7 @@ export interface RateLimitResult {
  * Named sliding-window limiters. Tune limits only with a documented reason.
  */
 export const RATE_LIMITS = {
-  // 60 uploads/min per session token — generous; a full 48-slot book plus
+  // 60 uploads/min per session token — generous; a full 49-slot book plus
   // re-crops and extras fits comfortably, but scripted abuse trips quickly.
   upload: { limit: 60, window: "60 s", prefix: "rl:upload" },
   // 20 session creates/min per IP — well above a human filling a form.

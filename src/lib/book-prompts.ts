@@ -1,6 +1,6 @@
 /**
  * All text prompts from the Lucy Darling memory book.
- * These are the fill-in-the-blank fields across ~48 book pages.
+ * These are the fill-in-the-blank fields across ~49 book pages.
  * Used by the "Book Details" mode to help moms capture info digitally.
  */
 

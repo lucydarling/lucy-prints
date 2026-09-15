@@ -4,14 +4,32 @@ import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
 import { usePhotoStore, type ExtraPrint } from "@/store/photo-store";
 import { prepareImageFile } from "@/lib/image-prep";
+import {
+  getPrintDimensions,
+  getPrintSizeLabel,
+  isSquarePrintSize,
+  type PrintOrientation,
+} from "@/lib/photo-slots";
 
 interface ExtraSlotCardProps {
   extra: ExtraPrint;
 }
 
+/** Thumbnail box at 16px per inch, with the long edge capped at 80px. */
+function thumbnailBox(width: number, height: number) {
+  const inchesW = width / 300;
+  const inchesH = height / 300;
+  const scale = Math.min(16, 80 / Math.max(inchesW, inchesH));
+  return {
+    width: Math.round(inchesW * scale),
+    height: Math.round(inchesH * scale),
+  };
+}
+
 export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
   const setExtraPhoto = usePhotoStore((s) => s.setExtraPhoto);
   const setEditingSlot = usePhotoStore((s) => s.setEditingSlot);
+  const setExtraOrientation = usePhotoStore((s) => s.setExtraOrientation);
   const removeExtra = usePhotoStore((s) => s.removeExtra);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -19,7 +37,20 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
 
   const hasPhoto = extra.previewUrl || extra.croppedUrl;
   const displayUrl = extra.croppedUrl || extra.previewUrl;
-  const aspectRatio = extra.size === "4x6" ? "portrait" : "square";
+  const isSquare = isSquarePrintSize(extra.size);
+  const sizeLabel = getPrintSizeLabel(extra.size, extra.orientation);
+  const shapeLabel = isSquare ? "square" : extra.orientation;
+  const { width, height } = getPrintDimensions(extra.size, extra.orientation);
+  const thumb = thumbnailBox(width, height);
+
+  const handleOrientationChange = (orientation: PrintOrientation) => {
+    if (orientation === extra.orientation) return;
+    const hadPhoto = Boolean(extra.previewUrl || extra.croppedUrl);
+    setExtraOrientation(extra.id, orientation);
+    // The old crop is discarded for the new shape — send them straight back
+    // to the cropper so the print never ends up uncropped.
+    if (hadPhoto) setEditingSlot(extra.id);
+  };
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -88,8 +119,8 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
       {/* Thumbnail / Upload area */}
       <button
         onClick={handleClick}
+        style={{ width: thumb.width, height: thumb.height }}
         className={`relative flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center
-          ${extra.size === "4x6" ? "w-14 h-20" : extra.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
           ${hasPhoto ? "bg-gray-100" : "bg-rose-50 border-2 border-dashed border-rose-200 hover:border-rose-300"}
           transition-colors`}
       >
@@ -97,7 +128,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
           <>
             <Image
               src={displayUrl}
-              alt={`Extra ${extra.size}" print`}
+              alt={`Extra ${sizeLabel}" print`}
               fill
               unoptimized
               className="object-cover"
@@ -142,14 +173,42 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
         )}
       </button>
 
-      {/* Label + size */}
+      {/* Label + size + orientation */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-800 truncate">
-          Extra {extra.size}&quot; Print
+          Extra {sizeLabel}&quot; Print
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
-          {extra.size}&quot; {aspectRatio} print
+          {sizeLabel}&quot; {shapeLabel} print
         </p>
+
+        {/* Square sizes look the same either way — only offer the choice
+            where it changes the shape of the print. */}
+        {!isSquare && (
+          <div
+            role="group"
+            aria-label="Print orientation"
+            className="inline-flex mt-2 p-0.5 rounded-full bg-gray-100"
+          >
+            {(["portrait", "landscape"] as const).map((option) => (
+              <button
+                key={option}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOrientationChange(option);
+                }}
+                aria-pressed={extra.orientation === option}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full capitalize transition-colors ${
+                  extra.orientation === option
+                    ? "bg-white text-rose-600 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Actions */}

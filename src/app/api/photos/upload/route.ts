@@ -11,7 +11,7 @@ export const maxDuration = 30;
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
 
-// The 48 fixed book slots — a known, closed set used as a strict allowlist.
+// The 49 fixed book slots — a known, closed set used as a strict allowlist.
 const SLOT_KEYS = new Set<string>(PHOTO_SLOTS.map((s) => s.key));
 
 /**
@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
     const customLabel = formData.get("customLabel") as string | null;
     const milestoneDate = formData.get("milestoneDate") as string | null;
     const printSize = formData.get("printSize") as string | null;
+    const orientation = formData.get("orientation") as string | null;
     const isExtra = formData.get("isExtra") === "true";
     const extraId = formData.get("extraId") as string | null;
 
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid extra id" }, { status: 400 });
       }
     } else if (!SLOT_KEYS.has(slotKey)) {
-      // The 48 book slots are a fixed, known set — strict allowlist.
+      // The 49 book slots are a fixed, known set — strict allowlist.
       return NextResponse.json({ error: "Unknown slot" }, { status: 400 });
     }
 
@@ -165,6 +166,8 @@ export async function POST(req: NextRequest) {
             session_id: session.id,
             extra_id: extraId || slotKey,
             print_size: printSize || "4x4",
+            // Extras default to portrait; anything unrecognised does too.
+            orientation: orientation === "landscape" ? "landscape" : "portrait",
             storage_path: storagePath,
           },
           { onConflict: "session_id,extra_id" }
