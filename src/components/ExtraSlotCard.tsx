@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
 import { usePhotoStore, type ExtraPrint } from "@/store/photo-store";
-import { prepareImageFile } from "@/lib/image-prep";
+import { detectImageOrientation, prepareImageFile } from "@/lib/image-prep";
 import {
   getPrintDimensions,
   getPrintSizeLabel,
@@ -56,12 +56,16 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
     async (file: File) => {
       setIsConverting(true);
       const result = await prepareImageFile(file);
-      setIsConverting(false);
       if (!result.ok) {
+        setIsConverting(false);
         alert(result.error);
         return;
       }
-      setExtraPhoto(extra.id, result.url);
+      // Match the print to the photo's shape so the cropper opens on the
+      // right one; the customer can still flip it in there.
+      const detected = await detectImageOrientation(result.url);
+      setIsConverting(false);
+      setExtraPhoto(extra.id, result.url, detected);
       setEditingSlot(extra.id);
     },
     [extra.id, setExtraPhoto, setEditingSlot]
@@ -99,6 +103,12 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
 
   const handleClick = () => {
     if (hasPhoto) {
+      // Blob previewUrls don't survive a reload, but the cropped data URL
+      // does — promote it so the cropper has a source to reopen with instead
+      // of silently doing nothing.
+      if (!extra.previewUrl && extra.croppedUrl) {
+        setExtraPhoto(extra.id, extra.croppedUrl);
+      }
       setEditingSlot(extra.id);
     } else {
       fileInputRef.current?.click();

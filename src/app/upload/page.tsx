@@ -125,8 +125,8 @@ export default function UploadPage() {
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-3">
-              Rectangular prints start out portrait — switch one to landscape
-              any time after you add it.
+              Rectangular prints match your photo&apos;s shape automatically —
+              you can switch portrait and landscape while cropping.
             </p>
           </div>
         </div>

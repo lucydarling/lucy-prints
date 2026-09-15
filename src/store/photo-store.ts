@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   PHOTO_SLOTS,
+  isSquarePrintSize,
   type PrintOrientation,
   type PrintSize,
 } from "@/lib/photo-slots";
@@ -27,6 +28,12 @@ export interface ExtraPrint {
    * rectangular sizes (4x3, 4x6) — squares ignore it.
    */
   orientation: PrintOrientation;
+  /**
+   * True once the customer has picked an orientation themselves. Until then
+   * an uploaded photo sets the orientation to match its own shape; after it,
+   * their choice wins and a later upload won't silently flip the print.
+   */
+  orientationLocked?: boolean;
   previewUrl: string | null;
   croppedUrl: string | null;
   quantity: number;
@@ -49,7 +56,11 @@ interface PhotoStore {
   /** Extra prints for blank pages */
   extras: ExtraPrint[];
   addExtra: (size: PrintSize, orientation?: PrintOrientation) => void;
-  setExtraPhoto: (id: string, previewUrl: string) => void;
+  setExtraPhoto: (
+    id: string,
+    previewUrl: string,
+    detectedOrientation?: PrintOrientation | null
+  ) => void;
   setExtraCropped: (id: string, croppedUrl: string) => void;
   setExtraOrientation: (id: string, orientation: PrintOrientation) => void;
   removeExtra: (id: string) => void;
@@ -166,11 +177,23 @@ export const usePhotoStore = create<PhotoStore>()(
           ],
         })),
 
-      setExtraPhoto: (id, previewUrl) =>
+      setExtraPhoto: (id, previewUrl, detectedOrientation) =>
         set((state) => ({
-          extras: state.extras.map((e) =>
-            e.id === id ? { ...e, previewUrl } : e
-          ),
+          extras: state.extras.map((e) => {
+            if (e.id !== id) return e;
+            // Match the print to the photo's own shape, unless the customer
+            // already chose an orientation or the size is square (where the
+            // choice would do nothing).
+            const adopt =
+              detectedOrientation &&
+              !e.orientationLocked &&
+              !isSquarePrintSize(e.size);
+            return {
+              ...e,
+              previewUrl,
+              orientation: adopt ? detectedOrientation : e.orientation,
+            };
+          }),
         })),
 
       setExtraCropped: (id, croppedUrl) =>
@@ -183,13 +206,19 @@ export const usePhotoStore = create<PhotoStore>()(
       setExtraOrientation: (id, orientation) =>
         set((state) => ({
           extras: state.extras.map((e) => {
-            if (e.id !== id || e.orientation === orientation) return e;
+            if (e.id !== id) return e;
+            // Picking the already-active option is still an explicit choice —
+            // lock it so a later upload can't flip the print back.
+            if (e.orientation === orientation) {
+              return { ...e, orientationLocked: true };
+            }
             // A crop made for the old shape can't be reused — drop it so the
             // customer re-crops. Blob previewUrls don't survive a reload, so
             // fall back to the cropped image as the source to re-crop from.
             return {
               ...e,
               orientation,
+              orientationLocked: true,
               previewUrl: e.previewUrl ?? e.croppedUrl,
               croppedUrl: null,
             };
@@ -245,6 +274,7 @@ export const usePhotoStore = create<PhotoStore>()(
         merged.extras = (merged.extras ?? []).map((e) => ({
           ...e,
           orientation: e.orientation === "landscape" ? "landscape" : "portrait",
+          orientationLocked: e.orientationLocked === true,
         }));
 
         return merged;

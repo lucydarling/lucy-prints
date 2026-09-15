@@ -11,6 +11,8 @@
  * silently handing an undecodable blob to the cropper (which renders black).
  */
 
+import type { PrintOrientation } from "@/lib/photo-slots";
+
 const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
 export type PrepareImageResult =
@@ -62,4 +64,28 @@ export async function prepareImageFile(file: File): Promise<PrepareImageResult> 
   }
 
   return { ok: true, url: URL.createObjectURL(file) };
+}
+
+/**
+ * Read an image's natural dimensions and report which way up it is.
+ *
+ * Used to default an extra print to the shape of the photo the customer
+ * actually chose, so nobody has to guess an orientation before seeing the
+ * picture. Resolves to null when the image can't be measured or is square —
+ * in both cases the caller keeps whatever orientation it already had.
+ */
+export function detectImageOrientation(
+  url: string
+): Promise<PrintOrientation | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const width = img.naturalWidth || img.width;
+      const height = img.naturalHeight || img.height;
+      if (!width || !height || width === height) return resolve(null);
+      resolve(width > height ? "landscape" : "portrait");
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
 }

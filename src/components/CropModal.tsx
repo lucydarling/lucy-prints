@@ -8,6 +8,7 @@ import {
   PHOTO_SLOTS,
   getPrintDimensions,
   getPrintSizeLabel,
+  isSquarePrintSize,
   type PrintOrientation,
   type PrintSize,
 } from "@/lib/photo-slots";
@@ -21,13 +22,33 @@ export function CropModal() {
   const setEditingSlot = usePhotoStore((s) => s.setEditingSlot);
   const removePhoto = usePhotoStore((s) => s.removePhoto);
   const removeExtra = usePhotoStore((s) => s.removeExtra);
+  const setExtraOrientation = usePhotoStore((s) => s.setExtraOrientation);
   const cropperRef = useRef<CropperRef>(null);
   const [loadError, setLoadError] = useState(false);
+
+  // Read the editing extra's orientation up here so the refresh effect below
+  // sits above the early returns and keeps a stable hook order.
+  const editingOrientation = usePhotoStore((s) =>
+    s.editingSlot
+      ? s.extras.find((e) => e.id === s.editingSlot)?.orientation ?? null
+      : null
+  );
+  const previousOrientation = useRef<PrintOrientation | null>(null);
 
   // Reset the error state whenever a different slot opens the modal.
   useEffect(() => {
     setLoadError(false);
   }, [editingSlot]);
+
+  // Flipping orientation changes the stencil's aspect ratio — the cropper
+  // needs a nudge to re-fit the crop box to the new shape.
+  useEffect(() => {
+    const previous = previousOrientation.current;
+    if (previous && editingOrientation && previous !== editingOrientation) {
+      cropperRef.current?.refresh();
+    }
+    previousOrientation.current = editingOrientation;
+  }, [editingOrientation]);
 
   if (!editingSlot) return null;
 
@@ -53,6 +74,7 @@ export function CropModal() {
     orientation
   );
   const aspectRatio = cropWidth / cropHeight;
+  const canChooseOrientation = Boolean(extra) && !isSquarePrintSize(size);
 
   const handleDone = () => {
     const canvas = cropperRef.current?.getCanvas({
@@ -113,6 +135,33 @@ export function CropModal() {
               : "portrait"}{" "}
             crop
           </p>
+
+          {/* Extras can be turned while the photo is on screen — which is the
+              only point you can really tell which way it wants to go. Book
+              slots print in a fixed shape, and squares look the same either
+              way, so neither gets the control. */}
+          {canChooseOrientation && !loadError && (
+            <div
+              role="group"
+              aria-label="Print orientation"
+              className="inline-flex mt-1.5 p-0.5 rounded-full bg-white/10"
+            >
+              {(["portrait", "landscape"] as const).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setExtraOrientation(editingSlot, option)}
+                  aria-pressed={orientation === option}
+                  className={`px-2.5 py-0.5 text-[11px] font-medium rounded-full capitalize transition-colors ${
+                    orientation === option
+                      ? "bg-white text-gray-900"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {loadError ? (
           <span className="text-sm font-semibold text-white/30 select-none">Done</span>
