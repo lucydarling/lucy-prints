@@ -25,7 +25,8 @@ function digest(value: string): Buffer {
 }
 
 function configuredKey(): string | null {
-  const key = process.env.PHOTO_LAB_PJ_PREVIEW_KEY;
+  // Trimmed: a key pasted into the Vercel dashboard can pick up a trailing newline.
+  const key = process.env.PHOTO_LAB_PJ_PREVIEW_KEY?.trim();
   // A short or missing key never unlocks anything.
   return key && key.length >= 16 ? key : null;
 }
