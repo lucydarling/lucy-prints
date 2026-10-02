@@ -20,7 +20,9 @@ export default function ReviewPage() {
   const notes = usePhotoStore((s) => s.notes);
   const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const babyName = useSaveStore((s) => s.babyName);
-  const sessionId = useSaveStore((s) => s.sessionId);
+  // A saved book is one with a session token. (sessionId is "" after a
+  // resume — the API never exposes it — so it can't mean "saved".)
+  const sessionToken = useSaveStore((s) => s.sessionToken);
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
   const router = useRouter();
 
@@ -42,7 +44,7 @@ export default function ReviewPage() {
 
   // After save modal completes, auto-trigger the pending download
   useEffect(() => {
-    if (!pendingDownload.current || !sessionId || !bookTheme) return;
+    if (!pendingDownload.current || !sessionToken || !bookTheme) return;
     pendingDownload.current = false;
     setDownloading(true);
     downloadPhotosZip(photos, extras, bookTheme, {
@@ -63,7 +65,7 @@ export default function ReviewPage() {
       })
       .finally(() => setDownloading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionToken]);
 
   if (!bookTheme) {
     return null;
@@ -123,7 +125,7 @@ export default function ReviewPage() {
       );
       return;
     }
-    if (!sessionId) {
+    if (!sessionToken) {
       pendingDownload.current = true;
       setShowSaveModal(true);
       return;

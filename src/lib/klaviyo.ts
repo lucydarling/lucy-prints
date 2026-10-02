@@ -234,22 +234,29 @@ export async function syncProfileToKlaviyo(
   const formattedPhone = data.phone ? formatPhone(data.phone) : null;
   const willAttemptSms = Boolean(data.smsOptIn && formattedPhone);
 
-  // Baseline properties — sms_consent starts false and is only flipped to
-  // true after subscribeToSms() confirms the job actually completed.
-  const attributes: Record<string, unknown> = {
+  // Profile properties are one value per email and the last write wins, so a
+  // blank field means "leave the profile as it is" — never send null for it.
+  // A customer re-saving (resume link, new device, a second book) with the
+  // name or birthday left empty must not wipe what the milestone flow and
+  // segments run on.
+  const properties = profileProperties(data);
+
+  // sms_consent starts false and is only flipped to true after
+  // subscribeToSms() confirms the job actually completed. On an EXISTING
+  // profile it is written only when this save attempts SMS, so a re-save
+  // without the SMS box can't reset a confirmed true.
+  const createAttributes: Record<string, unknown> = {
     email: data.email.toLowerCase().trim(),
-    properties: {
-      baby_name: data.babyName ?? null,
-      baby_birthdate: data.babyBirthdate ?? null,
-      book_theme: data.bookTheme ?? null,
-      photo_app_signup: true,
-      sms_consent: false,
-      source: "memories_app",
-    },
+    properties: { ...properties, sms_consent: false },
+  };
+  const updateAttributes: Record<string, unknown> = {
+    email: data.email.toLowerCase().trim(),
+    properties: willAttemptSms ? { ...properties, sms_consent: false } : properties,
   };
 
   if (formattedPhone) {
-    attributes.phone_number = formattedPhone;
+    createAttributes.phone_number = formattedPhone;
+    updateAttributes.phone_number = formattedPhone;
   }
 
   try {
@@ -259,7 +266,7 @@ export async function syncProfileToKlaviyo(
       body: JSON.stringify({
         data: {
           type: "profile",
-          attributes,
+          attributes: createAttributes,
         },
       }),
     });
@@ -275,7 +282,7 @@ export async function syncProfileToKlaviyo(
       const json = await res.json();
       profileId = json?.errors?.[0]?.meta?.duplicate_profile_id ?? null;
       if (profileId) {
-        await patchProfile(profileId, attributes);
+        await patchProfile(profileId, updateAttributes);
       }
     } else {
       const errorText = await res.text().catch(() => "");
@@ -312,6 +319,24 @@ export async function syncProfileToKlaviyo(
     console.error("[Klaviyo] Profile sync error:", msg);
     return { profileId: null, smsSubscribed: false, smsConsentStatus: "UNKNOWN", smsError: msg };
   }
+}
+
+/**
+ * The photo-app properties a memory book save writes. Blank values are
+ * left out entirely (not sent as null), so they never overwrite the profile.
+ */
+export function profileProperties(data: KlaviyoSessionData): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    photo_app_signup: true,
+    source: "memories_app",
+  };
+  const name = data.babyName?.trim();
+  const birthdate = data.babyBirthdate?.trim();
+  const theme = data.bookTheme?.trim();
+  if (name) properties.baby_name = name;
+  if (birthdate) properties.baby_birthdate = birthdate;
+  if (theme) properties.book_theme = theme;
+  return properties;
 }
 
 // ─────────────────────────────────────────────
