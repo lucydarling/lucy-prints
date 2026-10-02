@@ -7,6 +7,8 @@ import { usePhotoStore } from "@/store/photo-store";
 import {
   EXTRA_PRINT_SIZES,
   getPrintSizeLabel,
+  getBookSlots,
+  getProductForTheme,
   getSlotsBySection,
   type PrintSize,
 } from "@/lib/photo-slots";
@@ -28,6 +30,7 @@ export default function UploadPage() {
   const initializeSlots = usePhotoStore((s) => s.initializeSlots);
   const photos = usePhotoStore((s) => s.photos);
   const extras = usePhotoStore((s) => s.extras);
+  const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const router = useRouter();
 
   // Background photo upload to cloud
@@ -46,9 +49,12 @@ export default function UploadPage() {
   if (!bookTheme) return null;
 
   const sections = getSlotsBySection(bookTheme);
-  const uploaded = Object.values(photos).filter(
-    (p) => p.status === "cropped" || p.status === "uploaded"
-  ).length;
+  const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
+  // Photos in use: memory book slots, or the region photos the chosen layouts use.
+  const uploaded = getBookSlots(bookTheme, regionLayouts).filter((slot) => {
+    const p = photos[slot.key];
+    return p && (p.status === "cropped" || p.status === "uploaded");
+  }).length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -72,7 +78,8 @@ export default function UploadPage() {
           <div className="flex-1">
             <h1 className="text-xl font-bold text-gray-900">Your Photos</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Upload photos for each section of your memory book. We&apos;ll size
+              Upload photos for each section of your{" "}
+              {isJournal ? "pregnancy journal" : "memory book"}. We&apos;ll size
               them perfectly for printing.
             </p>
           </div>
@@ -82,10 +89,12 @@ export default function UploadPage() {
         </div>
       </div>
 
-      {/* Details mode toggle */}
-      <div className="max-w-2xl mx-auto">
-        <DetailsModeToggle />
-      </div>
+      {/* Details mode toggle — memory books only for now (no journal prompts yet) */}
+      {!isJournal && (
+        <div className="max-w-2xl mx-auto">
+          <DetailsModeToggle />
+        </div>
+      )}
 
       {/* Sections */}
       <div className="max-w-2xl mx-auto pb-24 pt-2">

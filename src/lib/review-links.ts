@@ -20,6 +20,10 @@ export const REVIEW_PRODUCT_HANDLES: Record<BookThemeId, string> = {
   wildflower_meadow: "wildflower-meadow-luxury-memory-baby-book",
   golden_blossom: "special-edition-golden-blossom-memory-baby-book",
   golden_stargazer: "special-edition-golden-stargazer-memory-baby-book",
+  // One Shopify product ("Pregnancy Memory Book") with both colourways as
+  // variants — verified via the Admin API 2026-10-02.
+  love_grows_desert_sand: "lucy-darling-pregnancy-journal",
+  love_grows_moss_green: "lucy-darling-pregnancy-journal",
 };
 
 /** Product page + Judge.me reviews section. Contains no personal data. */

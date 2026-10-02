@@ -33,6 +33,7 @@ export function openBook(themeId: string): void {
     extras: photoState.extras,
     notes: photoState.notes,
     detailsMode: photoState.detailsMode,
+    regionLayouts: photoState.regionLayouts,
     session: {
       sessionToken: save.sessionToken,
       sessionId: save.sessionId,
@@ -53,6 +54,7 @@ export function openBook(themeId: string): void {
     extras: next?.extras ?? [],
     notes: next?.notes ?? {},
     detailsMode: next?.detailsMode ?? false,
+    regionLayouts: next?.regionLayouts ?? {},
     editingSlot: null,
     shelf,
   });

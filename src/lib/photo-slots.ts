@@ -1,3 +1,5 @@
+import { JOURNAL_ITEMS } from "@/lib/journal-slots";
+
 export type PrintSize = "3x3" | "3.5x3.5" | "4x3" | "4x4" | "4x6";
 
 /** Which way up a rectangular print is cropped and printed. */
@@ -91,6 +93,68 @@ export interface PhotoSlot {
   dateField?: boolean;
   /** Page of the printed book this photo goes on, where that's tracked. */
   page?: number;
+  /**
+   * Set when the print must be cropped portrait or landscape — a region
+   * photo whose layout picks the shape. Book slots without it keep their
+   * natural shape (a 4x3 is landscape), exactly as before regions existed.
+   */
+  orientation?: PrintOrientation;
+  /** For a photo inside a region: the region's key and its 1-based position. */
+  region?: string;
+  regionIndex?: number;
+}
+
+/**
+ * One way to fill a region: `count` prints of one size, all the same way up.
+ * Every layout is checked against the page's measured clear area (with 0.25"
+ * between prints) before it's offered, so whatever the parent picks fits.
+ */
+export interface RegionLayout {
+  id: string;
+  count: number;
+  size: PrintSize;
+  /** Orientations that fit `count` of these on the page; squares list "portrait". */
+  orientations: PrintOrientation[];
+}
+
+/**
+ * Part of a page where the parent arranges several photos by hand (the
+ * pregnancy journal's month pages, shower pages…). The app sizes the photos;
+ * the parent places them. Each photo gets its own slot key `<key>_<n>`.
+ */
+export interface PhotoRegion {
+  key: string;
+  prompt: string;
+  page: number;
+  section: string;
+  sectionLabel: string;
+  sortOrder: number;
+  /** DRAFT guidance shown on the card — pending Haily's voice pass. */
+  guidance?: string;
+  /** Layouts offered, the default first. Each size appears at most once. */
+  layouts: RegionLayout[];
+}
+
+/** The customer's layout + orientation for one region. */
+export interface RegionChoice {
+  layoutId: string;
+  orientation: PrintOrientation;
+}
+
+/** The photo slots a region expands to: one per position, up to its largest layout. */
+export function expandRegion(region: PhotoRegion): PhotoSlot[] {
+  const max = Math.max(...region.layouts.map((l) => l.count));
+  return Array.from({ length: max }, (_, i) => ({
+    key: `${region.key}_${i + 1}`,
+    prompt: region.prompt,
+    size: region.layouts[0].size,
+    section: region.section,
+    sectionLabel: region.sectionLabel,
+    sortOrder: region.sortOrder + (i + 1) / 100,
+    page: region.page,
+    region: region.key,
+    regionIndex: i + 1,
+  }));
 }
 
 /**
@@ -377,17 +441,39 @@ export const BOOK_THEMES = [
   // Retiring — still available while supplies last
   { id: "golden_blossom", name: "Golden Blossom", sku: "BB021MEM", tier: "retiring", product: "memory_book" },
   { id: "golden_stargazer", name: "Golden Stargazer", sku: "BB022MEM", tier: "retiring", product: "memory_book" },
+  // Love Grows Pregnancy Journal — hidden behind the preview gate (lib/preview-gate.ts)
+  { id: "love_grows_desert_sand", name: "Love Grows Pregnancy Journal (Desert Sand)", sku: "PJ001PRE", tier: "journal", product: "pregnancy_journal" },
+  { id: "love_grows_moss_green", name: "Love Grows Pregnancy Journal (Moss Green)", sku: "PJ002PRE", tier: "journal", product: "pregnancy_journal" },
 ] as const;
 
 export type BookThemeId = (typeof BOOK_THEMES)[number]["id"];
 
 export type BookTheme = (typeof BOOK_THEMES)[number];
 
-/** Photo slots for each product, in book order. */
+/** Regions for each product. Memory books have none. */
+export const REGIONS_BY_PRODUCT: Record<ProductType, PhotoRegion[]> = {
+  memory_book: [],
+  pregnancy_journal: JOURNAL_ITEMS.filter(isRegion),
+};
+
+/** Photo slots for each product, in book order (region photos expanded). */
 export const SLOTS_BY_PRODUCT: Record<ProductType, PhotoSlot[]> = {
   memory_book: PHOTO_SLOTS,
-  pregnancy_journal: [],
+  pregnancy_journal: JOURNAL_ITEMS.flatMap((item) =>
+    isRegion(item) ? expandRegion(item) : [item]
+  ),
 };
+
+/** What a product is called, and what its progress bar counts. */
+export const PRODUCTS: Record<ProductType, { name: string; progressUnit: string }> = {
+  memory_book: { name: "Memory Book", progressUnit: "photos" },
+  // DRAFT copy — pending Haily.
+  pregnancy_journal: { name: "Love Grows Pregnancy Journal", progressUnit: "photo spots" },
+};
+
+function isRegion(item: PhotoSlot | PhotoRegion): item is PhotoRegion {
+  return "layouts" in item;
+}
 
 export function getTheme(themeId: string | null | undefined): BookTheme | undefined {
   return BOOK_THEMES.find((t) => t.id === themeId);
@@ -407,6 +493,128 @@ export function getProductForTheme(
  */
 export function getSlots(themeId: string | null | undefined): PhotoSlot[] {
   return SLOTS_BY_PRODUCT[getProductForTheme(themeId) ?? "memory_book"];
+}
+
+export function getRegions(themeId: string | null | undefined): PhotoRegion[] {
+  return REGIONS_BY_PRODUCT[getProductForTheme(themeId) ?? "memory_book"];
+}
+
+export function getRegion(
+  themeId: string | null | undefined,
+  regionKey: string
+): PhotoRegion | undefined {
+  return getRegions(themeId).find((r) => r.key === regionKey);
+}
+
+/**
+ * The layout and orientation a region is using: the customer's choice when
+ * it's still valid, otherwise the region's default (first layout, first
+ * orientation that fits).
+ */
+export function resolveRegionChoice(
+  region: PhotoRegion,
+  choice: RegionChoice | undefined
+): { layout: RegionLayout; orientation: PrintOrientation } {
+  const layout =
+    region.layouts.find((l) => l.id === choice?.layoutId) ?? region.layouts[0];
+  const orientation =
+    choice && layout.orientations.includes(choice.orientation)
+      ? choice.orientation
+      : layout.orientations[0];
+  return { layout, orientation };
+}
+
+/**
+ * The slots the customer is actually filling: every book slot, plus the
+ * region photos the chosen layouts use, each carrying the size and
+ * orientation it will print at. For a memory book this is PHOTO_SLOTS,
+ * untouched.
+ */
+export function getBookSlots(
+  themeId: string | null | undefined,
+  regionChoices: Record<string, RegionChoice> = {}
+): PhotoSlot[] {
+  const regions = getRegions(themeId);
+  const slots = getSlots(themeId);
+  if (regions.length === 0) return slots;
+
+  const byKey = new Map(regions.map((r) => [r.key, r]));
+  const out: PhotoSlot[] = [];
+  for (const slot of slots) {
+    const region = slot.region ? byKey.get(slot.region) : undefined;
+    if (!region) {
+      out.push(slot);
+      continue;
+    }
+    const { layout, orientation } = resolveRegionChoice(region, regionChoices[region.key]);
+    if ((slot.regionIndex ?? 1) > layout.count) continue;
+    out.push({
+      ...slot,
+      size: layout.size,
+      orientation: isSquarePrintSize(layout.size) ? undefined : orientation,
+    });
+  }
+  return out;
+}
+
+/**
+ * Progress for the progress bar: each book slot counts once, and each
+ * region counts once — done when any photo in it has been added.
+ */
+export function getBookProgress(
+  themeId: string | null | undefined,
+  photos: Record<string, { status: string } | undefined>,
+  regionChoices: Record<string, RegionChoice> = {}
+): { done: number; total: number } {
+  const filled = (key: string) => {
+    const p = photos[key];
+    return Boolean(p && (p.status === "cropped" || p.status === "uploaded"));
+  };
+  const slots = getBookSlots(themeId, regionChoices);
+  const plain = slots.filter((s) => !s.region);
+  const regionKeys = new Set(slots.filter((s) => s.region).map((s) => s.region!));
+  const regionsDone = [...regionKeys].filter((rk) =>
+    slots.some((s) => s.region === rk && filled(s.key))
+  ).length;
+  return {
+    done: plain.filter((s) => filled(s.key)).length + regionsDone,
+    total: plain.length + regionKeys.size,
+  };
+}
+
+/**
+ * Read a stored print size back — `session_photos.print_size` holds the size
+ * as the print reads ("3x4", "6x4", "3.5x3.5"), which for a region photo is
+ * also how its orientation is remembered.
+ */
+export function parsePrintLabel(
+  label: string | null | undefined
+): { size: PrintSize; orientation?: PrintOrientation } | null {
+  if (!label) return null;
+  for (const size of ALL_PRINT_SIZES) {
+    if (isSquarePrintSize(size)) {
+      if (getPrintSizeLabel(size) === label) return { size };
+      continue;
+    }
+    for (const orientation of ["portrait", "landscape"] as const) {
+      if (getPrintSizeLabel(size, orientation) === label) return { size, orientation };
+    }
+  }
+  return null;
+}
+
+/** The region choice a stored print size implies, if it matches one of the region's layouts. */
+export function choiceFromPrintLabel(
+  region: PhotoRegion,
+  label: string | null | undefined
+): RegionChoice | null {
+  const parsed = parsePrintLabel(label);
+  if (!parsed) return null;
+  const layout = region.layouts.find((l) => l.size === parsed.size);
+  if (!layout) return null;
+  const orientation = parsed.orientation ?? "portrait";
+  if (!isSquarePrintSize(layout.size) && !layout.orientations.includes(orientation)) return null;
+  return { layoutId: layout.id, orientation: isSquarePrintSize(layout.size) ? layout.orientations[0] : orientation };
 }
 
 /** Group a theme's photo slots by section for the dashboard */

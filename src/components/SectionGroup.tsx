@@ -1,6 +1,6 @@
 "use client";
 
-import { type PhotoSlot } from "@/lib/photo-slots";
+import { getBookSlots, type PhotoSlot } from "@/lib/photo-slots";
 import { usePhotoStore } from "@/store/photo-store";
 import {
   getStandaloneAfterSection,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/book-prompts";
 import { PhotoSlotCard } from "./PhotoSlotCard";
 import { StandaloneDetailCard } from "./StandaloneDetailCard";
+import { RegionCard } from "./RegionCard";
 
 interface SectionGroupProps {
   section: string;
@@ -19,11 +20,27 @@ export function SectionGroup({ section, label, slots }: SectionGroupProps) {
   const photos = usePhotoStore((s) => s.photos);
   const detailsMode = usePhotoStore((s) => s.detailsMode);
   const notes = usePhotoStore((s) => s.notes);
+  const bookTheme = usePhotoStore((s) => s.bookTheme);
+  const regionLayouts = usePhotoStore((s) => s.regionLayouts);
 
-  const completed = slots.filter((slot) => {
-    const photo = photos[slot.key];
-    return photo && (photo.status === "cropped" || photo.status === "uploaded");
-  }).length;
+  // A region (several photos on one page) shows as one card and counts once.
+  const items: ({ kind: "slot"; slot: PhotoSlot } | { kind: "region"; key: string })[] = [];
+  for (const slot of slots) {
+    if (!slot.region) items.push({ kind: "slot", slot });
+    else if (!items.some((i) => i.kind === "region" && i.key === slot.region)) {
+      items.push({ kind: "region", key: slot.region });
+    }
+  }
+  const inUse = getBookSlots(bookTheme, regionLayouts);
+  const isFilled = (key: string) => {
+    const photo = photos[key];
+    return Boolean(photo && (photo.status === "cropped" || photo.status === "uploaded"));
+  };
+  const completed = items.filter((item) =>
+    item.kind === "slot"
+      ? isFilled(item.slot.key)
+      : inUse.some((s) => s.region === item.key && isFilled(s.key))
+  ).length;
 
   // Standalone detail cards that appear after this section
   const standaloneCards = detailsMode
@@ -42,7 +59,7 @@ export function SectionGroup({ section, label, slots }: SectionGroupProps) {
         <h2 className="text-base font-semibold text-gray-800">{label}</h2>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400 font-medium">
-            {completed}/{slots.length}
+            {completed}/{items.length}
           </span>
           {detailProgress && detailProgress.total > 0 && (
             <>
@@ -61,9 +78,13 @@ export function SectionGroup({ section, label, slots }: SectionGroupProps) {
 
       {/* Cards */}
       <div className="px-4 space-y-2">
-        {slots.map((slot) => (
-          <PhotoSlotCard key={slot.key} slot={slot} />
-        ))}
+        {items.map((item) =>
+          item.kind === "slot" ? (
+            <PhotoSlotCard key={item.slot.key} slot={item.slot} />
+          ) : (
+            <RegionCard key={item.key} regionKey={item.key} />
+          )
+        )}
       </div>
 
       {/* Standalone detail cards after this section */}

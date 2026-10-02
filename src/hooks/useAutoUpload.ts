@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSaveStore } from "@/store/save-store";
 import { usePhotoStore } from "@/store/photo-store";
-import { getSlots } from "@/lib/photo-slots";
+import { getBookSlots, getPrintSizeLabel } from "@/lib/photo-slots";
 
 /**
  * Slots re-cropped while their previous crop was still uploading. When that
@@ -134,10 +134,14 @@ export function useAutoUpload() {
       customLabel = photo.customLabel;
       milestoneDate = photo.milestoneDate;
       // Look up print size from slot config
-      const slotDef = getSlots(usePhotoStore.getState().bookTheme).find(
+      const { bookTheme, regionLayouts } = usePhotoStore.getState();
+      const slotDef = getBookSlots(bookTheme, regionLayouts).find(
         (s) => s.key === nextSlotKey
       );
-      printSize = slotDef?.size || "4x4";
+      // Stored as the print reads ("4x3", "3x4", "3.5x3.5"): for a region
+      // photo that's how its layout's orientation survives a resume. Memory
+      // book slots have no orientation, so their value is unchanged.
+      printSize = slotDef ? getPrintSizeLabel(slotDef.size, slotDef.orientation) : "4x4";
     }
 
     if (!croppedUrl) return;

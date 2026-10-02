@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { getPrintAspectRatio, getSlots, type PrintSize } from "@/lib/photo-slots";
+import { getBookProgress, getBookSlots, getPrintAspectRatio, getProductForTheme, type PrintSize } from "@/lib/photo-slots";
 import { bookPrintItems, slotPrint, summarizePrints } from "@/lib/print-summary";
 import { downloadPhotosZip } from "@/lib/download-zip";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
@@ -18,6 +18,7 @@ export default function ReviewPage() {
   const extras = usePhotoStore((s) => s.extras);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const notes = usePhotoStore((s) => s.notes);
+  const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const babyName = useSaveStore((s) => s.babyName);
   const sessionId = useSaveStore((s) => s.sessionId);
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
@@ -48,9 +49,10 @@ export default function ReviewPage() {
       pad3x3to4x4:
         !padAllTo4x6 &&
         pad3x3 &&
-        summarizePrints(bookPrintItems(getSlots(bookTheme), photos, extras))
+        summarizePrints(bookPrintItems(getBookSlots(bookTheme, regionLayouts), photos, extras))
           .countBySize["3x3"] > 0,
       padAllTo4x6,
+      regionLayouts,
       babyName,
       notes,
     })
@@ -67,7 +69,9 @@ export default function ReviewPage() {
     return null;
   }
 
-  const slots = getSlots(bookTheme);
+  // The slots being filled — for a book with regions, only the photos its
+  // chosen layouts use, each at the size it will print.
+  const slots = getBookSlots(bookTheme, regionLayouts);
   const uploadedSlots = slots.filter((slot) => {
     const photo = photos[slot.key];
     return photo && photo.status !== "empty";
@@ -79,7 +83,9 @@ export default function ReviewPage() {
   const count3x3 = summary.countBySize["3x3"];
   const paddedSizes = summary.rows.filter((r) => r.paddedTo4x4).map((r) => r.size);
   const totalPhotos = summary.total;
-  const missingCount = slots.length - uploadedSlots.length;
+  const progress = getBookProgress(bookTheme, photos, regionLayouts);
+  const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
+  const missingCount = progress.total - progress.done;
 
   // What will actually land in the ZIP: only photos that have been cropped
   // (downloadPhotosZip bundles croppedUrl only). Uploaded-but-not-cropped
@@ -96,6 +102,7 @@ export default function ReviewPage() {
       await downloadPhotosZip(photos, extras, bookTheme, {
         pad3x3to4x4: !padAllTo4x6 && pad3x3 && count3x3 > 0,
         padAllTo4x6,
+        regionLayouts,
         babyName,
         notes,
       });
@@ -186,7 +193,9 @@ export default function ReviewPage() {
         {missingCount > 0 && (
           <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200">
             <p className="text-sm text-amber-800 font-medium">
-              {missingCount} photo{missingCount > 1 ? "s" : ""} not yet uploaded
+              {isJournal
+                ? `${missingCount} photo spot${missingCount > 1 ? "s" : ""} still empty`
+                : `${missingCount} photo${missingCount > 1 ? "s" : ""} not yet uploaded`}
             </p>
             <p className="text-xs text-amber-600 mt-1">
               You can still order what you have and come back for the rest later.

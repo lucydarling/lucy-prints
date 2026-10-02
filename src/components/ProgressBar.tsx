@@ -2,7 +2,7 @@
 
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { getSlots } from "@/lib/photo-slots";
+import { getBookProgress, getProductForTheme, PRODUCTS } from "@/lib/photo-slots";
 
 function formatBirthdate(dateStr: string): string {
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -14,10 +14,10 @@ function formatBirthdate(dateStr: string): string {
 export function ProgressBar() {
   const photos = usePhotoStore((s) => s.photos);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
-  const total = getSlots(bookTheme).length;
-  const uploaded = Object.values(photos).filter(
-    (p) => p.status === "cropped" || p.status === "uploaded"
-  ).length;
+  const regionLayouts = usePhotoStore((s) => s.regionLayouts);
+  const { done: uploaded, total } = getBookProgress(bookTheme, photos, regionLayouts);
+  const product = getProductForTheme(bookTheme) ?? "memory_book";
+  const unit = PRODUCTS[product].progressUnit;
   const percent = total > 0 ? Math.round((uploaded / total) * 100) : 0;
 
   const pendingBabyName = useSaveStore((s) => s.pendingBabyName);
@@ -32,7 +32,7 @@ export function ProgressBar() {
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-sm font-medium text-gray-700">
-            {uploaded} of {total} photos
+            {uploaded} of {total} {unit}
           </span>
           <span className="text-sm font-medium text-gray-500">{percent}%</span>
         </div>
@@ -43,7 +43,8 @@ export function ProgressBar() {
           />
         </div>
 
-        {/* Baby info row */}
+        {/* Baby info row — memory books only (a journal stores no baby details) */}
+        {product === "memory_book" && (
         <div className="flex items-center justify-between mt-2">
           {hasInfo ? (
             <div className="flex items-center gap-1.5 min-w-0">
@@ -76,6 +77,7 @@ export function ProgressBar() {
             {hasInfo ? "Edit" : "Add"}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { Cropper, CropperRef } from "react-advanced-cropper";
 import "react-advanced-cropper/dist/style.css";
 import { usePhotoStore } from "@/store/photo-store";
 import {
-  getSlots,
+  getBookSlots,
   getPrintDimensions,
   getPrintSizeLabel,
   isSquarePrintSize,
@@ -16,6 +16,7 @@ import {
 export function CropModal() {
   const editingSlot = usePhotoStore((s) => s.editingSlot);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
+  const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const photos = usePhotoStore((s) => s.photos);
   const extras = usePhotoStore((s) => s.extras);
   const setCropped = usePhotoStore((s) => s.setCropped);
@@ -55,15 +56,16 @@ export function CropModal() {
 
   // Check regular photo slots first, then extras
   const photo = photos[editingSlot];
-  const slot = getSlots(bookTheme).find((s) => s.key === editingSlot);
+  const slot = getBookSlots(bookTheme, regionLayouts).find((s) => s.key === editingSlot);
   const extra = !slot ? extras.find((e) => e.id === editingSlot) : null;
 
-  // Determine preview URL, size, and orientation. Book slots always print in
-  // their natural shape; only extras carry a customer-chosen orientation.
+  // Determine preview URL, size, and orientation. Memory book slots print in
+  // their natural shape (no orientation); a region photo takes its layout's
+  // shape; extras carry a customer-chosen orientation.
   const previewUrl = slot ? photo?.previewUrl : extra?.previewUrl;
   const size: PrintSize = slot?.size || extra?.size || "4x4";
   const orientation: PrintOrientation | undefined = slot
-    ? undefined
+    ? slot.orientation
     : extra?.orientation;
   const sizeLabel = getPrintSizeLabel(size, orientation);
   const label = slot?.prompt || `Extra ${sizeLabel}" Print`;

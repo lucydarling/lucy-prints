@@ -1,8 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  getBookProgress,
+  getRegion,
   getSlots,
   isSquarePrintSize,
+  resolveRegionChoice,
+  type RegionChoice,
   type PrintOrientation,
   type PrintSize,
   type ProductType,
@@ -61,6 +65,7 @@ export interface ShelvedBook {
   extras: ExtraPrint[];
   notes: Record<string, Record<string, string>>;
   detailsMode: boolean;
+  regionLayouts: Record<string, RegionChoice>;
   session: ShelvedSession;
 }
 
@@ -71,6 +76,16 @@ interface PhotoStore {
 
   /** Other products' work, keyed by product (never the open product). */
   shelf: Partial<Record<ProductType, ShelvedBook>>;
+
+  /** Layout + orientation the customer picked for each region (by region key). */
+  regionLayouts: Record<string, RegionChoice>;
+  /**
+   * Pick a region's layout. If that changes the print's shape, crops made
+   * for the old shape can't be reused: they're cleared (the image is kept
+   * to re-crop from) and their keys returned, so the caller can let them
+   * upload again once re-cropped.
+   */
+  setRegionChoice: (regionKey: string, choice: RegionChoice) => string[];
 
   /** Photo entries keyed by slot key */
   photos: Record<string, PhotoEntry>;
@@ -116,6 +131,46 @@ export const usePhotoStore = create<PhotoStore>()(
       setBookTheme: (theme) => set({ bookTheme: theme }),
 
       shelf: {},
+
+      regionLayouts: {},
+      setRegionChoice: (regionKey, choice) => {
+        const state = get();
+        const region = getRegion(state.bookTheme, regionKey);
+        if (!region) return [];
+        const before = resolveRegionChoice(region, state.regionLayouts[regionKey]);
+        const after = resolveRegionChoice(region, choice);
+        const shapeChanged =
+          before.layout.size !== after.layout.size ||
+          (!isSquarePrintSize(after.layout.size) && before.orientation !== after.orientation);
+
+        const cleared: string[] = [];
+        const photos = { ...state.photos };
+        if (shapeChanged) {
+          const regionSlotKeys = new Set(
+            getSlots(state.bookTheme)
+              .filter((sl) => sl.region === regionKey)
+              .map((sl) => sl.key)
+          );
+          for (const [key, p] of Object.entries(photos)) {
+            if (!regionSlotKeys.has(key) || !p.croppedUrl) continue;
+            photos[key] = {
+              ...p,
+              previewUrl: p.previewUrl ?? p.croppedUrl,
+              croppedUrl: null,
+              status: "uploaded",
+            };
+            cleared.push(key);
+          }
+        }
+        set({
+          photos,
+          regionLayouts: {
+            ...state.regionLayouts,
+            [regionKey]: { layoutId: after.layout.id, orientation: after.orientation },
+          },
+        });
+        return cleared;
+      },
 
       photos: {},
       initializeSlots: () => {
@@ -261,11 +316,11 @@ export const usePhotoStore = create<PhotoStore>()(
         })),
 
       getProgress: () => {
-        const photos = get().photos;
-        const total = getSlots(get().bookTheme).length;
-        const uploaded = Object.values(photos).filter(
-          (p) => p.status === "cropped" || p.status === "uploaded"
-        ).length;
+        const { done: uploaded, total } = getBookProgress(
+          get().bookTheme,
+          get().photos,
+          get().regionLayouts
+        );
         return {
           uploaded,
           total,
@@ -308,6 +363,7 @@ export const usePhotoStore = create<PhotoStore>()(
         }));
         // Browsers that saved before books were kept apart have no shelf.
         merged.shelf = merged.shelf ?? {};
+        merged.regionLayouts = merged.regionLayouts ?? {};
 
         return merged;
       },
@@ -346,6 +402,7 @@ export const usePhotoStore = create<PhotoStore>()(
           detailsMode: state.detailsMode,
           notes: state.notes,
           shelf: cleanShelf,
+          regionLayouts: state.regionLayouts,
         };
       },
       storage: {

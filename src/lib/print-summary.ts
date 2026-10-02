@@ -54,9 +54,9 @@ export function summarizePrints(items: PrintItem[]): {
   return { rows, total: items.length, countBySize };
 }
 
-/** The print a book slot's photo becomes. */
+/** The print a book slot's photo becomes (a region photo carries its layout's shape). */
 export function slotPrint(slot: PhotoSlot): PrintItem {
-  return { size: slot.size };
+  return { size: slot.size, orientation: slot.orientation };
 }
 
 /**

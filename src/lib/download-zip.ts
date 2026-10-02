@@ -1,6 +1,8 @@
 import JSZip from "jszip";
 import {
-  getSlots,
+  getBookSlots,
+  getProductForTheme,
+  type RegionChoice,
   getPrintDimensions,
   getPrintSizeLabel,
   isAlwaysPaddedTo4x4,
@@ -25,6 +27,8 @@ export interface DownloadOptions {
   /** Book detail notes (slotKey → promptKey → value). If any notes exist,
    *  a book-details.txt reference sheet is included in the ZIP. */
   notes?: Record<string, Record<string, string>>;
+  /** Layouts chosen for the book's regions (books with regions only). */
+  regionLayouts?: Record<string, RegionChoice>;
 }
 
 /**
@@ -55,7 +59,9 @@ export async function downloadPhotosZip(
   const name = options.babyName?.trim() || "Baby";
   let addedImages = 0;
 
-  const slots = getSlots(bookTheme);
+  // Only the photos the book is using, each at the size it will print.
+  const slots = getBookSlots(bookTheme, options.regionLayouts);
+  const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
 
   // Add regular slot photos — flat, numbered, personalized
   for (const slot of slots) {
@@ -63,18 +69,18 @@ export async function downloadPhotosZip(
     const imageData = photo?.croppedUrl;
     if (!imageData) continue;
 
-    const label = personalizeSlotName(slot, name, photo.customLabel);
-    const orderNum = String(slot.sortOrder).padStart(2, "0");
-
-    // Book slots always print in their natural shape — no orientation.
+    // Memory book slots print in their natural shape (no orientation); a
+    // region photo carries the shape its layout picked.
     const { sizeLabel, blob } = await preparePrint(
       imageData,
       slot.size,
-      undefined,
+      slot.orientation,
       options
     );
 
-    const fileName = `${orderNum} ${label} (${sizeLabel}).jpg`;
+    const fileName = isJournal
+      ? journalFileName(slot, slots, sizeLabel)
+      : `${String(slot.sortOrder).padStart(2, "0")} ${personalizeSlotName(slot, name, photo.customLabel)} (${sizeLabel}).jpg`;
     root.file(fileName, blob);
     addedImages++;
   }
@@ -122,6 +128,23 @@ export async function downloadPhotosZip(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Pregnancy journal filenames start with the page so the parent can find
+ * where each print goes, and sort in book order:
+ *   p05 Month 3 (4x3 on 4x4 trim sheet).jpg
+ *   p16 Baby shower photos 2 of 4 (3x3").jpg
+ *   p19 Babymoon + adventures, photo 1 (3.5x3.5 on 4x4 trim sheet).jpg
+ */
+function journalFileName(slot: PhotoSlot, slots: PhotoSlot[], sizeLabel: string): string {
+  const page = `p${String(slot.page ?? 0).padStart(2, "0")}`;
+  let label = slot.prompt;
+  if (slot.region) {
+    const inRegion = slots.filter((s) => s.region === slot.region).length;
+    if (inRegion > 1) label = `${label} ${slot.regionIndex} of ${inRegion}`;
+  }
+  return `${page} ${label.replace(/[\\/:*?"<>|]/g, "-")} (${sizeLabel}).jpg`;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
-import { type PhotoSlot } from "@/lib/photo-slots";
+import { getPrintDimensions, getPrintSizeLabel, type PhotoSlot } from "@/lib/photo-slots";
 import { usePhotoStore } from "@/store/photo-store";
 import { prepareImageFile } from "@/lib/image-prep";
 import { SlotDetailsPanel } from "./SlotDetailsPanel";
@@ -84,7 +84,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
     slot.customLabel && photo?.customLabel ? photo.customLabel : slot.prompt;
 
   return (
-    <div>
+    <div data-slot={slot.key}>
     <div
       className={`flex items-center gap-3 p-3 rounded-xl bg-white border shadow-sm transition-colors ${
         isDragOver
@@ -99,7 +99,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       <button
         onClick={handleClick}
         className={`group relative flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center
-          ${slot.size === "4x6" ? "w-14 h-20" : slot.size === "4x3" ? "w-20 h-14" : slot.size === "4x4" ? "w-16 h-16" : "w-14 h-14"}
+          ${thumbnailClass(slot)}
           ${hasPhoto ? "bg-gray-100" : "bg-rose-50 border-2 border-dashed border-rose-200 hover:border-rose-300"}
           transition-colors`}
       >
@@ -192,7 +192,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
           </p>
         )}
         <p className="text-xs text-gray-400 mt-0.5">
-          {slot.size}&quot; print
+          {getPrintSizeLabel(slot.size, slot.orientation)}&quot; print
         </p>
         {slot.dateField && (
           <input
@@ -258,7 +258,16 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
         className="hidden"
       />
     </div>
-    {detailsMode && <SlotDetailsPanel slotKey={slot.key} />}
+    {detailsMode && !slot.region && <SlotDetailsPanel slotKey={slot.key} />}
     </div>
   );
+}
+
+/** Thumbnail box in the print's shape (memory book sizes keep their old boxes). */
+function thumbnailClass(slot: PhotoSlot): string {
+  const { width, height } = getPrintDimensions(slot.size, slot.orientation);
+  if (width > height) return "w-20 h-14"; // 4x3, 6x4
+  if (height / width > 1.4) return "w-14 h-20"; // 4x6
+  if (height > width) return "w-14 h-[4.67rem]"; // 3x4
+  return slot.size === "4x4" ? "w-16 h-16" : "w-14 h-14";
 }
