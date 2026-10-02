@@ -1,4 +1,4 @@
-export type PrintSize = "3x3" | "4x3" | "4x4" | "4x6";
+export type PrintSize = "3x3" | "3.5x3.5" | "4x3" | "4x4" | "4x6";
 
 /** Which way up a rectangular print is cropped and printed. */
 export type PrintOrientation = "portrait" | "landscape";
@@ -12,10 +12,22 @@ export const EXTRA_PRINT_SIZES = ["3x3", "4x3", "4x4", "4x6"] as const;
  */
 const PRINT_DIMENSIONS: Record<PrintSize, { width: number; height: number }> = {
   "3x3": { width: 900, height: 900 },
+  "3.5x3.5": { width: 1050, height: 1050 },
   "4x3": { width: 1200, height: 900 },
   "4x4": { width: 1200, height: 1200 },
   "4x6": { width: 1200, height: 1800 },
 };
+
+/**
+ * Sizes no print service sells, so the ZIP always puts them on a 4x4 sheet
+ * with trim guides: 4x3 (either way up) and the journal's 3.5" squares.
+ */
+export function isAlwaysPaddedTo4x4(size: PrintSize): boolean {
+  return size === "4x3" || size === "3.5x3.5";
+}
+
+/** Every print size, in no particular order. */
+export const ALL_PRINT_SIZES = Object.keys(PRINT_DIMENSIONS) as PrintSize[];
 
 /** True for sizes where portrait and landscape are the same shape. */
 export function isSquarePrintSize(size: PrintSize): boolean {

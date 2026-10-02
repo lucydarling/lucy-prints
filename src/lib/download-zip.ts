@@ -3,6 +3,7 @@ import {
   getSlots,
   getPrintDimensions,
   getPrintSizeLabel,
+  isAlwaysPaddedTo4x4,
   type PrintOrientation,
   type PrintSize,
   type PhotoSlot,
@@ -213,9 +214,11 @@ async function preparePrint(
     };
   }
 
-  // 4x3 / 3x4 is never printed as-is — most printers don't offer it — so it
-  // always goes on a 4x4 sheet. 3x3 does too when the option is on.
-  const padTo4x4 = size === "4x3" || (options.pad3x3to4x4 && size === "3x3");
+  // 4x3 / 3x4 and 3.5x3.5 are never printed as-is — most printers don't
+  // offer them — so they always go on a 4x4 sheet. 3x3 does too when the
+  // option is on.
+  const padTo4x4 =
+    isAlwaysPaddedTo4x4(size) || (options.pad3x3to4x4 && size === "3x3");
   if (padTo4x4) {
     return {
       // No inch mark here — matches the trim-sheet filenames customers and

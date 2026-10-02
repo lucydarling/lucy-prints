@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { getSlots } from "@/lib/photo-slots";
+import { getPrintAspectRatio, getSlots, type PrintSize } from "@/lib/photo-slots";
+import { bookPrintItems, slotPrint, summarizePrints } from "@/lib/print-summary";
 import { downloadPhotosZip } from "@/lib/download-zip";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
@@ -44,8 +45,11 @@ export default function ReviewPage() {
     pendingDownload.current = false;
     setDownloading(true);
     downloadPhotosZip(photos, extras, bookTheme, {
-      pad3x3to4x4: !padAllTo4x6 && pad3x3 && (extras.filter((e) => e.size === "3x3" && e.croppedUrl).length +
-        getSlots(bookTheme).filter((slot) => slot.size === "3x3" && photos[slot.key]?.status !== "empty").length) > 0,
+      pad3x3to4x4:
+        !padAllTo4x6 &&
+        pad3x3 &&
+        summarizePrints(bookPrintItems(getSlots(bookTheme), photos, extras))
+          .countBySize["3x3"] > 0,
       padAllTo4x6,
       babyName,
       notes,
@@ -69,19 +73,12 @@ export default function ReviewPage() {
     return photo && photo.status !== "empty";
   });
 
-  const count4x6 =
-    uploadedSlots.filter((s) => s.size === "4x6").length +
-    extras.filter((e) => e.size === "4x6" && e.croppedUrl).length;
-  const count4x3 =
-    uploadedSlots.filter((s) => s.size === "4x3").length +
-    extras.filter((e) => e.size === "4x3" && e.croppedUrl).length;
-  const count4x4 =
-    uploadedSlots.filter((s) => s.size === "4x4").length +
-    extras.filter((e) => e.size === "4x4" && e.croppedUrl).length;
-  const count3x3 =
-    uploadedSlots.filter((s) => s.size === "3x3").length +
-    extras.filter((e) => e.size === "3x3" && e.croppedUrl).length;
-  const totalPhotos = count4x6 + count4x3 + count4x4 + count3x3;
+  // Prints by size — every photo counts under its own size, so a size this
+  // page doesn't know about can't silently drop out of the totals.
+  const summary = summarizePrints(bookPrintItems(slots, photos, extras));
+  const count3x3 = summary.countBySize["3x3"];
+  const paddedSizes = summary.rows.filter((r) => r.paddedTo4x4).map((r) => r.size);
+  const totalPhotos = summary.total;
   const missingCount = slots.length - uploadedSlots.length;
 
   // What will actually land in the ZIP: only photos that have been cropped
@@ -167,7 +164,8 @@ export default function ReviewPage() {
               return (
                 <div
                   key={slot.key}
-                  className={`${slot.size === "4x6" ? "aspect-[2/3]" : slot.size === "4x3" ? "aspect-[4/3]" : "aspect-square"} rounded-lg overflow-hidden bg-gray-100 relative`}
+                  className="rounded-lg overflow-hidden bg-gray-100 relative"
+                  style={{ aspectRatio: getPrintAspectRatio(slotPrint(slot).size, slotPrint(slot).orientation) }}
                 >
                   {url && (
                     <Image
@@ -208,38 +206,20 @@ export default function ReviewPage() {
             Order Summary
           </h2>
           <div className="space-y-2">
-            {count4x6 > 0 && (
-              <div className="flex justify-between text-sm">
+            {summary.rows.map((row) => (
+              <div key={row.size} className="flex justify-between text-sm">
                 <span className="text-gray-600">
-                  4x6&quot; prints x {count4x6}
+                  {row.size}&quot; prints x {row.count}
+                  {row.paddedTo4x4 && (
+                    <>
+                      {" "}
+                      <span className="text-gray-400">(padded to 4x4&quot;)</span>
+                    </>
+                  )}
                 </span>
                 <span className="text-gray-400">Included</span>
               </div>
-            )}
-            {count4x3 > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  4x3&quot; prints x {count4x3} <span className="text-gray-400">(padded to 4x4&quot;)</span>
-                </span>
-                <span className="text-gray-400">Included</span>
-              </div>
-            )}
-            {count4x4 > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  4x4&quot; prints x {count4x4}
-                </span>
-                <span className="text-gray-400">Included</span>
-              </div>
-            )}
-            {count3x3 > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">
-                  3x3&quot; prints x {count3x3}
-                </span>
-                <span className="text-gray-400">Included</span>
-              </div>
-            )}
+            ))}
             <div className="border-t border-gray-100 pt-2 mt-2">
               <div className="flex justify-between text-sm font-semibold">
                 <span className="text-gray-800">Total prints</span>
@@ -253,12 +233,12 @@ export default function ReviewPage() {
         {totalPhotos > 0 && (
           <div className="mb-4">
             {/* Print compatibility notice */}
-            {(count3x3 > 0 || count4x3 > 0) && (
+            {(count3x3 > 0 || paddedSizes.length > 0) && (
               <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
                 <p className="text-xs font-semibold text-amber-800 mb-1">About your print sizes</p>
                 <p className="text-xs text-amber-700 leading-relaxed mb-2">
                   Most print services only offer standard sizes like 4x4&quot; and 4x6&quot;.
-                  {count4x3 > 0 && <> Your 4x3&quot; photos are automatically padded to 4x4&quot; with a trim guide — order as 4x4&quot; and cut along the line.</>}
+                  {paddedSizes.length > 0 && <> Your {formatSizeList(paddedSizes)} photos are automatically padded to 4x4&quot; with a trim guide — order as 4x4&quot; and cut along the line.</>}
                   {count3x3 > 0 && <> Your 3x3&quot; photos can optionally be padded the same way.</>}
                 </p>
                 <p className="text-xs text-amber-600 leading-relaxed mb-2">
@@ -434,4 +414,11 @@ export default function ReviewPage() {
       <SaveProgressModal />
     </div>
   );
+}
+
+/** "4x3"" · "4x3" and 3.5x3.5"" · "4x3", 4x6" and 3x3"" */
+function formatSizeList(sizes: PrintSize[]): string {
+  const quoted = sizes.map((size) => `${size}"`);
+  if (quoted.length <= 1) return quoted.join("");
+  return `${quoted.slice(0, -1).join(", ")} and ${quoted[quoted.length - 1]}`;
 }
