@@ -10,7 +10,12 @@ import {
   type PrintSize,
   type PhotoSlot,
 } from "@/lib/photo-slots";
-import { BOOK_PROMPTS, getPromptsForSlot } from "@/lib/book-prompts";
+import {
+  getBookPrompts,
+  repeatItemsWithContent,
+  repeatNoteKey,
+  type SlotPrompts,
+} from "@/lib/book-prompts";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
 
 export interface DownloadOptions {
@@ -112,7 +117,7 @@ export async function downloadPhotosZip(
 
   // Add book details reference sheet if notes exist
   if (options.notes) {
-    const detailsText = generateBookDetailsText(options.notes, name, slots);
+    const detailsText = generateBookDetailsText(options.notes, name, slots, getBookPrompts(bookTheme));
     if (detailsText) {
       root.file("book-details.txt", detailsText);
     }
@@ -356,7 +361,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 function generateBookDetailsText(
   notes: Record<string, Record<string, string>>,
   babyName: string,
-  slots: PhotoSlot[]
+  slots: PhotoSlot[],
+  prompts: SlotPrompts[]
 ): string | null {
   const lines: string[] = [];
   let hasAnyContent = false;
@@ -376,25 +382,42 @@ function generateBookDetailsText(
     school: "First Day of School",
   };
 
-  for (const entry of BOOK_PROMPTS) {
+  // Books whose sections sit under a heading ("Age One"…) group their notes
+  // by that heading instead. The memory book has none, so it reads as before.
+  const groupOf = new Map<string, string | undefined>();
+  const labelOf = new Map<string, string>();
+  for (const s of slots) {
+    if (!groupOf.has(s.section)) groupOf.set(s.section, s.group);
+    if (!labelOf.has(s.section)) labelOf.set(s.section, s.sectionLabel);
+  }
+  const grouped = slots.some((s) => s.group);
+  const headerKey = (section: string) =>
+    grouped ? groupOf.get(section) ?? section : section;
+
+  for (const entry of prompts) {
     const slotNotes = notes[entry.slotKey];
     if (!slotNotes) continue;
 
-    const filledPrompts = entry.prompts.filter(
-      (p) => slotNotes[p.key] && slotNotes[p.key].trim().length > 0
-    );
-    if (filledPrompts.length === 0) continue;
+    const repeatItems = entry.repeat ? repeatItemsWithContent(entry, slotNotes) : [];
+    const filledPrompts = entry.repeat
+      ? []
+      : entry.prompts.filter(
+          (p) => slotNotes[p.key] && slotNotes[p.key].trim().length > 0
+        );
+    if (filledPrompts.length === 0 && repeatItems.length === 0) continue;
 
     hasAnyContent = true;
 
     // Print section header if we haven't yet
-    if (!printedSections.has(entry.section)) {
+    const header = headerKey(entry.section);
+    if (!printedSections.has(header)) {
       if (lines.length > 0) lines.push(""); // blank line before new section
-      const sectionLabel =
-        sectionLabels[entry.section] || entry.section;
+      const sectionLabel = grouped
+        ? groupOf.get(entry.section) ?? labelOf.get(entry.section) ?? entry.section
+        : sectionLabels[entry.section] || entry.section;
       lines.push(`═══ ${sectionLabel} ═══`);
       lines.push("");
-      printedSections.add(entry.section);
+      printedSections.add(header);
     }
 
     // Slot sub-header
@@ -405,6 +428,12 @@ function generateBookDetailsText(
       const value = slotNotes[prompt.key].trim();
       lines.push(`  ${prompt.label}: ${value}`);
     }
+    repeatItems.forEach((n, i) => {
+      const parts = entry.prompts
+        .map((p) => ({ label: p.label, value: slotNotes[repeatNoteKey(p.key, n)]?.trim() }))
+        .filter((x) => x.value);
+      lines.push(`  ${i + 1}. ${parts.map((x) => `${x.label}: ${x.value}`).join(" · ")}`);
+    });
     lines.push("");
   }
 

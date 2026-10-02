@@ -1,3 +1,6 @@
+import { getProductForTheme, type ProductType } from "@/lib/photo-slots";
+import { LITTLE_YEARS_GIRL_PROMPTS, LITTLE_YEARS_PROMPTS } from "@/lib/little-years-prompts";
+
 /**
  * All text prompts from the Lucy Darling memory book.
  * These are the fill-in-the-blank fields across ~49 book pages.
@@ -31,6 +34,12 @@ export interface SlotPrompts {
    * Only used for standalone entries.
    */
   afterSection?: string;
+  /**
+   * Repeatable entry (e.g. quotes): `prompts` make up one item, which the
+   * parent can add up to `repeat` times. Each item's note keys are
+   * `<promptKey>_<n>`, n from 1.
+   */
+  repeat?: number;
 }
 
 // ── Prompts for photo-attached slots ──
@@ -203,39 +212,77 @@ export const BOOK_PROMPTS: SlotPrompts[] = [
   },
 ];
 
+/** Text prompts for each product. The pregnancy journal has no Book Details mode. */
+export const PROMPTS_BY_PRODUCT: Record<ProductType, SlotPrompts[]> = {
+  memory_book: BOOK_PROMPTS,
+  pregnancy_journal: [],
+  little_years: LITTLE_YEARS_PROMPTS,
+};
+
+/** Themes whose printed book words a prompt differently from the rest of its product. */
+const PROMPTS_BY_THEME: Record<string, SlotPrompts[]> = {
+  little_years_girl: LITTLE_YEARS_GIRL_PROMPTS,
+};
+
+/** A theme's prompts, in book order. Unknown themes get the memory book's. */
+export function getBookPrompts(themeId: string | null | undefined): SlotPrompts[] {
+  return (
+    (themeId && PROMPTS_BY_THEME[themeId]) ||
+    PROMPTS_BY_PRODUCT[getProductForTheme(themeId) ?? "memory_book"]
+  );
+}
+
 // ── Lookup helpers ──
+// Slot keys and section keys never repeat across products, so without a
+// theme the lookups below search every product's prompts at once. Pass the
+// open theme wherever its wording can differ (The Little Years Girl).
+
+const ALL_PROMPTS: SlotPrompts[] = Object.values(PROMPTS_BY_PRODUCT).flat();
 
 /** Map from slotKey → SlotPrompts for quick lookup */
 const _promptsBySlot = new Map<string, SlotPrompts>();
-for (const sp of BOOK_PROMPTS) {
+for (const sp of ALL_PROMPTS) {
   _promptsBySlot.set(sp.slotKey, sp);
 }
 
 /** Get prompts for a specific photo slot key */
-export function getPromptsForSlot(slotKey: string): SlotPrompts | undefined {
+export function getPromptsForSlot(
+  slotKey: string,
+  themeId?: string | null
+): SlotPrompts | undefined {
+  if (themeId) return getBookPrompts(themeId).find((sp) => sp.slotKey === slotKey);
   return _promptsBySlot.get(slotKey);
 }
 
 /** Get all standalone entries that should appear after a given photo section */
-export function getStandaloneAfterSection(sectionKey: string): SlotPrompts[] {
-  return BOOK_PROMPTS.filter(
+export function getStandaloneAfterSection(
+  sectionKey: string,
+  themeId?: string | null
+): SlotPrompts[] {
+  return (themeId ? getBookPrompts(themeId) : ALL_PROMPTS).filter(
     (sp) => sp.standalone && sp.afterSection === sectionKey
   );
 }
 
 /** Get all standalone entries */
 export function getAllStandalone(): SlotPrompts[] {
-  return BOOK_PROMPTS.filter((sp) => sp.standalone);
+  return ALL_PROMPTS.filter((sp) => sp.standalone);
 }
 
 /** Count how many prompts are filled for a given slot */
 export function countFilledPrompts(
   slotKey: string,
-  notes: Record<string, Record<string, string>>
+  notes: Record<string, Record<string, string>>,
+  themeId?: string | null
 ): { filled: number; total: number } {
-  const sp = _promptsBySlot.get(slotKey);
+  const sp = getPromptsForSlot(slotKey, themeId);
   if (!sp) return { filled: 0, total: 0 };
   const slotNotes = notes[slotKey] || {};
+  if (sp.repeat) {
+    // A repeatable entry has no fixed total: count the items started.
+    const started = repeatItemsWithContent(sp, slotNotes).length;
+    return { filled: started, total: started };
+  }
   const filled = sp.prompts.filter(
     (p) => slotNotes[p.key] && slotNotes[p.key].trim().length > 0
   ).length;
@@ -245,16 +292,34 @@ export function countFilledPrompts(
 /** Count total detail prompts filled across all slots in a section */
 export function countSectionDetailProgress(
   sectionKey: string,
-  notes: Record<string, Record<string, string>>
+  notes: Record<string, Record<string, string>>,
+  themeId?: string | null
 ): { filled: number; total: number } {
   let filled = 0;
   let total = 0;
-  for (const sp of BOOK_PROMPTS) {
+  for (const sp of themeId ? getBookPrompts(themeId) : ALL_PROMPTS) {
     if (sp.section === sectionKey && sp.prompts.length > 0) {
-      const result = countFilledPrompts(sp.slotKey, notes);
+      const result = countFilledPrompts(sp.slotKey, notes, themeId);
       filled += result.filled;
       total += result.total;
     }
   }
   return { filled, total };
+}
+
+/** Note key for one item of a repeatable entry. */
+export function repeatNoteKey(promptKey: string, n: number): string {
+  return `${promptKey}_${n}`;
+}
+
+/** The 1-based item numbers of a repeatable entry that have any text in them. */
+export function repeatItemsWithContent(
+  sp: SlotPrompts,
+  slotNotes: Record<string, string>
+): number[] {
+  const items: number[] = [];
+  for (let n = 1; n <= (sp.repeat ?? 0); n++) {
+    if (sp.prompts.some((p) => slotNotes[repeatNoteKey(p.key, n)]?.trim())) items.push(n);
+  }
+  return items;
 }

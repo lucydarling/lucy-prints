@@ -1,6 +1,7 @@
 import { JOURNAL_ITEMS } from "@/lib/journal-slots";
+import { LITTLE_YEARS_SLOTS } from "@/lib/little-years-slots";
 
-export type PrintSize = "3x3" | "3.5x3.5" | "4x3" | "4x4" | "4x6";
+export type PrintSize = "3x3" | "3.5x3.5" | "4x3" | "4x4" | "4x6" | "5x5";
 
 /** Which way up a rectangular print is cropped and printed. */
 export type PrintOrientation = "portrait" | "landscape";
@@ -18,6 +19,8 @@ const PRINT_DIMENSIONS: Record<PrintSize, { width: number; height: number }> = {
   "4x3": { width: 1200, height: 900 },
   "4x4": { width: 1200, height: 1200 },
   "4x6": { width: 1200, height: 1800 },
+  // The Little Years book only — never offered as an extra print.
+  "5x5": { width: 1500, height: 1500 },
 };
 
 /**
@@ -78,7 +81,7 @@ export function getPrintAspectRatio(
 }
 
 /** Which book a theme belongs to. Every theme of a product shares its slots. */
-export type ProductType = "memory_book" | "pregnancy_journal";
+export type ProductType = "memory_book" | "pregnancy_journal" | "little_years";
 
 export interface PhotoSlot {
   key: string;
@@ -102,6 +105,8 @@ export interface PhotoSlot {
   /** For a photo inside a region: the region's key and its 1-based position. */
   region?: string;
   regionIndex?: number;
+  /** Heading that groups sections on the dashboard ("Age One"…), where a book has one. */
+  group?: string;
 }
 
 /**
@@ -454,6 +459,7 @@ export type BookTheme = (typeof BOOK_THEMES)[number];
 export const REGIONS_BY_PRODUCT: Record<ProductType, PhotoRegion[]> = {
   memory_book: [],
   pregnancy_journal: JOURNAL_ITEMS.filter(isRegion),
+  little_years: [],
 };
 
 /** Photo slots for each product, in book order (region photos expanded). */
@@ -462,6 +468,7 @@ export const SLOTS_BY_PRODUCT: Record<ProductType, PhotoSlot[]> = {
   pregnancy_journal: JOURNAL_ITEMS.flatMap((item) =>
     isRegion(item) ? expandRegion(item) : [item]
   ),
+  little_years: LITTLE_YEARS_SLOTS,
 };
 
 /** What a product is called, and what its progress bar counts. */
@@ -469,6 +476,7 @@ export const PRODUCTS: Record<ProductType, { name: string; progressUnit: string 
   memory_book: { name: "Memory Book", progressUnit: "photos" },
   // DRAFT copy — pending Haily.
   pregnancy_journal: { name: "Love Grows Pregnancy Journal", progressUnit: "photo spots" },
+  little_years: { name: "The Little Years", progressUnit: "photos" },
 };
 
 function isRegion(item: PhotoSlot | PhotoRegion): item is PhotoRegion {

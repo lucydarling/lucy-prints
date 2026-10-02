@@ -192,7 +192,7 @@ export async function GET(
 
     if (photoRows && photoRows.length > 0) {
       // Batch all signed-URL requests into a single call instead of one
-      // round-trip per photo (a session can have up to 49 slots).
+      // round-trip per photo (a session can have up to 146 slots).
       const { data: signedList } = await supabaseAdmin.storage
         .from("photos")
         .createSignedUrls(
