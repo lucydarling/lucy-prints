@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
+import { getSlots } from "@/lib/photo-slots";
 import { downloadPhotosZip } from "@/lib/download-zip";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
@@ -45,7 +45,7 @@ export default function ReviewPage() {
     setDownloading(true);
     downloadPhotosZip(photos, extras, bookTheme, {
       pad3x3to4x4: !padAllTo4x6 && pad3x3 && (extras.filter((e) => e.size === "3x3" && e.croppedUrl).length +
-        PHOTO_SLOTS.filter((slot) => slot.size === "3x3" && photos[slot.key]?.status !== "empty").length) > 0,
+        getSlots(bookTheme).filter((slot) => slot.size === "3x3" && photos[slot.key]?.status !== "empty").length) > 0,
       padAllTo4x6,
       babyName,
       notes,
@@ -63,7 +63,8 @@ export default function ReviewPage() {
     return null;
   }
 
-  const uploadedSlots = PHOTO_SLOTS.filter((slot) => {
+  const slots = getSlots(bookTheme);
+  const uploadedSlots = slots.filter((slot) => {
     const photo = photos[slot.key];
     return photo && photo.status !== "empty";
   });
@@ -81,14 +82,14 @@ export default function ReviewPage() {
     uploadedSlots.filter((s) => s.size === "3x3").length +
     extras.filter((e) => e.size === "3x3" && e.croppedUrl).length;
   const totalPhotos = count4x6 + count4x3 + count4x4 + count3x3;
-  const missingCount = PHOTO_SLOTS.length - uploadedSlots.length;
+  const missingCount = slots.length - uploadedSlots.length;
 
   // What will actually land in the ZIP: only photos that have been cropped
   // (downloadPhotosZip bundles croppedUrl only). Uploaded-but-not-cropped
   // photos count toward totalPhotos but produce nothing — gate the download
   // on this so an empty ZIP can never be created silently.
   const downloadableCount =
-    PHOTO_SLOTS.filter((slot) => photos[slot.key]?.croppedUrl).length +
+    slots.filter((slot) => photos[slot.key]?.croppedUrl).length +
     extras.filter((e) => e.croppedUrl).length;
   const uncroppedCount = totalPhotos - downloadableCount;
 

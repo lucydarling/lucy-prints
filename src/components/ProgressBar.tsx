@@ -2,7 +2,7 @@
 
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import { getSlots } from "@/lib/photo-slots";
 
 function formatBirthdate(dateStr: string): string {
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -13,7 +13,8 @@ function formatBirthdate(dateStr: string): string {
 
 export function ProgressBar() {
   const photos = usePhotoStore((s) => s.photos);
-  const total = PHOTO_SLOTS.length;
+  const bookTheme = usePhotoStore((s) => s.bookTheme);
+  const total = getSlots(bookTheme).length;
   const uploaded = Object.values(photos).filter(
     (p) => p.status === "cropped" || p.status === "uploaded"
   ).length;

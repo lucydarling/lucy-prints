@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePhotoStore } from "@/store/photo-store";
 import { getReviewUrl, type ReviewSource } from "@/lib/review-links";
 import { countCropped, milestoneFor, readReviewState, recordAsk } from "@/lib/review-prompt";
+import { getSlots } from "@/lib/photo-slots";
 import { ReviewPromptCard } from "@/components/ReviewPromptCard";
 
 /**
@@ -18,9 +19,9 @@ export function ReviewMilestoneBanner({ themeId }: { themeId: string }) {
   useEffect(() => {
     const st = usePhotoStore.getState();
     if (!getReviewUrl(themeId)) return; // unmapped theme: never ask, never burn an ask
-    let prev = countCropped(st.photos, st.extras);
+    let prev = countCropped(st.photos, st.extras, getSlots(st.bookTheme));
     return usePhotoStore.subscribe((state) => {
-      const next = countCropped(state.photos, state.extras);
+      const next = countCropped(state.photos, state.extras, getSlots(state.bookTheme));
       const source = milestoneFor(prev, next, readReviewState(themeId));
       prev = next;
       if (source && recordAsk(themeId)) setAsk({ source, id: Date.now() });

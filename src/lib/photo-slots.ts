@@ -63,6 +63,9 @@ export function getPrintAspectRatio(
   return width / height;
 }
 
+/** Which book a theme belongs to. Every theme of a product shares its slots. */
+export type ProductType = "memory_book" | "pregnancy_journal";
+
 export interface PhotoSlot {
   key: string;
   prompt: string;
@@ -74,6 +77,8 @@ export interface PhotoSlot {
   customLabel?: boolean;
   /** If true, show an optional date field (for personal records, not printed) */
   dateField?: boolean;
+  /** Page of the printed book this photo goes on, where that's tracked. */
+  page?: number;
 }
 
 /**
@@ -334,35 +339,66 @@ export const PHOTO_SLOTS: PhotoSlot[] = [
   },
 ];
 
-/** Book themes — all share the same PHOTO_SLOTS layout */
+/**
+ * Book themes. A theme's `product` decides its photo slots — every memory
+ * book theme shares PHOTO_SLOTS, only the illustrations differ.
+ */
 export const BOOK_THEMES = [
   // Darling Memory Books (standard)
-  { id: "little_artist", name: "Little Artist", sku: "BB001MEM", tier: "standard" },
-  { id: "little_animal_lover", name: "Little Animal Lover", sku: "BB002MEM", tier: "standard" },
-  { id: "little_captain", name: "Little Captain", sku: "BB004MEM", tier: "standard" },
-  { id: "little_camper", name: "Little Camper", sku: "BB007MEM", tier: "standard" },
-  { id: "little_beach_babe", name: "Little Beach Babe", sku: "BB008MEM", tier: "standard" },
-  { id: "little_rainbow", name: "Little Rainbow", sku: "BB010MEM", tier: "standard" },
-  { id: "flower_child", name: "Flower Child", sku: "BB011MEM", tier: "standard" },
-  { id: "little_farmer", name: "Little Farmer", sku: "BB016MEM", tier: "standard" },
-  { id: "little_goose", name: "Little Goose", sku: "BB017MEM", tier: "standard" },
-  { id: "cottage_garden", name: "Cottage Garden", sku: "BB018MEM", tier: "standard" },
-  { id: "bowkissed_blush", name: "Bowkissed Blush", sku: "BB019MEM", tier: "standard" },
-  { id: "my_first_rodeo", name: "My First Rodeo", sku: "BB020MEM", tier: "standard" },
+  { id: "little_artist", name: "Little Artist", sku: "BB001MEM", tier: "standard", product: "memory_book" },
+  { id: "little_animal_lover", name: "Little Animal Lover", sku: "BB002MEM", tier: "standard", product: "memory_book" },
+  { id: "little_captain", name: "Little Captain", sku: "BB004MEM", tier: "standard", product: "memory_book" },
+  { id: "little_camper", name: "Little Camper", sku: "BB007MEM", tier: "standard", product: "memory_book" },
+  { id: "little_beach_babe", name: "Little Beach Babe", sku: "BB008MEM", tier: "standard", product: "memory_book" },
+  { id: "little_rainbow", name: "Little Rainbow", sku: "BB010MEM", tier: "standard", product: "memory_book" },
+  { id: "flower_child", name: "Flower Child", sku: "BB011MEM", tier: "standard", product: "memory_book" },
+  { id: "little_farmer", name: "Little Farmer", sku: "BB016MEM", tier: "standard", product: "memory_book" },
+  { id: "little_goose", name: "Little Goose", sku: "BB017MEM", tier: "standard", product: "memory_book" },
+  { id: "cottage_garden", name: "Cottage Garden", sku: "BB018MEM", tier: "standard", product: "memory_book" },
+  { id: "bowkissed_blush", name: "Bowkissed Blush", sku: "BB019MEM", tier: "standard", product: "memory_book" },
+  { id: "my_first_rodeo", name: "My First Rodeo", sku: "BB020MEM", tier: "standard", product: "memory_book" },
   // Luxury Memory Books (gold embossed fabric covers)
-  { id: "honey_bee", name: "Honey Bee", sku: "BB012MEM", tier: "luxury" },
-  { id: "teddy_bears_picnic", name: "Teddy Bear's Picnic", sku: "BB013MEM", tier: "luxury" },
-  { id: "celestial_skies", name: "Celestial Skies", sku: "BB014MEM", tier: "luxury" },
-  { id: "wildflower_meadow", name: "Wildflower Meadow", sku: "BB015MEM", tier: "luxury" },
+  { id: "honey_bee", name: "Honey Bee", sku: "BB012MEM", tier: "luxury", product: "memory_book" },
+  { id: "teddy_bears_picnic", name: "Teddy Bear's Picnic", sku: "BB013MEM", tier: "luxury", product: "memory_book" },
+  { id: "celestial_skies", name: "Celestial Skies", sku: "BB014MEM", tier: "luxury", product: "memory_book" },
+  { id: "wildflower_meadow", name: "Wildflower Meadow", sku: "BB015MEM", tier: "luxury", product: "memory_book" },
   // Retiring — still available while supplies last
-  { id: "golden_blossom", name: "Golden Blossom", sku: "BB021MEM", tier: "retiring" },
-  { id: "golden_stargazer", name: "Golden Stargazer", sku: "BB022MEM", tier: "retiring" },
+  { id: "golden_blossom", name: "Golden Blossom", sku: "BB021MEM", tier: "retiring", product: "memory_book" },
+  { id: "golden_stargazer", name: "Golden Stargazer", sku: "BB022MEM", tier: "retiring", product: "memory_book" },
 ] as const;
 
 export type BookThemeId = (typeof BOOK_THEMES)[number]["id"];
 
-/** Group photo slots by section for the dashboard */
-export function getSlotsBySection(): {
+export type BookTheme = (typeof BOOK_THEMES)[number];
+
+/** Photo slots for each product, in book order. */
+export const SLOTS_BY_PRODUCT: Record<ProductType, PhotoSlot[]> = {
+  memory_book: PHOTO_SLOTS,
+  pregnancy_journal: [],
+};
+
+export function getTheme(themeId: string | null | undefined): BookTheme | undefined {
+  return BOOK_THEMES.find((t) => t.id === themeId);
+}
+
+/** The product a theme belongs to, or null for an unknown theme id. */
+export function getProductForTheme(
+  themeId: string | null | undefined
+): ProductType | null {
+  return getTheme(themeId)?.product ?? null;
+}
+
+/**
+ * The photo slots for a theme's book. An unknown or missing theme gets the
+ * memory book's slots, which is what every session had before books other
+ * than memory books existed.
+ */
+export function getSlots(themeId: string | null | undefined): PhotoSlot[] {
+  return SLOTS_BY_PRODUCT[getProductForTheme(themeId) ?? "memory_book"];
+}
+
+/** Group a theme's photo slots by section for the dashboard */
+export function getSlotsBySection(themeId: string | null | undefined): {
   section: string;
   label: string;
   slots: PhotoSlot[];
@@ -370,7 +406,7 @@ export function getSlotsBySection(): {
   const sections: Map<string, { label: string; slots: PhotoSlot[] }> =
     new Map();
 
-  for (const slot of PHOTO_SLOTS) {
+  for (const slot of getSlots(themeId)) {
     if (!sections.has(slot.section)) {
       sections.set(slot.section, { label: slot.sectionLabel, slots: [] });
     }

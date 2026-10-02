@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSaveStore } from "@/store/save-store";
 import { usePhotoStore } from "@/store/photo-store";
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import { getSlots } from "@/lib/photo-slots";
 
 /**
  * Slots re-cropped while their previous crop was still uploading. When that
@@ -134,7 +134,9 @@ export function useAutoUpload() {
       customLabel = photo.customLabel;
       milestoneDate = photo.milestoneDate;
       // Look up print size from slot config
-      const slotDef = PHOTO_SLOTS.find((s) => s.key === nextSlotKey);
+      const slotDef = getSlots(usePhotoStore.getState().bookTheme).find(
+        (s) => s.key === nextSlotKey
+      );
       printSize = slotDef?.size || "4x4";
     }
 

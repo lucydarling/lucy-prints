@@ -45,7 +45,7 @@ export default function UploadPage() {
 
   if (!bookTheme) return null;
 
-  const sections = getSlotsBySection();
+  const sections = getSlotsBySection(bookTheme);
   const uploaded = Object.values(photos).filter(
     (p) => p.status === "cropped" || p.status === "uploaded"
   ).length;

@@ -4,7 +4,9 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
-import { type PrintSize } from "@/lib/photo-slots";
+import { getProductForTheme, type PrintSize } from "@/lib/photo-slots";
+import { clearShelvedBook, openBook, shelvedBookFor } from "@/lib/open-book";
+import type { PhotoEntry } from "@/store/photo-store";
 
 interface SessionData {
   session: {
@@ -51,17 +53,36 @@ export default function ResumePage({
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
 
-  // Check for existing local data conflict
-  const existingTheme = usePhotoStore((s) => s.bookTheme);
-  const existingPhotos = usePhotoStore((s) => s.photos);
-  const existingSessionToken = useSaveStore((s) => s.sessionToken);
-
-  const hasExistingData =
-    existingTheme !== null &&
-    existingSessionToken !== token &&
-    Object.values(existingPhotos).some(
-      (p) => p.status === "cropped" || p.status === "uploaded"
+  // True when this saved book is a different product from the one open here,
+  // so its local work (if any) is on the shelf rather than on screen.
+  function isOtherProduct(bookTheme: string): boolean {
+    const open = usePhotoStore.getState().bookTheme;
+    return (
+      open !== null &&
+      getProductForTheme(open) !== getProductForTheme(bookTheme)
     );
+  }
+
+  // Unsaved local work for the same product as the saved book, from another
+  // session — restoring over it would lose it, so ask first.
+  function hasLocalConflict(bookTheme: string): boolean {
+    const hasPhotos = (photos: Record<string, PhotoEntry>) =>
+      Object.values(photos).some(
+        (p) => p.status === "cropped" || p.status === "uploaded"
+      );
+    if (isOtherProduct(bookTheme)) {
+      const shelved = shelvedBookFor(getProductForTheme(bookTheme));
+      return Boolean(
+        shelved && shelved.session.sessionToken !== token && hasPhotos(shelved.photos)
+      );
+    }
+    const open = usePhotoStore.getState();
+    return (
+      open.bookTheme !== null &&
+      useSaveStore.getState().sessionToken !== token &&
+      hasPhotos(open.photos)
+    );
+  }
 
   // Fetch session on mount
   useEffect(() => {
@@ -88,7 +109,7 @@ export default function ResumePage({
       setSessionData(data);
 
       // Check for conflict with existing local data
-      if (hasExistingData) {
+      if (hasLocalConflict(data.session.bookTheme)) {
         setStatus("conflict");
         return;
       }
@@ -110,7 +131,8 @@ export default function ResumePage({
 
     try {
       // Set book theme first
-      usePhotoStore.getState().setBookTheme(data.session.bookTheme);
+      // openBook keeps any other product's unsaved work on the shelf.
+      openBook(data.session.bookTheme);
       usePhotoStore.getState().initializeSlots();
 
       // Download and restore each photo
@@ -212,7 +234,13 @@ export default function ResumePage({
 
   // Conflict resolution: replace existing data
   function handleReplace() {
-    if (sessionData) {
+    if (sessionData && isOtherProduct(sessionData.session.bookTheme)) {
+      // The local work being replaced is on the shelf — drop only that, and
+      // leave the open book (a different product) and its session alone.
+      const product = getProductForTheme(sessionData.session.bookTheme);
+      if (product) clearShelvedBook(product);
+      restoreSession(sessionData);
+    } else if (sessionData) {
       // Clear existing data including notes and detailsMode
       usePhotoStore.setState({
         bookTheme: null,
@@ -396,7 +424,17 @@ export default function ResumePage({
                 Replace with Saved Photos
               </button>
               <button
-                onClick={() => router.push("/upload")}
+                onClick={() => {
+                  // Keep the local work for THIS book's product: if it's on
+                  // the shelf, open it before going to the upload page.
+                  if (sessionData && isOtherProduct(sessionData.session.bookTheme)) {
+                    const shelved = shelvedBookFor(
+                      getProductForTheme(sessionData.session.bookTheme)
+                    );
+                    if (shelved) openBook(shelved.bookTheme);
+                  }
+                  router.push("/upload");
+                }}
                 className="w-full py-3 text-gray-600 font-medium rounded-xl text-sm border border-gray-200 hover:bg-gray-50 transition-colors"
               >
                 Keep Current Photos

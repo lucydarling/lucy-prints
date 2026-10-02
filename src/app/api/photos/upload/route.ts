@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import { getSlots } from "@/lib/photo-slots";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -11,8 +11,19 @@ export const maxDuration = 30;
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
 
-// The 49 fixed book slots — a known, closed set used as a strict allowlist.
-const SLOT_KEYS = new Set<string>(PHOTO_SLOTS.map((s) => s.key));
+// Slot keys are lowercase words joined by underscores (`month_3`). This only
+// screens what may reach a storage path; the real allowlist is the session's
+// own book, checked once the session is looked up.
+const SLOT_KEY_SHAPE = /^[a-z0-9_]+$/;
+
+/**
+ * True when `slotKey` is one of the photo slots of the book `bookTheme`.
+ * A theme id that's no longer listed (a retired title) keeps the memory
+ * book's slots, so its customers can still upload.
+ */
+function isSlotOfBook(slotKey: string, bookTheme: string): boolean {
+  return getSlots(bookTheme).some((s) => s.key === slotKey);
+}
 
 /**
  * Sniff the leading bytes to confirm the file is actually an image we accept,
@@ -94,8 +105,7 @@ export async function POST(req: NextRequest) {
       if (!extraKey || !/^extra_[a-z0-9_]+$/i.test(extraKey)) {
         return NextResponse.json({ error: "Invalid extra id" }, { status: 400 });
       }
-    } else if (!SLOT_KEYS.has(slotKey)) {
-      // The 49 book slots are a fixed, known set — strict allowlist.
+    } else if (!SLOT_KEY_SHAPE.test(slotKey)) {
       return NextResponse.json({ error: "Unknown slot" }, { status: 400 });
     }
 
@@ -131,13 +141,18 @@ export async function POST(req: NextRequest) {
     // Look up session
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id")
+      .select("id, book_theme")
       .eq("token", sessionToken)
       .eq("status", "active")
       .maybeSingle();
 
     if (!session) {
       return NextResponse.json({ error: "Invalid or expired session" }, { status: 404 });
+    }
+
+    // Strict allowlist: a book slot must belong to THIS session's book.
+    if (!isExtra && !isSlotOfBook(slotKey, session.book_theme)) {
+      return NextResponse.json({ error: "Unknown slot" }, { status: 400 });
     }
 
     // Upload to Supabase Storage

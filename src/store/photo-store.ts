@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
-  PHOTO_SLOTS,
+  getSlots,
   isSquarePrintSize,
   type PrintOrientation,
   type PrintSize,
+  type ProductType,
 } from "@/lib/photo-slots";
 
 export interface PhotoEntry {
@@ -39,10 +40,37 @@ export interface ExtraPrint {
   quantity: number;
 }
 
+/** The parts of a saved session that belong to one book. */
+export interface ShelvedSession {
+  sessionToken: string | null;
+  sessionId: string | null;
+  email: string | null;
+  babyName: string | null;
+  babyBirthdate: string | null;
+  uploadedSlots: string[];
+}
+
+/**
+ * One product's work, set aside while the customer has a different product
+ * open — so opening the pregnancy journal never discards a memory book's
+ * unsaved photos, and vice versa. See openBook() in lib/open-book.ts.
+ */
+export interface ShelvedBook {
+  bookTheme: string;
+  photos: Record<string, PhotoEntry>;
+  extras: ExtraPrint[];
+  notes: Record<string, Record<string, string>>;
+  detailsMode: boolean;
+  session: ShelvedSession;
+}
+
 interface PhotoStore {
   /** Which book theme the customer selected */
   bookTheme: string | null;
   setBookTheme: (theme: string) => void;
+
+  /** Other products' work, keyed by product (never the open product). */
+  shelf: Partial<Record<ProductType, ShelvedBook>>;
 
   /** Photo entries keyed by slot key */
   photos: Record<string, PhotoEntry>;
@@ -87,11 +115,13 @@ export const usePhotoStore = create<PhotoStore>()(
       bookTheme: null,
       setBookTheme: (theme) => set({ bookTheme: theme }),
 
+      shelf: {},
+
       photos: {},
       initializeSlots: () => {
         const existing = get().photos;
         const photos: Record<string, PhotoEntry> = {};
-        for (const slot of PHOTO_SLOTS) {
+        for (const slot of getSlots(get().bookTheme)) {
           photos[slot.key] = existing[slot.key] ?? {
             slotKey: slot.key,
             previewUrl: null,
@@ -232,7 +262,7 @@ export const usePhotoStore = create<PhotoStore>()(
 
       getProgress: () => {
         const photos = get().photos;
-        const total = PHOTO_SLOTS.length;
+        const total = getSlots(get().bookTheme).length;
         const uploaded = Object.values(photos).filter(
           (p) => p.status === "cropped" || p.status === "uploaded"
         ).length;
@@ -276,6 +306,8 @@ export const usePhotoStore = create<PhotoStore>()(
           orientation: e.orientation === "landscape" ? "landscape" : "portrait",
           orientationLocked: e.orientationLocked === true,
         }));
+        // Browsers that saved before books were kept apart have no shelf.
+        merged.shelf = merged.shelf ?? {};
 
         return merged;
       },
@@ -295,12 +327,25 @@ export const usePhotoStore = create<PhotoStore>()(
           previewUrl: null,
         }));
 
+        const cleanShelf: Partial<Record<ProductType, ShelvedBook>> = {};
+        for (const [product, book] of Object.entries(state.shelf)) {
+          if (!book) continue;
+          cleanShelf[product as ProductType] = {
+            ...book,
+            photos: Object.fromEntries(
+              Object.entries(book.photos).map(([k, p]) => [k, { ...p, previewUrl: null }])
+            ),
+            extras: book.extras.map((e) => ({ ...e, previewUrl: null })),
+          };
+        }
+
         return {
           bookTheme: state.bookTheme,
           photos: cleanPhotos,
           extras: cleanExtras,
           detailsMode: state.detailsMode,
           notes: state.notes,
+          shelf: cleanShelf,
         };
       },
       storage: {

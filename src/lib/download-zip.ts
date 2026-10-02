@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import {
-  PHOTO_SLOTS,
+  getSlots,
   getPrintDimensions,
   getPrintSizeLabel,
   type PrintOrientation,
@@ -54,8 +54,10 @@ export async function downloadPhotosZip(
   const name = options.babyName?.trim() || "Baby";
   let addedImages = 0;
 
+  const slots = getSlots(bookTheme);
+
   // Add regular slot photos — flat, numbered, personalized
-  for (const slot of PHOTO_SLOTS) {
+  for (const slot of slots) {
     const photo = photos[slot.key];
     const imageData = photo?.croppedUrl;
     if (!imageData) continue;
@@ -103,7 +105,7 @@ export async function downloadPhotosZip(
 
   // Add book details reference sheet if notes exist
   if (options.notes) {
-    const detailsText = generateBookDetailsText(options.notes, name);
+    const detailsText = generateBookDetailsText(options.notes, name, slots);
     if (detailsText) {
       root.file("book-details.txt", detailsText);
     }
@@ -327,7 +329,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  */
 function generateBookDetailsText(
   notes: Record<string, Record<string, string>>,
-  babyName: string
+  babyName: string,
+  slots: PhotoSlot[]
 ): string | null {
   const lines: string[] = [];
   let hasAnyContent = false;
@@ -369,7 +372,7 @@ function generateBookDetailsText(
     }
 
     // Slot sub-header
-    const slotLabel = entry.standaloneLabel || getSlotDisplayName(entry.slotKey, babyName);
+    const slotLabel = entry.standaloneLabel || getSlotDisplayName(entry.slotKey, babyName, slots);
     lines.push(`── ${slotLabel} ──`);
 
     for (const prompt of filledPrompts) {
@@ -395,8 +398,8 @@ function generateBookDetailsText(
 }
 
 /** Get a friendly display name for a slot key */
-function getSlotDisplayName(slotKey: string, babyName: string): string {
-  const slot = PHOTO_SLOTS.find((s) => s.key === slotKey);
+function getSlotDisplayName(slotKey: string, babyName: string, slots: PhotoSlot[]): string {
+  const slot = slots.find((s) => s.key === slotKey);
   if (!slot) return slotKey;
 
   // Monthly milestones

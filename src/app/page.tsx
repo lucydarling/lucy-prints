@@ -4,11 +4,11 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
-import { BOOK_THEMES, PHOTO_SLOTS } from "@/lib/photo-slots";
+import { BOOK_THEMES, getSlots } from "@/lib/photo-slots";
+import { openBook } from "@/lib/open-book";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
 export default function Home() {
-  const setBookTheme = usePhotoStore((s) => s.setBookTheme);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const router = useRouter();
 
@@ -45,7 +45,7 @@ export default function Home() {
   };
 
   const handleSelect = (themeId: string) => {
-    setBookTheme(themeId);
+    openBook(themeId);
     router.push("/upload");
   };
 
@@ -255,7 +255,7 @@ function ThemeCard({
           {theme.name}
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
-          {PHOTO_SLOTS.length} photos
+          {getSlots(theme.id).length} photos
         </p>
       </div>
     </button>

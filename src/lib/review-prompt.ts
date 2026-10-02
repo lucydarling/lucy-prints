@@ -1,4 +1,4 @@
-import { PHOTO_SLOTS } from "@/lib/photo-slots";
+import type { PhotoSlot } from "@/lib/photo-slots";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
 import type { ReviewSource } from "@/lib/review-links";
 
@@ -60,10 +60,14 @@ export function recordClick(themeId: string): void {
   write(themeId, { asks: s?.asks ?? 0, clicked: true });
 }
 
-/** Photos a customer has cropped: book slots plus extras (what the ZIP will contain). */
-export function countCropped(photos: Record<string, PhotoEntry>, extras: ExtraPrint[]): number {
+/** Photos a customer has cropped: the book's slots plus extras (what the ZIP will contain). */
+export function countCropped(
+  photos: Record<string, PhotoEntry>,
+  extras: ExtraPrint[],
+  slots: PhotoSlot[]
+): number {
   return (
-    PHOTO_SLOTS.filter((slot) => photos[slot.key]?.croppedUrl).length +
+    slots.filter((slot) => photos[slot.key]?.croppedUrl).length +
     extras.filter((e) => e.croppedUrl).length
   );
 }

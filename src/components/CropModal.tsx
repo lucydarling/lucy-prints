@@ -5,7 +5,7 @@ import { Cropper, CropperRef } from "react-advanced-cropper";
 import "react-advanced-cropper/dist/style.css";
 import { usePhotoStore } from "@/store/photo-store";
 import {
-  PHOTO_SLOTS,
+  getSlots,
   getPrintDimensions,
   getPrintSizeLabel,
   isSquarePrintSize,
@@ -15,6 +15,7 @@ import {
 
 export function CropModal() {
   const editingSlot = usePhotoStore((s) => s.editingSlot);
+  const bookTheme = usePhotoStore((s) => s.bookTheme);
   const photos = usePhotoStore((s) => s.photos);
   const extras = usePhotoStore((s) => s.extras);
   const setCropped = usePhotoStore((s) => s.setCropped);
@@ -54,7 +55,7 @@ export function CropModal() {
 
   // Check regular photo slots first, then extras
   const photo = photos[editingSlot];
-  const slot = PHOTO_SLOTS.find((s) => s.key === editingSlot);
+  const slot = getSlots(bookTheme).find((s) => s.key === editingSlot);
   const extra = !slot ? extras.find((e) => e.id === editingSlot) : null;
 
   // Determine preview URL, size, and orientation. Book slots always print in
