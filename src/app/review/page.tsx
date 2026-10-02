@@ -9,6 +9,7 @@ import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
 import { downloadPhotosZip } from "@/lib/download-zip";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
+import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { DownloadReviewPrompt } from "@/components/ReviewPromptCard";
 
 export default function ReviewPage() {
@@ -20,6 +21,10 @@ export default function ReviewPage() {
   const sessionId = useSaveStore((s) => s.sessionId);
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
   const router = useRouter();
+
+  // Keep syncing crops to the cloud here too: the save modal queues them at download
+  // time, and without this they wait until the customer next opens /upload.
+  useAutoUpload();
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [showTrimExample, setShowTrimExample] = useState(false);
