@@ -9,6 +9,7 @@ import { PHOTO_SLOTS, BOOK_THEMES } from "@/lib/photo-slots";
 import { downloadPhotosZip } from "@/lib/download-zip";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
+import { ReviewPromptCard } from "@/components/ReviewPromptCard";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
@@ -406,6 +407,8 @@ export default function ReviewPage() {
                 Downloads as a ZIP file · Print at home or any photo lab
               </p>
             )}
+
+            {downloaded && <ReviewPromptCard themeId={bookTheme} />}
           </div>
         )}
 
