@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useSaveStore } from "@/store/save-store";
 import { usePhotoStore } from "@/store/photo-store";
 import { getBookSlots, getPrintSizeLabel } from "@/lib/photo-slots";
+import { diffCrops } from "@/lib/crop-sync";
 
 /**
  * Slots re-cropped while their previous crop was still uploading. When that
@@ -24,6 +25,29 @@ function requeueRecropped(keys: string[]) {
   }));
   for (const k of keys) if (k === uploadingSlot) staleWhileUploading.add(k);
   useSaveStore.getState().addToUploadQueue(keys);
+}
+
+/**
+ * A crop that was CLEARED (orientation or layout changed, photo removed)
+ * leaves the cloud copy stale. Forget that it was uploaded, so the crop that
+ * replaces it uploads instead of being skipped as "already uploaded". If it's
+ * mid-upload right now, the completion handler re-queues it, and the queue
+ * drops it again while it has no crop.
+ */
+function forgetUploaded(keys: string[]) {
+  if (keys.length === 0) return;
+  const { uploadingSlot } = useSaveStore.getState();
+  useSaveStore.setState((s) => ({
+    uploadedSlots: s.uploadedSlots.filter((k) => !keys.includes(k)),
+  }));
+  for (const k of keys) if (k === uploadingSlot) staleWhileUploading.add(k);
+}
+
+/** Slot crops as key → cropped URL (only status "cropped" counts as cropped). */
+function slotCrops(photos: Record<string, { status: string; croppedUrl: string | null }>) {
+  return new Map(
+    Object.entries(photos).map(([k, p]) => [k, p.status === "cropped" ? p.croppedUrl : null])
+  );
 }
 
 /**
@@ -48,23 +72,15 @@ export function useAutoUpload() {
   useEffect(() => {
     if (!sessionToken) return;
 
-    const prev = prevPhotosRef.current;
-    const newlyCropped: string[] = [];
-    const recropped: string[] = [];
+    // A different crop replacing one we already had (not the first-mount pass,
+    // where prev is empty) has to overwrite what's in the cloud; a cleared
+    // crop's replacement must upload too.
+    const { newlyCropped, recropped, cleared } = diffCrops(
+      slotCrops(prevPhotosRef.current),
+      slotCrops(photos)
+    );
 
-    for (const [key, entry] of Object.entries(photos)) {
-      if (
-        entry.status === "cropped" &&
-        entry.croppedUrl &&
-        (!prev[key] || prev[key].status !== "cropped" || prev[key].croppedUrl !== entry.croppedUrl)
-      ) {
-        // A different crop replacing one we already had (not the first-mount pass,
-        // where prev is empty) has to overwrite what's in the cloud.
-        if (prev[key]?.croppedUrl && prev[key].croppedUrl !== entry.croppedUrl) recropped.push(key);
-        else newlyCropped.push(key);
-      }
-    }
-
+    forgetUploaded(cleared);
     requeueRecropped(recropped);
     if (newlyCropped.length > 0) {
       addToUploadQueue(newlyCropped);
@@ -77,18 +93,14 @@ export function useAutoUpload() {
   useEffect(() => {
     if (!sessionToken) return;
 
-    const prev = prevExtrasRef.current;
-    const newlyCropped: string[] = [];
-    const recropped: string[] = [];
+    // Changing an extra's orientation clears its crop (it must be re-cropped
+    // to the new shape) — the re-crop must reach the cloud, not be skipped.
+    const { newlyCropped, recropped, cleared } = diffCrops(
+      new Map(prevExtrasRef.current.map((e) => [e.id, e.croppedUrl])),
+      new Map(extras.map((e) => [e.id, e.croppedUrl]))
+    );
 
-    for (const extra of extras) {
-      if (extra.croppedUrl) {
-        const prevExtra = prev.find((e) => e.id === extra.id);
-        if (!prevExtra?.croppedUrl) newlyCropped.push(extra.id);
-        else if (prevExtra.croppedUrl !== extra.croppedUrl) recropped.push(extra.id);
-      }
-    }
-
+    forgetUploaded(cleared);
     requeueRecropped(recropped);
     if (newlyCropped.length > 0) {
       addToUploadQueue(newlyCropped);
