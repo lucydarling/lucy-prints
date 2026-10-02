@@ -23,8 +23,10 @@ export const REVIEW_PRODUCT_HANDLES: Record<BookThemeId, string> = {
 };
 
 /** Product page + Judge.me reviews section. Contains no personal data. */
-export function getReviewUrl(themeId: string): string | null {
+export type ReviewSource = "photos_10" | "photos_25" | "after_download";
+
+export function getReviewUrl(themeId: string, source: ReviewSource = "after_download"): string | null {
   const handle = (REVIEW_PRODUCT_HANDLES as Record<string, string | undefined>)[themeId];
   if (!handle) return null;
-  return `https://www.lucydarling.com/products/${handle}?utm_source=photo_lab&utm_medium=app&utm_campaign=review_prompt#judgeme_product_reviews`;
+  return `https://www.lucydarling.com/products/${handle}?utm_source=photo_lab&utm_medium=app&utm_campaign=review_prompt&utm_content=${source}#judgeme_product_reviews`;
 }

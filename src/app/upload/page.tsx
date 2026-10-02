@@ -21,6 +21,7 @@ import { DetailsModeToggle } from "@/components/DetailsModeToggle";
 import { BookSwitcher } from "@/components/BookSwitcher";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { useNotesSync } from "@/hooks/useNotesSync";
+import { ReviewMilestoneBanner } from "@/components/ReviewMilestoneBanner";
 
 export default function UploadPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
@@ -62,6 +63,8 @@ export default function UploadPage() {
       </div>
 
       <ProgressBar />
+
+      <ReviewMilestoneBanner themeId={bookTheme} />
 
       {/* Page header */}
       <div className="px-4 pt-4 pb-2 max-w-2xl mx-auto">
