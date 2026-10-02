@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getSlots } from "@/lib/photo-slots";
+import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -146,7 +147,9 @@ export async function POST(req: NextRequest) {
       .eq("status", "active")
       .maybeSingle();
 
-    if (!session) {
+    // A hidden book (the journal, until it's public) only accepts uploads from
+    // a browser that has unlocked it — answered exactly like an unknown session.
+    if (!session || !isThemeAllowed(session.book_theme, req.cookies.get(PJ_PREVIEW_COOKIE)?.value)) {
       return NextResponse.json({ error: "Invalid or expired session" }, { status: 404 });
     }
 

@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 
 const ONBOARDED_KEY = "lucy-prints-onboarded";
 
-export function OnboardingModal() {
+/**
+ * `bookWord` is what the visitor's book is called: "memory book" by default,
+ * "pregnancy journal" when they arrived for the journal (preview link only).
+ */
+export function OnboardingModal({ bookWord = "memory book" }: { bookWord?: string }) {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -61,7 +65,7 @@ export function OnboardingModal() {
               Lucy Darling Photo Prints
             </p>
             <h2 className="text-xl font-bold text-gray-900 leading-snug">
-              Get your photos perfectly sized for your memory book
+              Get your photos perfectly sized for your {bookWord}
             </h2>
             <p className="text-sm text-gray-500 mt-2 leading-relaxed">
               We&apos;ll guide you through every page — then give you print-ready files to take anywhere.
@@ -77,7 +81,7 @@ export function OnboardingModal() {
               <div>
                 <p className="text-sm font-semibold text-gray-800">Pick your book theme</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Select the theme that matches the memory book you have.
+                  Select the theme that matches the {bookWord} you have.
                 </p>
               </div>
             </div>

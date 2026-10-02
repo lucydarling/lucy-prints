@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendMyBooksEmail, EmailSendError } from "@/lib/email";
 import { BOOK_THEMES } from "@/lib/photo-slots";
+import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimits,
   RATE_LIMITS,
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
       return tooManyRequestsResponse(rl.retryAfterSeconds);
     }
 
-    const { data: sessions, error: lookupError } = await supabaseAdmin
+    const { data: allSessions, error: lookupError } = await supabaseAdmin
       .from("sessions")
       .select("token, book_theme, baby_name, photo_count")
       .eq("email", normalizedEmail)
@@ -44,9 +45,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to send email" }, { status: 500 });
     }
 
+    // A hidden book (the journal, until it's public) is left out unless this
+    // browser has unlocked it.
+    const cookie = req.cookies.get(PJ_PREVIEW_COOKIE)?.value;
+    const sessions = (allSessions ?? []).filter((s) => isThemeAllowed(s.book_theme, cookie));
+
     // Always return 200 — don't reveal whether email exists.
     // Logged distinctly so a lookup miss is never confused with a send failure.
-    if (!sessions || sessions.length === 0) {
+    if (sessions.length === 0) {
       console.warn(
         `[my-books-email] outcome=lookup-miss email=${normalizedEmail} — no active session; no email attempted`
       );
