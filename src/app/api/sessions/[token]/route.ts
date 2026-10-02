@@ -7,7 +7,7 @@ import {
   buildSyncStatus,
   isJournalTheme,
 } from "@/lib/klaviyo";
-import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
+import { isThemeAllowed } from "@/lib/preview-gate";
 
 /**
  * PATCH /api/sessions/[token]
@@ -31,7 +31,7 @@ export async function PATCH(
       .eq("status", "active")
       .maybeSingle();
 
-    if (!session || !isThemeAllowed(session.book_theme, req.cookies.get(PJ_PREVIEW_COOKIE)?.value)) {
+    if (!session || !isThemeAllowed(session.book_theme, req.cookies)) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -123,7 +123,7 @@ export async function PATCH(
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
@@ -137,7 +137,8 @@ export async function GET(
       .eq("status", "active")
       .maybeSingle();
 
-    if (!session) {
+    // A hidden book's session reads as unknown to a browser that hasn't unlocked it.
+    if (!session || !isThemeAllowed(session.book_theme, req.cookies)) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendMyBooksEmail, EmailSendError } from "@/lib/email";
 import { BOOK_THEMES } from "@/lib/photo-slots";
-import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
+import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimits,
   RATE_LIMITS,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     // A hidden book (the journal, until it's public) is left out unless this
     // browser has unlocked it.
-    const cookie = req.cookies.get(PJ_PREVIEW_COOKIE)?.value;
+    const cookie = req.cookies;
     const sessions = (allSessions ?? []).filter((s) => isThemeAllowed(s.book_theme, cookie));
 
     // Always return 200 — don't reveal whether email exists.

@@ -19,6 +19,8 @@ export function HomePage({
 }: {
   /** The pregnancy journal is shown only when public or unlocked by the preview link. */
   journalVisible: boolean;
+  /** The Little Years, likewise (shown from the next change on). */
+  littleYearsVisible: boolean;
   /** ?book= — a product ("pregnancy_journal") or theme id to put first and highlight. */
   preselect: string | null;
 }) {

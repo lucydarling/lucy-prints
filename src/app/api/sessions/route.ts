@@ -9,7 +9,7 @@ import {
   buildSyncStatus,
   isJournalTheme,
 } from "@/lib/klaviyo";
-import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
+import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       !bookTheme ||
       !BOOK_THEMES.some((t) => t.id === bookTheme) ||
       // A hidden book (the journal, until it's public) is treated as unknown.
-      !isThemeAllowed(bookTheme, req.cookies.get(PJ_PREVIEW_COOKIE)?.value)
+      !isThemeAllowed(bookTheme, req.cookies)
     ) {
       return NextResponse.json({ error: "Valid book theme required" }, { status: 400 });
     }
