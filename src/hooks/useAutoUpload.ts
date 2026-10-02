@@ -6,6 +6,27 @@ import { usePhotoStore } from "@/store/photo-store";
 import { PHOTO_SLOTS } from "@/lib/photo-slots";
 
 /**
+ * Slots re-cropped while their previous crop was still uploading. When that
+ * upload finishes it would mark the slot done and the new crop would never go
+ * up, so the completion handler re-queues anything in here.
+ */
+const staleWhileUploading = new Set<string>();
+
+/**
+ * A crop that REPLACES an already-seen crop must go up again, but
+ * addToUploadQueue skips keys in uploadedSlots, so drop them first.
+ */
+function requeueRecropped(keys: string[]) {
+  if (keys.length === 0) return;
+  const { uploadingSlot } = useSaveStore.getState();
+  useSaveStore.setState((s) => ({
+    uploadedSlots: s.uploadedSlots.filter((k) => !keys.includes(k)),
+  }));
+  for (const k of keys) if (k === uploadingSlot) staleWhileUploading.add(k);
+  useSaveStore.getState().addToUploadQueue(keys);
+}
+
+/**
  * Background upload hook — processes the upload queue one photo at a time.
  * Also watches for newly cropped photos and queues them for upload.
  */
@@ -29,6 +50,7 @@ export function useAutoUpload() {
 
     const prev = prevPhotosRef.current;
     const newlyCropped: string[] = [];
+    const recropped: string[] = [];
 
     for (const [key, entry] of Object.entries(photos)) {
       if (
@@ -36,10 +58,14 @@ export function useAutoUpload() {
         entry.croppedUrl &&
         (!prev[key] || prev[key].status !== "cropped" || prev[key].croppedUrl !== entry.croppedUrl)
       ) {
-        newlyCropped.push(key);
+        // A different crop replacing one we already had (not the first-mount pass,
+        // where prev is empty) has to overwrite what's in the cloud.
+        if (prev[key]?.croppedUrl && prev[key].croppedUrl !== entry.croppedUrl) recropped.push(key);
+        else newlyCropped.push(key);
       }
     }
 
+    requeueRecropped(recropped);
     if (newlyCropped.length > 0) {
       addToUploadQueue(newlyCropped);
     }
@@ -53,16 +79,17 @@ export function useAutoUpload() {
 
     const prev = prevExtrasRef.current;
     const newlyCropped: string[] = [];
+    const recropped: string[] = [];
 
     for (const extra of extras) {
       if (extra.croppedUrl) {
         const prevExtra = prev.find((e) => e.id === extra.id);
-        if (!prevExtra?.croppedUrl || prevExtra.croppedUrl !== extra.croppedUrl) {
-          newlyCropped.push(extra.id);
-        }
+        if (!prevExtra?.croppedUrl) newlyCropped.push(extra.id);
+        else if (prevExtra.croppedUrl !== extra.croppedUrl) recropped.push(extra.id);
       }
     }
 
+    requeueRecropped(recropped);
     if (newlyCropped.length > 0) {
       addToUploadQueue(newlyCropped);
     }
@@ -129,6 +156,10 @@ export function useAutoUpload() {
     })
       .then(() => {
         markUploaded(nextSlotKey);
+        if (staleWhileUploading.delete(nextSlotKey)) {
+          // Re-cropped during this upload: the copy we just sent is already old.
+          requeueRecropped([nextSlotKey]);
+        }
       })
       .catch((err) => {
         markUploadError(nextSlotKey, err.message || "Upload failed");
