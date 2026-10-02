@@ -30,7 +30,9 @@ export function ReviewPromptCard({
   return (
     <div className={`${className} p-4 rounded-xl bg-rose-50 border border-rose-100`}>
       <h2 className="text-sm font-semibold text-gray-800">
-        How&apos;s your {theme.name} book coming along?
+        How&apos;s your{" "}
+        {theme.product === "pregnancy_journal" ? "Love Grows journal" : `${theme.name} book`}{" "}
+        coming along?
       </h2>
       <p className="text-xs text-gray-600 mt-1 leading-relaxed">
         If you&apos;re loving it, a quick review helps other parents find a book they&apos;ll actually finish. It takes about a minute.

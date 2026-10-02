@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useSaveStore } from "@/store/save-store";
 import { usePhotoStore } from "@/store/photo-store";
+import { getProductForTheme } from "@/lib/photo-slots";
 
 // Outer shell — only renders the form when the modal is open so useState
 // initializers always read fresh values from the store on each open.
@@ -38,6 +39,12 @@ function SaveProgressModalForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // A pregnancy journal save asks for an email only: no baby name, no
+  // birthday (its baby usually isn't born yet, and a birthday would start the
+  // monthly milestone reminders), no phone/SMS (those texts are for monthly
+  // baby photos). The server ignores those fields for a journal anyway.
+  const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
+
   function handleOptOutChange(checked: boolean) {
     setBirthdateOptOut(checked);
     if (checked) setBabyBirthdate("");
@@ -52,7 +59,7 @@ function SaveProgressModalForm() {
       return;
     }
 
-    if (!birthdateOptOut && !babyBirthdate) {
+    if (!isJournal && !birthdateOptOut && !babyBirthdate) {
       setError("Baby's birthday is required so we can send milestone reminders.");
       return;
     }
@@ -65,10 +72,14 @@ function SaveProgressModalForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
-          babyName: babyName.trim() || undefined,
-          babyBirthdate: birthdateOptOut ? undefined : babyBirthdate || undefined,
-          phone: phone.trim() || undefined,
-          smsOptIn,
+          ...(isJournal
+            ? {}
+            : {
+                babyName: babyName.trim() || undefined,
+                babyBirthdate: birthdateOptOut ? undefined : babyBirthdate || undefined,
+                phone: phone.trim() || undefined,
+                smsOptIn,
+              }),
           bookTheme,
           notes: Object.keys(notes).length > 0 ? notes : undefined,
           detailsMode: detailsMode || undefined,
@@ -82,20 +93,24 @@ function SaveProgressModalForm() {
 
       const { token, sessionId } = await res.json();
 
-      // Sync final baby info back to the pending store so it's remembered
-      setPendingBabyInfo(
-        babyName.trim(),
-        birthdateOptOut ? "" : babyBirthdate,
-        birthdateOptOut
-      );
+      if (isJournal) {
+        setSession(token, sessionId, email.trim());
+      } else {
+        // Sync final baby info back to the pending store so it's remembered
+        setPendingBabyInfo(
+          babyName.trim(),
+          birthdateOptOut ? "" : babyBirthdate,
+          birthdateOptOut
+        );
 
-      setSession(
-        token,
-        sessionId,
-        email.trim(),
-        babyName.trim() || undefined,
-        birthdateOptOut ? undefined : babyBirthdate || undefined
-      );
+        setSession(
+          token,
+          sessionId,
+          email.trim(),
+          babyName.trim() || undefined,
+          birthdateOptOut ? undefined : babyBirthdate || undefined
+        );
+      }
       setSaveStatus("saving");
 
       const croppedSlotKeys = Object.entries(photos)
@@ -177,6 +192,7 @@ function SaveProgressModalForm() {
             />
           </div>
 
+          {!isJournal && (<>
           {/* Baby name — optional */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -261,6 +277,7 @@ function SaveProgressModalForm() {
               </span>
             </label>
           </div>
+          </>)}
 
           {/* Error */}
           {error && (

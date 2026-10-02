@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
-import { syncProfileToKlaviyo, trackPhotoAppSignup, subscribeToEmailList, buildSyncStatus } from "@/lib/klaviyo";
+import {
+  syncProfileToKlaviyo,
+  trackPhotoAppSignup,
+  subscribeToEmailList,
+  buildSyncStatus,
+  isJournalTheme,
+} from "@/lib/klaviyo";
+import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -19,13 +26,23 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { email, babyName, babyBirthdate, phone, smsOptIn, bookTheme, notes, detailsMode } = body;
+    const { email, bookTheme, notes, detailsMode } = body;
+    // A pregnancy journal save carries no baby or phone details at all: its
+    // baby usually isn't born yet, and a birthdate here would start the
+    // monthly milestone reminders. Ignored even if a client sends them.
+    const isJournal = isJournalTheme(bookTheme);
+    const { babyName, babyBirthdate, phone, smsOptIn } = isJournal ? {} : body;
 
     // Validate required fields
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
-    if (!bookTheme || !BOOK_THEMES.some((t) => t.id === bookTheme)) {
+    if (
+      !bookTheme ||
+      !BOOK_THEMES.some((t) => t.id === bookTheme) ||
+      // A hidden book (the journal, until it's public) is treated as unknown.
+      !isThemeAllowed(bookTheme, req.cookies.get(PJ_PREVIEW_COOKIE)?.value)
+    ) {
       return NextResponse.json({ error: "Valid book theme required" }, { status: 400 });
     }
 
@@ -143,7 +160,8 @@ export async function POST(req: NextRequest) {
 
     // Fire the "Photo App Signup" event only when we have a birthdate —
     // this is what triggers the monthly milestone reminder flow in Klaviyo.
-    if (babyBirthdate) {
+    // Never for a pregnancy journal.
+    if (babyBirthdate && !isJournal) {
       trackPhotoAppSignup({
         email,
         babyName,

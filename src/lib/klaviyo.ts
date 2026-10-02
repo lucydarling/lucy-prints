@@ -8,6 +8,8 @@
  * Klaviyo → Settings → API Keys → Create Private API Key)
  */
 
+import { getProductForTheme } from "@/lib/photo-slots";
+
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
 const KLAVIYO_REVISION = "2024-10-15";
 
@@ -216,6 +218,9 @@ async function pollProfileConsent(
 export async function syncProfileToKlaviyo(
   data: KlaviyoSessionData
 ): Promise<KlaviyoSyncResult> {
+  if (isJournalTheme(data.bookTheme)) {
+    return syncJournalProfile(data.email, data.bookTheme as string);
+  }
   if (!process.env.KLAVIYO_API_KEY) {
     console.warn("[Klaviyo] KLAVIYO_API_KEY not set — skipping profile sync");
     return {
@@ -306,6 +311,81 @@ export async function syncProfileToKlaviyo(
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[Klaviyo] Profile sync error:", msg);
     return { profileId: null, smsSubscribed: false, smsConsentStatus: "UNKNOWN", smsError: msg };
+  }
+}
+
+// ─────────────────────────────────────────────
+// Pregnancy journal profiles
+// ─────────────────────────────────────────────
+
+/** True for a pregnancy journal theme id. */
+export function isJournalTheme(bookTheme: string | null | undefined): boolean {
+  return getProductForTheme(bookTheme) === "pregnancy_journal";
+}
+
+/**
+ * A pregnancy journal save writes ONE profile property: pregnancy_journal_theme.
+ *
+ * It never sends baby_name, baby_birthdate, book_theme, phone or sms_consent.
+ * Those are profile-level (one value per email, last write wins), and a parent
+ * who already has a memory book session would otherwise have their real baby's
+ * details — the ones the milestone flow runs on — blanked or replaced.
+ * The journal has no SMS opt-in, so no SMS subscription is attempted.
+ *
+ * Never throws — all errors are captured in the returned result.
+ */
+async function syncJournalProfile(
+  email: string,
+  bookTheme: string
+): Promise<KlaviyoSyncResult> {
+  if (!process.env.KLAVIYO_API_KEY) {
+    console.warn("[Klaviyo] KLAVIYO_API_KEY not set — skipping profile sync");
+    return {
+      profileId: null,
+      smsSubscribed: false,
+      smsConsentStatus: "NOT_ATTEMPTED",
+      smsError: "KLAVIYO_API_KEY not set",
+    };
+  }
+
+  const attributes = {
+    email: email.toLowerCase().trim(),
+    properties: { pregnancy_journal_theme: bookTheme },
+  };
+
+  try {
+    const res = await fetch(`${KLAVIYO_BASE}/profiles/`, {
+      method: "POST",
+      headers: klaviyoHeaders(),
+      body: JSON.stringify({ data: { type: "profile", attributes } }),
+    });
+
+    let profileId: string | null = null;
+    if (res.status === 201 || res.status === 200) {
+      const json = await res.json();
+      profileId = json?.data?.id ?? null;
+    } else if (res.status === 409) {
+      // Existing profile: update only the journal property.
+      const json = await res.json();
+      profileId = json?.errors?.[0]?.meta?.duplicate_profile_id ?? null;
+      if (profileId) {
+        await patchProfile(profileId, { properties: attributes.properties });
+      }
+    } else {
+      const errorText = await res.text().catch(() => "");
+      console.error(`[Klaviyo] Journal profile sync failed (${res.status}):`, errorText);
+      return {
+        profileId: null,
+        smsSubscribed: false,
+        smsConsentStatus: "NOT_ATTEMPTED",
+        smsError: `Profile sync failed (${res.status}): ${errorText}`,
+      };
+    }
+    return { profileId, smsSubscribed: false, smsConsentStatus: "NOT_ATTEMPTED" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[Klaviyo] Journal profile sync error:", msg);
+    return { profileId: null, smsSubscribed: false, smsConsentStatus: "NOT_ATTEMPTED", smsError: msg };
   }
 }
 
@@ -547,6 +627,12 @@ export async function trackPhotoAppSignup(
 ): Promise<void> {
   if (!process.env.KLAVIYO_API_KEY) {
     console.warn("[Klaviyo] KLAVIYO_API_KEY not set — skipping event track");
+    return;
+  }
+
+  if (isJournalTheme(data.bookTheme)) {
+    // Never for a pregnancy journal: this event starts the baby's monthly
+    // milestone reminders, and a journal's baby usually isn't born yet.
     return;
   }
 

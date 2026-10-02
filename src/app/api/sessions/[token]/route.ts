@@ -5,7 +5,9 @@ import {
   subscribeToEmailList,
   trackPhotoAppSignup,
   buildSyncStatus,
+  isJournalTheme,
 } from "@/lib/klaviyo";
+import { PJ_PREVIEW_COOKIE, isThemeAllowed } from "@/lib/preview-gate";
 
 /**
  * PATCH /api/sessions/[token]
@@ -19,19 +21,24 @@ export async function PATCH(
   try {
     const { token } = await params;
     const body = await req.json();
-    const { notes, detailsMode, babyName, babyBirthdate } = body;
+    const { notes, detailsMode } = body;
 
     // Look up session
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id")
+      .select("id, book_theme")
       .eq("token", token)
       .eq("status", "active")
       .maybeSingle();
 
-    if (!session) {
+    if (!session || !isThemeAllowed(session.book_theme, req.cookies.get(PJ_PREVIEW_COOKIE)?.value)) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
+
+    // A pregnancy journal never stores a baby's name or birthdate (and so
+    // never starts the milestone reminders) — ignored even if sent.
+    const isJournal = isJournalTheme(session.book_theme);
+    const { babyName, babyBirthdate } = isJournal ? {} : body;
 
     // Build update object — only include fields that were sent
     const update: Record<string, unknown> = {};
@@ -100,7 +107,7 @@ export async function PATCH(
       // If a birthdate was just added for the first time, fire the signup event
       // so the milestone flow starts. We check `babyBirthdate` from the request
       // body — if it was sent in this PATCH and is now set, fire the event.
-      if (babyBirthdate && updatedSession.baby_birthdate) {
+      if (babyBirthdate && updatedSession.baby_birthdate && !isJournal) {
         trackPhotoAppSignup({
           ...klaviyoData,
           sessionToken: token,
