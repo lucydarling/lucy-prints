@@ -8,6 +8,7 @@ import {
   subscribeToEmailList,
   buildSyncStatus,
   isJournalTheme,
+  isSideBookTheme,
 } from "@/lib/klaviyo";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
@@ -27,11 +28,13 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { email, bookTheme, notes, detailsMode } = body;
-    // A pregnancy journal save carries no baby or phone details at all: its
-    // baby usually isn't born yet, and a birthdate here would start the
-    // monthly milestone reminders. Ignored even if a client sends them.
-    const isJournal = isJournalTheme(bookTheme);
-    const { babyName, babyBirthdate, phone, smsOptIn } = isJournal ? {} : body;
+    // A pregnancy journal or Little Years save carries no birthdate or phone:
+    // a birthdate here would start the first-year milestone reminders.
+    // Ignored even if a client sends them. Little Years keeps the child's
+    // name (it names the print files); the journal keeps nothing.
+    const isSideBook = isSideBookTheme(bookTheme);
+    const { babyBirthdate, phone, smsOptIn } = isSideBook ? {} : body;
+    const babyName = isJournalTheme(bookTheme) ? undefined : body.babyName;
 
     // Validate required fields
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -161,7 +164,7 @@ export async function POST(req: NextRequest) {
     // Fire the "Photo App Signup" event only when we have a birthdate —
     // this is what triggers the monthly milestone reminder flow in Klaviyo.
     // Never for a pregnancy journal.
-    if (babyBirthdate && !isJournal) {
+    if (babyBirthdate && !isSideBook) {
       trackPhotoAppSignup({
         email,
         babyName,

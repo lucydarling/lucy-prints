@@ -44,6 +44,11 @@ function SaveProgressModalForm() {
   // monthly milestone reminders), no phone/SMS (those texts are for monthly
   // baby photos). The server ignores those fields for a journal anyway.
   const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
+  // A Little Years save asks for an email and, optionally, the child's name
+  // (it names the print files). No birthday or phone: those drive the
+  // first-year milestone reminders, which don't apply to a toddler book.
+  const isLittleYears = getProductForTheme(bookTheme) === "little_years";
+  const milestoneFields = !isJournal && !isLittleYears;
 
   function handleOptOutChange(checked: boolean) {
     setBirthdateOptOut(checked);
@@ -59,7 +64,7 @@ function SaveProgressModalForm() {
       return;
     }
 
-    if (!isJournal && !birthdateOptOut && !babyBirthdate) {
+    if (milestoneFields && !birthdateOptOut && !babyBirthdate) {
       setError("Baby's birthday is required so we can send milestone reminders.");
       return;
     }
@@ -74,6 +79,8 @@ function SaveProgressModalForm() {
           email: email.trim(),
           ...(isJournal
             ? {}
+            : isLittleYears
+            ? { babyName: babyName.trim() || undefined }
             : {
                 babyName: babyName.trim() || undefined,
                 babyBirthdate: birthdateOptOut ? undefined : babyBirthdate || undefined,
@@ -95,6 +102,8 @@ function SaveProgressModalForm() {
 
       if (isJournal) {
         setSession(token, sessionId, email.trim());
+      } else if (isLittleYears) {
+        setSession(token, sessionId, email.trim(), babyName.trim() || undefined);
       } else {
         // Sync final baby info back to the pending store so it's remembered
         setPendingBabyInfo(
@@ -192,11 +201,12 @@ function SaveProgressModalForm() {
             />
           </div>
 
-          {!isJournal && (<>
-          {/* Baby name — optional */}
+          {/* Baby / child name — optional (not asked for a journal) */}
+          {!isJournal && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Baby&apos;s Name <span className="text-gray-400 font-normal">(optional)</span>
+              {isLittleYears ? "Child\u2019s Name" : <>Baby&apos;s Name</>}{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <input
               type="text"
@@ -206,7 +216,9 @@ function SaveProgressModalForm() {
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#FAB8A9] focus:border-transparent"
             />
           </div>
+          )}
 
+          {milestoneFields && (<>
           {/* Baby birthdate */}
           {!birthdateOptOut && (
             <div>

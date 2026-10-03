@@ -83,6 +83,7 @@ export default function ReviewPage() {
   // page doesn't know about can't silently drop out of the totals.
   const summary = summarizePrints(bookPrintItems(slots, photos, extras));
   const count3x3 = summary.countBySize["3x3"];
+  const count5x5 = summary.countBySize["5x5"];
   const paddedSizes = summary.rows.filter((r) => r.paddedTo4x4).map((r) => r.size);
   const totalPhotos = summary.total;
   const progress = getBookProgress(bookTheme, photos, regionLayouts);
@@ -305,6 +306,9 @@ export default function ReviewPage() {
               </label>
               <p className="text-xs text-gray-400 mt-1.5 ml-[26px] leading-relaxed">
                 Every photo gets placed on a standard 4x6&quot; sheet — order one size at any print service and trim to fit. Great if your printer only offers 4x6&quot;.
+                {count5x5 > 0 && (
+                  <> Your 5x5&quot; photos stay 5x5&quot;: they&apos;re too big for a 4x6&quot; sheet.</>
+                )}
               </p>
             </div>
 

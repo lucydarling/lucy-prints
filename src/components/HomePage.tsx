@@ -9,21 +9,25 @@ import {
   PRODUCTS,
   getBookProgress,
   getProductForTheme,
+  type ProductType,
 } from "@/lib/photo-slots";
 import { openBook } from "@/lib/open-book";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
 export function HomePage({
-  journalVisible,
+  unlockedBooks,
   preselect,
 }: {
-  /** The pregnancy journal is shown only when public or unlocked by the preview link. */
-  journalVisible: boolean;
-  /** The Little Years, likewise (shown from the next change on). */
-  littleYearsVisible: boolean;
+  /**
+   * Hidden books this visitor may see (public, or unlocked by a preview
+   * link): "pregnancy_journal", "little_years". Empty for most visitors.
+   */
+  unlockedBooks: ProductType[];
   /** ?book= — a product ("pregnancy_journal") or theme id to put first and highlight. */
   preselect: string | null;
 }) {
+  const journalVisible = unlockedBooks.includes("pregnancy_journal");
+  const littleYearsVisible = unlockedBooks.includes("little_years");
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const router = useRouter();
 
@@ -69,6 +73,30 @@ export function HomePage({
     journalVisible &&
     (preselect === "pregnancy_journal" ||
       getProductForTheme(preselect) === "pregnancy_journal");
+
+  const littleYearsFirst =
+    littleYearsVisible &&
+    (preselect === "little_years" || getProductForTheme(preselect) === "little_years");
+
+  const littleYearsSection = littleYearsVisible ? (
+    <div className={littleYearsFirst ? "mb-8" : "mt-6"}>
+      {/* DRAFT copy — pending Haily. */}
+      <h3 className="text-sm font-semibold text-gray-700 mb-1">
+        The Little Years Toddler Memory Book
+      </h3>
+      <p className="text-xs text-gray-400 mb-3">Ages one to five.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {BOOK_THEMES.filter((t) => t.tier === "little_years").map((theme) => (
+          <ThemeCard
+            key={theme.id}
+            theme={theme}
+            onSelect={handleSelect}
+            highlighted={preselect === theme.id}
+          />
+        ))}
+      </div>
+    </div>
+  ) : null;
 
   const journalSection = journalVisible ? (
     <div className={journalFirst ? "mb-8" : "mt-6"}>
@@ -204,7 +232,7 @@ export function HomePage({
           </h3>
           <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
             <li>
-              {journalVisible
+              {journalVisible || littleYearsVisible
                 ? "Select your book below"
                 : "Select your memory book theme below"}
             </li>
@@ -224,6 +252,7 @@ export function HomePage({
         </h2>
 
         {journalFirst && journalSection}
+        {littleYearsFirst && littleYearsSection}
 
         {/* Standard Memory Books */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -271,6 +300,7 @@ export function HomePage({
         </div>
 
         {!journalFirst && journalSection}
+        {!littleYearsFirst && littleYearsSection}
       </div>
     </div>
   );
@@ -325,8 +355,9 @@ function ThemeCard({
       </div>
       <div className="p-3 bg-white">
         <p className="text-sm font-medium text-gray-800 truncate">
-          {/* Journal cards sit under the journal heading — show the cover color. */}
-          {product === "pregnancy_journal"
+          {/* Journal and Little Years cards sit under their book's heading —
+              show just the variant (cover color, Boy/Girl). */}
+          {product !== "memory_book"
             ? theme.name.replace(/^.*\((.*)\)$/, "$1")
             : theme.name}
         </p>

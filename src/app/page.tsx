@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { HomePage } from "@/components/HomePage";
 import { getProductForTheme, type ProductType } from "@/lib/photo-slots";
-import { unlockedProducts } from "@/lib/preview-gate";
+import { GATED_PRODUCTS, unlockedProducts } from "@/lib/preview-gate";
 
 const PRODUCT_IDS: ProductType[] = ["memory_book", "pregnancy_journal", "little_years"];
 
@@ -23,11 +23,8 @@ export default async function Home({
   // A hidden book falls back to the normal home page, as if no ?book= was given.
   const preselect = wantedProduct && unlocked[wantedProduct] ? wanted : null;
 
-  return (
-    <HomePage
-      journalVisible={unlocked.pregnancy_journal}
-      littleYearsVisible={unlocked.little_years}
-      preselect={preselect}
-    />
-  );
+  // Only books this visitor may see are named in the page; a locked visitor
+  // gets an empty list, so a hidden book never appears in the HTML.
+  const unlockedBooks = GATED_PRODUCTS.filter((p) => unlocked[p]);
+  return <HomePage unlockedBooks={unlockedBooks} preselect={preselect} />;
 }

@@ -6,6 +6,7 @@ import {
   trackPhotoAppSignup,
   buildSyncStatus,
   isJournalTheme,
+  isSideBookTheme,
 } from "@/lib/klaviyo";
 import { isThemeAllowed } from "@/lib/preview-gate";
 
@@ -35,10 +36,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // A pregnancy journal never stores a baby's name or birthdate (and so
-    // never starts the milestone reminders) — ignored even if sent.
-    const isJournal = isJournalTheme(session.book_theme);
-    const { babyName, babyBirthdate } = isJournal ? {} : body;
+    // A pregnancy journal never stores a baby's name or birthdate, and Little
+    // Years never stores a birthdate (so neither starts the milestone
+    // reminders) — ignored even if sent. Little Years keeps the child's name.
+    const isSideBook = isSideBookTheme(session.book_theme);
+    const babyName = isJournalTheme(session.book_theme) ? undefined : body.babyName;
+    const babyBirthdate = isSideBook ? undefined : body.babyBirthdate;
 
     // Build update object — only include fields that were sent
     const update: Record<string, unknown> = {};
@@ -107,7 +110,7 @@ export async function PATCH(
       // If a birthdate was just added for the first time, fire the signup event
       // so the milestone flow starts. We check `babyBirthdate` from the request
       // body — if it was sent in this PATCH and is now set, fire the event.
-      if (babyBirthdate && updatedSession.baby_birthdate && !isJournal) {
+      if (babyBirthdate && updatedSession.baby_birthdate && !isSideBook) {
         trackPhotoAppSignup({
           ...klaviyoData,
           sessionToken: token,

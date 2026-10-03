@@ -44,12 +44,12 @@ export function SectionGroup({ section, label, slots }: SectionGroupProps) {
 
   // Standalone detail cards that appear after this section
   const standaloneCards = detailsMode
-    ? getStandaloneAfterSection(section)
+    ? getStandaloneAfterSection(section, bookTheme)
     : [];
 
   // Detail progress for this section (only when detailsMode is on)
   const detailProgress = detailsMode
-    ? countSectionDetailProgress(section, notes)
+    ? countSectionDetailProgress(section, notes, bookTheme)
     : null;
 
   return (

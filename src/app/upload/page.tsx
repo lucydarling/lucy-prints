@@ -49,6 +49,8 @@ export default function UploadPage() {
   if (!bookTheme) return null;
 
   const sections = getSlotsBySection(bookTheme);
+  // Headings that group sections, in order (The Little Years: "Age One"…).
+  const groups = [...new Set(sections.map((s) => s.slots[0]?.group).filter((g): g is string => !!g))];
   const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
   // Photos in use: memory book slots, or the region photos the chosen layouts use.
   const uploaded = getBookSlots(bookTheme, regionLayouts).filter((slot) => {
@@ -96,16 +98,40 @@ export default function UploadPage() {
         </div>
       )}
 
+      {/* Books grouped by age (The Little Years): a row of jump links */}
+      {groups.length > 0 && (
+        <nav className="max-w-2xl mx-auto px-4 pt-2 flex flex-wrap gap-2" aria-label="Jump to age">
+          {groups.map((g) => (
+            <a
+              key={g}
+              href={`#${groupAnchor(g)}`}
+              className="px-3 py-1 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100"
+            >
+              {g}
+            </a>
+          ))}
+        </nav>
+      )}
+
       {/* Sections */}
       <div className="max-w-2xl mx-auto pb-24 pt-2">
-        {sections.map(({ section, label, slots }) => (
-          <SectionGroup
-            key={section}
-            section={section}
-            label={label}
-            slots={slots}
-          />
-        ))}
+        {sections.map(({ section, label, slots }, i) => {
+          const group = slots[0]?.group;
+          const startsGroup = group && group !== sections[i - 1]?.slots[0]?.group;
+          return (
+            <div key={section}>
+              {startsGroup && (
+                <h2
+                  id={groupAnchor(group)}
+                  className="px-4 pt-4 pb-3 text-lg font-bold text-gray-900 scroll-mt-4"
+                >
+                  {group}
+                </h2>
+              )}
+              <SectionGroup section={section} label={label} slots={slots} />
+            </div>
+          );
+        })}
 
         {/* Extra Prints section */}
         <div className="mb-6 px-4">
@@ -184,4 +210,9 @@ function ExtraButton({ size }: { size: PrintSize }) {
       + Add {label}&quot; print
     </button>
   );
+}
+
+/** "Age One" → "age-one", for the jump links. */
+function groupAnchor(group: string): string {
+  return group.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }

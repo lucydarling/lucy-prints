@@ -1,6 +1,6 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { profileProperties, syncProfileToKlaviyo } from "@/lib/klaviyo";
+import { profileProperties, syncProfileToKlaviyo, trackPhotoAppSignup } from "@/lib/klaviyo";
 
 /**
  * A fake Klaviyo profiles API with the real semantics that matter here:
@@ -78,4 +78,38 @@ test("no property is ever sent as null", () => {
   const p = profileProperties({ email: EMAIL, babyName: null, babyBirthdate: "", bookTheme: undefined });
   assert.deepEqual(p, { photo_app_signup: true, source: "memories_app" });
   assert.ok(!Object.values(p).some((v) => v === null));
+});
+
+test("a Little Years save writes only little_years_theme and never starts the milestone flow", async () => {
+  await syncProfileToKlaviyo({
+    email: EMAIL, babyName: "Emma", babyBirthdate: "2026-09-01", bookTheme: "little_goose",
+  });
+  const smsBefore = props().sms_consent;
+  const before = { ...props() };
+  // Same parent saves an older child's Little Years book.
+  await syncProfileToKlaviyo({
+    email: EMAIL, babyName: "Ollie", babyBirthdate: "2023-05-01", phone: "6025550100", smsOptIn: true,
+    bookTheme: "little_years_boy",
+  });
+  assert.equal(props().baby_name, "Emma", "the memory book baby's name is untouched");
+  assert.equal(props().baby_birthdate, "2026-09-01");
+  assert.equal(props().book_theme, "little_goose");
+  assert.equal(props().little_years_theme, "little_years_boy");
+  assert.equal(props().sms_consent, smsBefore, "no SMS attempt for Little Years");
+  assert.deepEqual(
+    props(),
+    { ...before, little_years_theme: "little_years_boy" },
+    "nothing else was written or changed"
+  );
+
+  const calls: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+    calls.push(String(input));
+    return realFetch(input, init);
+  }) as typeof fetch;
+  await trackPhotoAppSignup({
+    email: EMAIL, babyName: "Ollie", babyBirthdate: "2023-05-01", bookTheme: "little_years_girl", sessionToken: "t",
+  });
+  assert.deepEqual(calls, [], "no Photo App Signup event");
 });

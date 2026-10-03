@@ -2,10 +2,13 @@
 
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
+import { getProductForTheme } from "@/lib/photo-slots";
 
 export function DetailsModeToggle() {
   const detailsMode = usePhotoStore((s) => s.detailsMode);
   const setDetailsMode = usePhotoStore((s) => s.setDetailsMode);
+  const bookTheme = usePhotoStore((s) => s.bookTheme);
+  const isMemoryBook = (getProductForTheme(bookTheme) ?? "memory_book") === "memory_book";
   const pendingBabyBirthdate = useSaveStore((s) => s.pendingBabyBirthdate);
   const birthdateOptOut = useSaveStore((s) => s.birthdateOptOut);
   const setShowBabyInfoModal = useSaveStore((s) => s.setShowBabyInfoModal);
@@ -14,8 +17,9 @@ export function DetailsModeToggle() {
     const turningOn = !detailsMode;
     setDetailsMode(turningOn);
     // Only show the baby info modal when turning ON for the first time
-    // (i.e. we don't already have a birthdate or an explicit opt-out)
-    if (turningOn && !pendingBabyBirthdate && !birthdateOptOut) {
+    // (i.e. we don't already have a birthdate or an explicit opt-out).
+    // Memory books only: the modal asks for a newborn's birthday.
+    if (turningOn && isMemoryBook && !pendingBabyBirthdate && !birthdateOptOut) {
       setShowBabyInfoModal(true);
     }
   }
@@ -28,8 +32,18 @@ export function DetailsModeToggle() {
             Capture book details too?
           </p>
           <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-            Record details like weight, height, and favorite things — we&apos;ll
-            include a reference sheet in your download.
+            {isMemoryBook ? (
+              <>
+                Record details like weight, height, and favorite things — we&apos;ll
+                include a reference sheet in your download.
+              </>
+            ) : (
+              // DRAFT copy — pending Haily.
+              <>
+                Record birthdays, favorite things and cute quotes for each year.
+                We&apos;ll include a reference sheet in your download.
+              </>
+            )}
           </p>
         </div>
         <button

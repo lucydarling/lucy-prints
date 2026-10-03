@@ -8,7 +8,7 @@
  * Klaviyo → Settings → API Keys → Create Private API Key)
  */
 
-import { getProductForTheme } from "@/lib/photo-slots";
+import { getProductForTheme, type ProductType } from "@/lib/photo-slots";
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
 const KLAVIYO_REVISION = "2024-10-15";
@@ -218,7 +218,7 @@ async function pollProfileConsent(
 export async function syncProfileToKlaviyo(
   data: KlaviyoSessionData
 ): Promise<KlaviyoSyncResult> {
-  if (isJournalTheme(data.bookTheme)) {
+  if (isSideBookTheme(data.bookTheme)) {
     return syncJournalProfile(data.email, data.bookTheme as string);
   }
   if (!process.env.KLAVIYO_API_KEY) {
@@ -340,7 +340,7 @@ export function profileProperties(data: KlaviyoSessionData): Record<string, unkn
 }
 
 // ─────────────────────────────────────────────
-// Pregnancy journal profiles
+// Pregnancy journal + Little Years profiles
 // ─────────────────────────────────────────────
 
 /** True for a pregnancy journal theme id. */
@@ -349,7 +349,27 @@ export function isJournalTheme(bookTheme: string | null | undefined): boolean {
 }
 
 /**
- * A pregnancy journal save writes ONE profile property: pregnancy_journal_theme.
+ * Books whose saves stay out of the memory book's Klaviyo data: each writes
+ * only its own theme property, and never starts the milestone flow.
+ */
+const SIDE_BOOK_PROPERTY: Partial<Record<ProductType, string>> = {
+  pregnancy_journal: "pregnancy_journal_theme",
+  little_years: "little_years_theme",
+};
+
+/**
+ * True for a pregnancy journal or Little Years theme id. A Little Years
+ * child is a toddler, so the first-year milestone reminders don't apply, and
+ * their name must not replace a younger sibling's on the shared profile.
+ */
+export function isSideBookTheme(bookTheme: string | null | undefined): boolean {
+  const product = getProductForTheme(bookTheme);
+  return Boolean(product && SIDE_BOOK_PROPERTY[product]);
+}
+
+/**
+ * A pregnancy journal save writes ONE profile property: pregnancy_journal_theme
+ * (a Little Years save, likewise, writes only little_years_theme).
  *
  * It never sends baby_name, baby_birthdate, book_theme, phone or sms_consent.
  * Those are profile-level (one value per email, last write wins), and a parent
@@ -375,7 +395,9 @@ async function syncJournalProfile(
 
   const attributes = {
     email: email.toLowerCase().trim(),
-    properties: { pregnancy_journal_theme: bookTheme },
+    properties: {
+      [SIDE_BOOK_PROPERTY[getProductForTheme(bookTheme)!] ?? "pregnancy_journal_theme"]: bookTheme,
+    },
   };
 
   try {
@@ -655,9 +677,10 @@ export async function trackPhotoAppSignup(
     return;
   }
 
-  if (isJournalTheme(data.bookTheme)) {
-    // Never for a pregnancy journal: this event starts the baby's monthly
-    // milestone reminders, and a journal's baby usually isn't born yet.
+  if (isSideBookTheme(data.bookTheme)) {
+    // Never for a pregnancy journal or Little Years: this event starts the
+    // baby's monthly milestone reminders. A journal's baby usually isn't
+    // born yet, and a Little Years child is past the first year.
     return;
   }
 

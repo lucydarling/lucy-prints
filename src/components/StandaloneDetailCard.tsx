@@ -6,6 +6,8 @@ import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
 import {
   countFilledPrompts,
+  repeatItemsWithContent,
+  repeatNoteKey,
   type SlotPrompts,
   type BookPrompt,
 } from "@/lib/book-prompts";
@@ -21,8 +23,16 @@ interface StandaloneDetailCardProps {
 export function StandaloneDetailCard({ entry }: StandaloneDetailCardProps) {
   const notes = usePhotoStore((s) => s.notes);
   const setNote = usePhotoStore((s) => s.setNote);
+  const bookTheme = usePhotoStore((s) => s.bookTheme);
   const babyBirthdate = useSaveStore((s) => s.babyBirthdate);
   const [isExpanded, setIsExpanded] = useState(false);
+  // Repeatable entries (quotes): items shown = the last one with text, at
+  // least one, plus any the parent has just added.
+  const startedItems = entry.repeat ? repeatItemsWithContent(entry, notes[entry.slotKey] || {}) : [];
+  const [addedItems, setAddedItems] = useState(0);
+  const shownItems = entry.repeat
+    ? Math.min(entry.repeat, Math.max(1, ...startedItems) + addedItems)
+    : 0;
 
   // Time Capsule smart fill: auto-suggest values when birthdate is available
   const isTimeCapsule = entry.slotKey === "time_capsule";
@@ -52,7 +62,7 @@ export function StandaloneDetailCard({ entry }: StandaloneDetailCardProps) {
 
   const hasPrompts = entry.prompts.length > 0;
   const { filled, total } = hasPrompts
-    ? countFilledPrompts(entry.slotKey, notes)
+    ? countFilledPrompts(entry.slotKey, notes, bookTheme)
     : { filled: 0, total: 0 };
 
   // Resource-image-only card (e.g. Family Tree)
@@ -121,7 +131,7 @@ export function StandaloneDetailCard({ entry }: StandaloneDetailCardProps) {
                   filled > 0 ? "text-rose-500 font-medium" : "text-gray-400"
                 }`}
               >
-                {filled}/{total}
+                {entry.repeat ? filled : `${filled}/${total}`}
               </span>
               <svg
                 className={`w-3.5 h-3.5 text-gray-400 transition-transform ${
@@ -143,8 +153,40 @@ export function StandaloneDetailCard({ entry }: StandaloneDetailCardProps) {
         </div>
       </button>
 
+      {/* Repeatable entry (quotes): numbered items, add more up to the limit */}
+      {isExpanded && hasPrompts && entry.repeat && (
+        <div className="mt-3 space-y-4">
+          {Array.from({ length: shownItems }, (_, i) => i + 1).map((n) => (
+            <div key={n} className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400">{n}</p>
+              {entry.prompts.map((prompt) => {
+                const key = repeatNoteKey(prompt.key, n);
+                return (
+                  <StandaloneField
+                    key={key}
+                    slotKey={entry.slotKey}
+                    prompt={{ ...prompt, key }}
+                    value={notes[entry.slotKey]?.[key] || ""}
+                    onSave={setNote}
+                  />
+                );
+              })}
+            </div>
+          ))}
+          {shownItems < entry.repeat && (
+            <button
+              type="button"
+              onClick={() => setAddedItems((a) => a + 1)}
+              className="text-xs font-medium text-rose-600 hover:text-rose-700"
+            >
+              + Add another quote
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Expanded fields */}
-      {isExpanded && hasPrompts && (
+      {isExpanded && hasPrompts && !entry.repeat && (
         <div className="mt-3 space-y-3">
           {/* Use grid for short fields, stack for long ones */}
           {entry.prompts.every((p) => p.type === "short") &&

@@ -449,6 +449,9 @@ export const BOOK_THEMES = [
   // Love Grows Pregnancy Journal — hidden behind the preview gate (lib/preview-gate.ts)
   { id: "love_grows_desert_sand", name: "Love Grows Pregnancy Journal (Desert Sand)", sku: "PJ001PRE", tier: "journal", product: "pregnancy_journal" },
   { id: "love_grows_moss_green", name: "Love Grows Pregnancy Journal (Moss Green)", sku: "PJ002PRE", tier: "journal", product: "pregnancy_journal" },
+  // The Little Years toddler book — hidden behind the preview gate (lib/preview-gate.ts)
+  { id: "little_years_boy", name: "The Little Years (Boy)", sku: "TB006LTY", tier: "little_years", product: "little_years" },
+  { id: "little_years_girl", name: "The Little Years (Girl)", sku: "TB005LTY", tier: "little_years", product: "little_years" },
 ] as const;
 
 export type BookThemeId = (typeof BOOK_THEMES)[number]["id"];

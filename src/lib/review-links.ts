@@ -24,6 +24,8 @@ export const REVIEW_PRODUCT_HANDLES: Record<BookThemeId, string> = {
   // variants — verified via the Admin API 2026-10-02.
   love_grows_desert_sand: "lucy-darling-pregnancy-journal",
   love_grows_moss_green: "lucy-darling-pregnancy-journal",
+  little_years_boy: "the-little-years-toddler-boy-baby-book",
+  little_years_girl: "the-little-years-toddler-girl-baby-book",
 };
 
 /** Product page + Judge.me reviews section. Contains no personal data. */

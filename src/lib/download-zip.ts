@@ -67,6 +67,7 @@ export async function downloadPhotosZip(
   // Only the photos the book is using, each at the size it will print.
   const slots = getBookSlots(bookTheme, options.regionLayouts);
   const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
+  const isLittleYears = getProductForTheme(bookTheme) === "little_years";
 
   // Add regular slot photos — flat, numbered, personalized
   for (const slot of slots) {
@@ -85,6 +86,8 @@ export async function downloadPhotosZip(
 
     const fileName = isJournal
       ? journalFileName(slot, slots, sizeLabel)
+      : isLittleYears
+      ? littleYearsFileName(slot, options.babyName?.trim() || "", photo.customLabel, sizeLabel)
       : `${String(slot.sortOrder).padStart(2, "0")} ${personalizeSlotName(slot, name, photo.customLabel)} (${sizeLabel}).jpg`;
     root.file(fileName, blob);
     addedImages++;
@@ -150,6 +153,41 @@ function journalFileName(slot: PhotoSlot, slots: PhotoSlot[], sizeLabel: string)
     if (inRegion > 1) label = `${label} ${slot.regionIndex} of ${inRegion}`;
   }
   return `${page} ${label.replace(/[\\/:*?"<>|]/g, "-")} (${sizeLabel}).jpg`;
+}
+
+/**
+ * The Little Years filenames: a 3-digit number (146 photos, so 001–146 sort
+ * in book order), the child's name if given, the age, then where it goes:
+ *   001 Ollie This Is the Story Of (5x5").jpg
+ *   002 Ollie Age One Birthday 1 (4x4").jpg
+ *   012 Ollie Age One Holiday 4 Halloween (4x4").jpg
+ *   030 Age One Snapshot 16 (4x4").jpg        (no name given)
+ */
+function littleYearsFileName(
+  slot: PhotoSlot,
+  childName: string,
+  customLabel: string | undefined,
+  sizeLabel: string
+): string {
+  const n = slot.key.match(/_(\d+)$/)?.[1];
+  const kind = slot.key.replace(/^ly_(a\d_)?/, "").replace(/_\d+$/, "");
+  const label =
+    kind === "story"
+      ? slot.prompt
+      : kind === "birthday"
+      ? `Birthday ${n}`
+      : kind === "grown"
+      ? `Grown ${n}`
+      : kind === "family"
+      ? "Our Family"
+      : kind === "holiday"
+      ? `Holiday ${n}${customLabel?.trim() ? ` ${customLabel.trim()}` : ""}`
+      : kind === "snapshot"
+      ? `Snapshot ${n}`
+      : slot.prompt;
+  const parts = [String(slot.sortOrder).padStart(3, "0"), childName, slot.group ?? "", label];
+  const name = parts.filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "-");
+  return `${name} (${sizeLabel}).jpg`;
 }
 
 /**
@@ -222,6 +260,12 @@ async function preparePrint(
 ): Promise<{ sizeLabel: string; blob: Blob }> {
   const { width, height } = getPrintDimensions(size, orientation);
   const label = getSizeLabel(size, orientation);
+
+  // A 5x5 (The Little Years) is bigger than a 4x6 sheet's width, so it's
+  // always handed back as a plain 5x5 file, whatever the sheet options.
+  if (size === "5x5") {
+    return { sizeLabel: label, blob: await dataUrlToBlob(imageData) };
+  }
 
   if (options.padAllTo4x6) {
     // Everything goes on a 4x6 sheet — turned landscape when the print is

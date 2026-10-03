@@ -31,7 +31,11 @@ export function ReviewPromptCard({
     <div className={`${className} p-4 rounded-xl bg-rose-50 border border-rose-100`}>
       <h2 className="text-sm font-semibold text-gray-800">
         How&apos;s your{" "}
-        {theme.product === "pregnancy_journal" ? "Love Grows journal" : `${theme.name} book`}{" "}
+        {theme.product === "pregnancy_journal"
+          ? "Love Grows journal"
+          : theme.product === "little_years"
+          ? "Little Years book"
+          : `${theme.name} book`}{" "}
         coming along?
       </h2>
       <p className="text-xs text-gray-600 mt-1 leading-relaxed">

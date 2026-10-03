@@ -163,7 +163,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
             <input
               type="text"
               autoFocus
-              placeholder="My First ___"
+              placeholder={slot.prompt.includes("___") ? slot.prompt : "My First ___"}
               defaultValue={photo?.customLabel || ""}
               onBlur={(e) => {
                 if (e.target.value.trim()) {

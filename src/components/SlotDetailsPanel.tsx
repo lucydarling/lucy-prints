@@ -16,13 +16,14 @@ export function SlotDetailsPanel({ slotKey }: SlotDetailsPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const notes = usePhotoStore((s) => s.notes);
   const setNote = usePhotoStore((s) => s.setNote);
+  const bookTheme = usePhotoStore((s) => s.bookTheme);
 
-  const slotPrompts = getPromptsForSlot(slotKey);
+  const slotPrompts = getPromptsForSlot(slotKey, bookTheme);
   if (!slotPrompts || slotPrompts.prompts.length === 0 || slotPrompts.standalone) {
     return null;
   }
 
-  const { filled, total } = countFilledPrompts(slotKey, notes);
+  const { filled, total } = countFilledPrompts(slotKey, notes, bookTheme);
 
   return (
     <div className="mt-1">

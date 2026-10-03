@@ -68,3 +68,13 @@ test("memory book themes are always allowed; journal themes only when unlocked",
     isThemeAllowed("love_grows_desert_sand", jar({ ld_pj_preview: previewCookieValue("pregnancy_journal")! }))
   );
 });
+
+test("Little Years themes are rejected while locked and allowed once unlocked", () => {
+  for (const theme of ["little_years_boy", "little_years_girl"]) {
+    assert.ok(!isThemeAllowed(theme, jar({})), theme);
+    assert.ok(!isThemeAllowed(theme, jar({ ld_pj_preview: previewCookieValue("pregnancy_journal")! })), theme);
+    assert.ok(isThemeAllowed(theme, jar({ ld_ly_preview: previewCookieValue("little_years")! })), theme);
+  }
+  process.env.LITTLE_YEARS_ENABLED = "true";
+  assert.ok(isThemeAllowed("little_years_girl", jar({})));
+});
