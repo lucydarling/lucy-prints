@@ -232,12 +232,16 @@ async function uploadPhoto({
 
       if (!uploadRes.ok) {
         const data = await uploadRes.json();
-        throw new Error(data.error || `Upload failed (${uploadRes.status})`);
+        const err = new Error(data.error || `Upload failed (${uploadRes.status})`);
+        // 409 = the book was sent to print; retrying can never succeed.
+        if (uploadRes.status === 409) throw Object.assign(err, { noRetry: true });
+        throw err;
       }
 
       return; // success
     } catch (err) {
       lastError = err instanceof Error ? err : new Error("Upload failed");
+      if ((err as { noRetry?: boolean }).noRetry) throw lastError;
       if (attempt < 2) {
         await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
       }

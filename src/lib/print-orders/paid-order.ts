@@ -81,9 +81,9 @@ const attr = (o: ShopifyPaidOrder, name: string) =>
 
 export interface HandleOptions {
   /**
-   * Manual retry of an order that is NOT ready: take a fresh snapshot of the
-   * session instead of reusing the saved one (e.g. a held, empty order that
-   * was fixed by hand).
+   * Take a fresh snapshot of the session instead of reusing the saved one,
+   * even for a refused order (never for a ready one). A HELD order always
+   * re-freezes on retry: its customer is still allowed to add photos.
    */
   refreeze?: boolean;
 }
@@ -160,7 +160,7 @@ export async function handlePaidOrder(
 
   // Freeze at payment (first sight), or reuse what was frozen. Never live rows after that.
   const snapshot =
-    existing?.snapshot && !opts.refreeze
+    existing?.snapshot && existing.status !== "held" && !opts.refreeze
       ? existing.snapshot
       : await deps.freeze(orderId, loaded.photoRows, loaded.extraRows);
   const finish = (r: PaidOrderResult) => done({ ...r, sessionId: loaded.session.id, snapshot });

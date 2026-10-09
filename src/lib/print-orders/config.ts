@@ -50,7 +50,8 @@ export const HARD_MIN_FRACTION = 0.5;
 
 /**
  * Extra prints (the Extra Prints section) are currently free — there is no price
- * anywhere in the app. This is the most a single order may include.
+ * anywhere in the app. This is the most a PRINT ORDER may include (enforced by
+ * validatePrintRequest only; the ZIP flow and the extras UI are NOT capped).
  * PLACEHOLDER — Kevin to set the real cap before go-live.
  */
 export const EXTRAS_FREE_CAP = 12;

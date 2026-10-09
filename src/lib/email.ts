@@ -234,6 +234,6 @@ export async function sendPrintOrderAlert(info: {
 </ul>
 <p>Reason:</p>
 <ul>${info.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
-<p>Nothing was sent to the print partner.</p>`,
+<p>Nothing was sent to the print partner.</p>${info.status === "held" ? `<p>A held order stays editable by the customer. Once photos are added, retry with <code>npm run print-order:retry -- ${esc(info.shopifyOrderId)}</code> — it takes a fresh snapshot.</p>` : ""}`,
   });
 }

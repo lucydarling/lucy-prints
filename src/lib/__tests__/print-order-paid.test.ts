@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { getPrintDimensions, getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
 import { EXTRAS_FREE_CAP } from "@/lib/print-orders/config";
 import { handlePaidOrder, type AlertInfo, type PaidOrderDeps, type PaidOrderResult, type PrintSnapshot, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
+import { lockFromStatuses } from "@/lib/print-orders/freeze";
 import { printingMessage, tierForTheme, validatePrintRequest } from "@/lib/print-orders/print-request";
 import { verifyShopifyHmac } from "@/lib/print-orders/webhook-hmac";
 import { buildOrder } from "@/lib/print-orders/build-order";
@@ -129,13 +130,19 @@ test("the photos are frozen at payment; a retry uses the snapshot, not live rows
 
   // The customer keeps editing afterwards (all slots now filled); a held order retried with its saved snapshot ignores that.
   live.current = sessionRows();
-  const retry = deps({ liveRows: live, existing: { status: "held", snapshot: r1.snapshot } });
+  const retry = deps({ liveRows: live, existing: { status: "refused", snapshot: r1.snapshot } });
   const r2 = await handlePaidOrder(orderJson(), retry.d);
   assert.equal(r2.printCount, 3);
   assert.equal(retry.frozen.length, 0, "must not re-freeze");
 
-  // --refreeze takes a fresh snapshot, but never of an order that is already ready.
-  const re = deps({ liveRows: live, existing: { status: "held", snapshot: r1.snapshot } });
+  // A HELD order always re-freezes on retry (its customer may still add photos).
+  const held = deps({ liveRows: live, existing: { status: "held", snapshot: r1.snapshot } });
+  const r4 = await handlePaidOrder(orderJson(), held.d);
+  assert.equal(r4.printCount, getSlots(THEME).length);
+  assert.equal(held.frozen.length, 1);
+
+  // --refreeze forces a fresh snapshot of a refused order, but never of one that is already ready.
+  const re = deps({ liveRows: live, existing: { status: "refused", snapshot: r1.snapshot } });
   const r3 = await handlePaidOrder(orderJson(), re.d, { refreeze: true });
   assert.equal(r3.printCount, getSlots(THEME).length);
   await assert.rejects(handlePaidOrder(orderJson(), deps({ existing: { status: "ready" } }).d, { refreeze: true }), /already ready/);
@@ -173,7 +180,7 @@ test("shared validation: the checkout button and the webhook use the same rules"
   assert.equal(printingMessage(ok), `You're printing 12 of ${getSlots(THEME).length} photos plus 2 extra prints`);
   assert.equal(printingMessage({ ...ok, extras: 1 }).endsWith("plus 1 extra print"), true);
 
-  assert.match(validatePrintRequest({ bookTheme: THEME, filledBookSlots: 1, extraPrints: EXTRAS_FREE_CAP + 2 }).errors[0], /remove 2/);
+  assert.match(validatePrintRequest({ bookTheme: THEME, filledBookSlots: 1, extraPrints: EXTRAS_FREE_CAP + 2 }).errors[0], /please choose 12 extras to print/);
   assert.match(validatePrintRequest({ bookTheme: "love_grows_desert_sand", filledBookSlots: 1, extraPrints: 0 }).errors[0], /cannot be printed through the Photo Lab yet/);
   assert.match(validatePrintRequest({ bookTheme: "", filledBookSlots: 1, extraPrints: 0 }).errors[0], /no book is selected/);
   assert.match(validatePrintRequest({ bookTheme: "nope", filledBookSlots: 1, extraPrints: 0 }).errors[0], /unknown book/);
@@ -276,4 +283,12 @@ test("a square source larger than a square slot is scaled down, never up", async
   const m2 = await sharp(small.images[0].data).metadata();
   assert.deepEqual([m2.width, m2.height], [1000, 1000]); // under size: flagged, not upscaled
   assert.ok(small.warnings.some((w) => /under the 1200x1200px/.test(w)));
+});
+
+test("session lock: ready/refused freeze, held stays editable, none is unlocked", () => {
+  assert.equal(lockFromStatuses([]), null);
+  assert.equal(lockFromStatuses(["held"]), "held");
+  assert.equal(lockFromStatuses(["ready"]), "frozen");
+  assert.equal(lockFromStatuses(["refused"]), "frozen");
+  assert.equal(lockFromStatuses(["held", "ready"]), "frozen");
 });

@@ -10,6 +10,7 @@ import {
   isJournalTheme,
   isSideBookTheme,
 } from "@/lib/klaviyo";
+import { FROZEN_MESSAGE, getPrintLock } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
@@ -59,6 +60,10 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
+      // The existing book has been sent to print: don't rewrite its details.
+      if ((await getPrintLock(existing.id)) === "frozen") {
+        return NextResponse.json({ error: FROZEN_MESSAGE }, { status: 409 });
+      }
       // Update baby info + refresh the activity timestamp.
       const updateData: Record<string, unknown> = {};
       if (babyName !== undefined) updateData.baby_name = babyName || null;

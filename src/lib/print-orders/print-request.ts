@@ -53,7 +53,7 @@ export function validatePrintRequest(r: PrintRequest): PrintRequestCheck {
     errors.push(`paid for the ${r.variantTier} print product but ${r.bookTheme} is a ${tierForTheme(r.bookTheme)} book`);
   }
   if (r.extraPrints > maxExtras) {
-    errors.push(`${r.extraPrints} extra prints is over the limit of ${maxExtras} — remove ${r.extraPrints - maxExtras}`);
+    errors.push(`${r.extraPrints} extra prints is over the limit of ${maxExtras} — please choose ${maxExtras} extras to print`);
   }
   return {
     errors,
