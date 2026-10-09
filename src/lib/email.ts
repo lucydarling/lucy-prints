@@ -209,3 +209,31 @@ export async function sendMagicLinkEmail({
     `.trim(),
   });
 }
+
+/**
+ * Tell Kevin a print order was held or refused. Test-mode orders only for now;
+ * nothing here touches the customer.
+ */
+export async function sendPrintOrderAlert(info: {
+  status: "held" | "refused";
+  shopifyOrderId: string;
+  shopifyOrderName?: string;
+  sessionToken: string;
+  reasons: string[];
+}) {
+  const to = process.env.PRINT_ORDER_ALERT_TO || "kevin@lucydarling.com";
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const name = info.shopifyOrderName || info.shopifyOrderId;
+  return sendEmail({
+    to,
+    subject: `[Photo Lab] Print order ${info.status.toUpperCase()}: ${name}`,
+    html: `<p>A paid print order was <strong>${info.status}</strong> and needs a person.</p>
+<ul>
+<li>Order: ${esc(name)} (Shopify id ${esc(info.shopifyOrderId)})</li>
+<li>Session token: ${esc(info.sessionToken || "(none on the order)")}</li>
+</ul>
+<p>Reason:</p>
+<ul>${info.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+<p>Nothing was sent to the print partner.</p>`,
+  });
+}

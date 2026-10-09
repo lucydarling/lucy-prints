@@ -60,10 +60,10 @@ export interface PaidEntitlement {
   maxExtras: number;
 }
 
-/** A paid slot has no photo yet — the order waits; nothing is built or sent. */
+/** Nothing to print at payment time — the order waits for a person; nothing is built or sent. */
 export class PrintOrderHeld extends Error {
-  constructor(public readonly missingSlots: string[]) {
-    super(`Print order held: ${missingSlots.length} paid slot(s) have no photo yet (${missingSlots.slice(0, 8).join(", ")}${missingSlots.length > 8 ? ", …" : ""})`);
+  constructor(reason: string) {
+    super(`Print order held: ${reason}`);
   }
 }
 
@@ -160,7 +160,7 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
     jobs.push({ base: `extra_${extraN}`, size: parsed.size, orientation, path: row.storage_path, quantity: row.quantity });
   }
 
-  if (jobs.length === 0) errors.push("session has no printable photos");
+  if (jobs.length === 0 && !p.paid) errors.push("session has no printable photos");
 
   if (p.paid) {
     const paidKeys = new Set(p.paid.bookSlotKeys);
@@ -176,8 +176,8 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
     if (errors.length > 0) {
       throw new Error(`Print order refused:\n - ${[...new Set(errors)].join("\n - ")}`);
     }
-    const missing = p.paid.bookSlotKeys.filter((k) => !filled.has(k));
-    if (missing.length > 0) throw new PrintOrderHeld(missing);
+    // Payment = finished: whatever is filled prints. Only an empty order waits.
+    if (jobs.length === 0) throw new PrintOrderHeld("no photos were filled in when the order was paid");
   }
 
   const images: OrderFile[] = [];

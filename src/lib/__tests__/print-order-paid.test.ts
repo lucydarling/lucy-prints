@@ -4,7 +4,8 @@ import { createHmac } from "node:crypto";
 import sharp from "sharp";
 import { getPrintDimensions, getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
 import { EXTRAS_FREE_CAP } from "@/lib/print-orders/config";
-import { handlePaidOrder, type PaidOrderDeps, type PaidOrderResult, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
+import { handlePaidOrder, type AlertInfo, type PaidOrderDeps, type PaidOrderResult, type PrintSnapshot, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
+import { printingMessage, tierForTheme, validatePrintRequest } from "@/lib/print-orders/print-request";
 import { verifyShopifyHmac } from "@/lib/print-orders/webhook-hmac";
 import { buildOrder } from "@/lib/print-orders/build-order";
 
@@ -34,6 +35,11 @@ function sessionRows(skip: string[] = []) {
     });
 }
 const fetchImage = async (p: string) => {
+  if (p.startsWith("frozen/")) {
+    const slot = getSlots(THEME).find((s) => s.key === p.split("/").pop())!;
+    const d = getPrintDimensions(slot.size, slot.orientation);
+    return img(d.width, d.height);
+  }
   const [w, h] = p.replace("p/", "").split("x").map(Number);
   return img(w, h);
 };
@@ -52,15 +58,23 @@ const orderJson = (over: Partial<ShopifyPaidOrder> = {}): ShopifyPaidOrder => ({
   ...over,
 });
 
-function deps(over: { skip?: string[]; extras?: number; otherReady?: boolean; rows?: ReturnType<typeof sessionRows> } = {}) {
+function deps(over: { skip?: string[]; extras?: number; otherReady?: boolean; rows?: ReturnType<typeof sessionRows>; existing?: { status: string; snapshot?: PrintSnapshot } | null; liveRows?: { current: ReturnType<typeof sessionRows> } } = {}) {
   const recorded: Array<PaidOrderResult & { shopifyOrderId: string }> = [];
+  const alerts: AlertInfo[] = [];
+  const frozen: string[] = [];
   const d: PaidOrderDeps = {
+    loadExisting: async () => over.existing ?? null,
+    freeze: async (id, photoRows, extraRows) => {
+      frozen.push(id);
+      return { frozenAt: "2026-10-09T00:00:00Z", photoRows: photoRows.map((r) => ({ ...r, storage_path: `frozen/${id}/${r.slot_key}` })), extraRows };
+    },
+    alert: async (i) => { alerts.push(i); },
     variants: { standardVariantId: STD, luxuryVariantId: LUX, extraVariantIds: [EXTRA] },
     loadSession: async (token) => {
       if (token !== "tok") throw new Error("Session not found");
       return {
         session: { id: "sess-1", book_theme: THEME },
-        photoRows: over.rows ?? sessionRows(over.skip),
+        photoRows: over.liveRows?.current ?? over.rows ?? sessionRows(over.skip),
         extraRows: Array.from({ length: over.extras ?? 0 }, (_, i) => ({
           extra_id: `extra_${i}`, print_size: "4x4", orientation: "portrait", storage_path: "p/1200x1200", quantity: 1,
         })),
@@ -70,7 +84,7 @@ function deps(over: { skip?: string[]; extras?: number; otherReady?: boolean; ro
     otherReadyOrderForSession: async () => over.otherReady ?? false,
     record: async (r) => { recorded.push(r); },
   };
-  return { d, recorded };
+  return { d, recorded, alerts, frozen };
 }
 
 test("a fully paid, fully filled memory book is ready (test-mode id)", async () => {
@@ -89,19 +103,92 @@ test("an order with no print line item is ignored and not recorded", async () =>
   assert.equal(recorded.length, 0);
 });
 
-test("any empty paid slot holds the order (nothing built)", async () => {
-  const { d, recorded } = deps({ skip: ["month_3", "baby_bump"] });
-  const r = await handlePaidOrder(orderJson(), d);
-  assert.equal(r.status, "held");
-  assert.match(r.reasons[0], /2 paid slot\(s\) have no photo yet \(.*(month_3|baby_bump)/);
-  assert.equal(recorded[0].status, "held");
+test("payment = finished: a partly filled book prints what is filled; only an empty order is held (and alerts)", async () => {
+  const partial = deps({ skip: getSlots(THEME).slice(5).map((s) => s.key) }); // 5 slots filled
+  const r = await handlePaidOrder(orderJson(), partial.d);
+  assert.equal(r.status, "ready", r.reasons.join(";"));
+  assert.equal(r.printCount, 5);
+  assert.equal(partial.alerts.length, 0);
+
+  const empty = deps({ rows: [] });
+  const h = await handlePaidOrder(orderJson(), empty.d);
+  assert.equal(h.status, "held");
+  assert.match(h.reasons[0], /no photos were filled in when the order was paid/);
+  assert.equal(empty.alerts.length, 1);
+  assert.deepEqual([empty.alerts[0].status, empty.alerts[0].shopifyOrderName, empty.alerts[0].sessionToken], ["held", "#1001", "tok"]);
+});
+
+test("the photos are frozen at payment; a retry uses the snapshot, not live rows", async () => {
+  const live = { current: sessionRows(getSlots(THEME).slice(3).map((s) => s.key)) }; // 3 filled at payment
+  const first = deps({ liveRows: live, rows: [] });
+  const r1 = await handlePaidOrder(orderJson(), first.d);
+  assert.equal(r1.printCount, 3);
+  assert.equal(first.frozen.length, 1);
+  assert.equal(r1.snapshot!.photoRows.length, 3);
+  assert.ok(r1.snapshot!.photoRows.every((r) => r.storage_path.startsWith("frozen/5550001/")));
+
+  // The customer keeps editing afterwards (all slots now filled); a held order retried with its saved snapshot ignores that.
+  live.current = sessionRows();
+  const retry = deps({ liveRows: live, existing: { status: "held", snapshot: r1.snapshot } });
+  const r2 = await handlePaidOrder(orderJson(), retry.d);
+  assert.equal(r2.printCount, 3);
+  assert.equal(retry.frozen.length, 0, "must not re-freeze");
+
+  // --refreeze takes a fresh snapshot, but never of an order that is already ready.
+  const re = deps({ liveRows: live, existing: { status: "held", snapshot: r1.snapshot } });
+  const r3 = await handlePaidOrder(orderJson(), re.d, { refreeze: true });
+  assert.equal(r3.printCount, getSlots(THEME).length);
+  await assert.rejects(handlePaidOrder(orderJson(), deps({ existing: { status: "ready" } }).d, { refreeze: true }), /already ready/);
+});
+
+test("a webhook retry for an order that is already ready does nothing and sends no alert", async () => {
+  const d = deps({ existing: { status: "ready", snapshot: { frozenAt: "x", photoRows: [], extraRows: [] } } });
+  const r = await handlePaidOrder(orderJson(), d.d);
+  assert.equal(r.status, "ready");
+  assert.equal(d.recorded.length, 0);
+  assert.equal(d.frozen.length, 0);
+});
+
+test("a repeated refusal alerts once, not on every retry", async () => {
+  const a = deps({ extras: EXTRAS_FREE_CAP + 1 });
+  assert.equal((await handlePaidOrder(orderJson(), a.d)).status, "refused");
+  assert.equal(a.alerts.length, 1);
+  assert.match(a.alerts[0].reasons[0], /extra prints/);
+  const b = deps({ extras: EXTRAS_FREE_CAP + 1, existing: { status: "refused" } });
+  await handlePaidOrder(orderJson(), b.d);
+  assert.equal(b.alerts.length, 0);
+});
+
+test("an alert that fails to send never fails the order", async () => {
+  const d = deps({ rows: [] });
+  d.d.alert = async () => { throw new Error("resend down"); };
+  assert.equal((await handlePaidOrder(orderJson(), d.d)).status, "held");
+});
+
+test("shared validation: the checkout button and the webhook use the same rules", () => {
+  const ok = validatePrintRequest({ bookTheme: THEME, filledBookSlots: 12, extraPrints: 2 });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.printing, 12);
+  assert.equal(ok.of, getSlots(THEME).length);
+  assert.equal(printingMessage(ok), `You're printing 12 of ${getSlots(THEME).length} photos plus 2 extra prints`);
+  assert.equal(printingMessage({ ...ok, extras: 1 }).endsWith("plus 1 extra print"), true);
+
+  assert.match(validatePrintRequest({ bookTheme: THEME, filledBookSlots: 1, extraPrints: EXTRAS_FREE_CAP + 2 }).errors[0], /remove 2/);
+  assert.match(validatePrintRequest({ bookTheme: "love_grows_desert_sand", filledBookSlots: 1, extraPrints: 0 }).errors[0], /cannot be printed through the Photo Lab yet/);
+  assert.match(validatePrintRequest({ bookTheme: "", filledBookSlots: 1, extraPrints: 0 }).errors[0], /no book is selected/);
+  assert.match(validatePrintRequest({ bookTheme: "nope", filledBookSlots: 1, extraPrints: 0 }).errors[0], /unknown book/);
+  assert.equal(validatePrintRequest({ bookTheme: THEME, filledBookSlots: 0, extraPrints: 0 }).empty, true);
+  assert.equal(validatePrintRequest({ bookTheme: THEME, filledBookSlots: 0, extraPrints: 1 }).empty, false);
+  assert.equal(validatePrintRequest({ bookTheme: THEME, filledBookSlots: 1, extraPrints: EXTRAS_FREE_CAP + 1, paidExtras: 1 }).errors.length, 0);
+  assert.equal(tierForTheme("honey_bee"), "luxury");
+  assert.equal(tierForTheme("golden_blossom"), "standard"); // retiring books sell at the standard price
 });
 
 test("extras beyond the free cap are refused unless paid for; paid units raise the cap", async () => {
   const over = EXTRAS_FREE_CAP + 1;
   const a = await handlePaidOrder(orderJson(), deps({ extras: over }).d);
   assert.equal(a.status, "refused");
-  assert.match(a.reasons[0], new RegExp(`${over} extra prints but only ${EXTRAS_FREE_CAP}`));
+  assert.match(a.reasons[0], new RegExp(`${over} extra prints is over the limit of ${EXTRAS_FREE_CAP}`));
 
   const paid = orderJson({ line_items: [{ variant_id: Number(STD), quantity: 1 }, { variant_id: Number(EXTRA), quantity: 1 }] });
   assert.equal((await handlePaidOrder(paid, deps({ extras: over }).d)).status, "ready");
@@ -115,9 +202,10 @@ test("a photo in a slot that was not paid for refuses the order", async () => {
 });
 
 test("the photo_count attribute never changes what was paid for", async () => {
-  const { d } = deps({ skip: ["month_3"] });
+  const { d } = deps({ skip: getSlots(THEME).slice(2).map((s) => s.key) });
   const r = await handlePaidOrder(orderJson(), d); // photo_count says 999
-  assert.equal(r.status, "held");
+  assert.equal(r.status, "ready");
+  assert.equal(r.printCount, 2);
 });
 
 test("tier, theme, token and quantity problems refuse with a clear reason", async () => {
@@ -134,7 +222,7 @@ test("tier, theme, token and quantity problems refuse with a clear reason", asyn
   assert.match(wrongTheme.reasons[0], /paid for the standard print product but honey_bee is a luxury book/);
 
   const journal = await handlePaidOrder(orderJson({ note_attributes: [{ name: "session_token", value: "tok" }, { name: "book_theme", value: "love_grows_desert_sand" }] }), deps().d);
-  assert.match(journal.reasons[0], /not supported for printing yet/);
+  assert.match(journal.reasons[0], /cannot be printed through the Photo Lab yet/);
 
   const sessionMismatch = await handlePaidOrder(orderJson({ note_attributes: [{ name: "session_token", value: "tok" }, { name: "book_theme", value: "little_camper" }] }), deps().d);
   assert.match(sessionMismatch.reasons[0], /order says little_camper but the session is little_artist/);

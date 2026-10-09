@@ -1,5 +1,5 @@
-import { BOOK_THEMES, getProductForTheme, getSlots } from "@/lib/photo-slots";
-import { EXTRAS_FREE_CAP } from "./config";
+import { getSlots } from "@/lib/photo-slots";
+import { validatePrintRequest } from "./print-request";
 import { buildOrder, PrintOrderHeld, type PaidEntitlement, type SessionExtraRow, type SessionPhotoRow } from "./build-order";
 import type { ShipTo } from "./order-xml";
 
@@ -29,6 +29,13 @@ export interface VariantConfig {
 
 export type PaidOrderStatus = "ignored" | "ready" | "held" | "refused";
 
+/** The exact rows a paid order prints, frozen at payment. Builds and retries read ONLY this. */
+export interface PrintSnapshot {
+  frozenAt: string;
+  photoRows: SessionPhotoRow[];
+  extraRows: SessionExtraRow[];
+}
+
 export interface PaidOrderResult {
   status: PaidOrderStatus;
   reasons: string[];
@@ -36,6 +43,15 @@ export interface PaidOrderResult {
   externalId?: string;
   printCount?: number;
   sessionId?: string;
+  snapshot?: PrintSnapshot;
+}
+
+export interface AlertInfo {
+  status: "held" | "refused";
+  shopifyOrderId: string;
+  shopifyOrderName?: string;
+  sessionToken: string;
+  reasons: string[];
 }
 
 export interface PaidOrderDeps {
@@ -46,6 +62,15 @@ export interface PaidOrderDeps {
     extraRows: SessionExtraRow[];
     fetchImage: (path: string) => Promise<Buffer>;
   }>;
+  /** What we already recorded for this Shopify order (webhook retries, manual retries). */
+  loadExisting: (shopifyOrderId: string) => Promise<{ status: string; snapshot?: PrintSnapshot } | null>;
+  /**
+   * Freeze the rows: copy each stored image to a path nobody else writes to
+   * (e.g. print-orders/<order id>/…) and return rows pointing at the copies.
+   */
+  freeze: (shopifyOrderId: string, photoRows: SessionPhotoRow[], extraRows: SessionExtraRow[]) => Promise<PrintSnapshot>;
+  /** Email Kevin about a refused or held order. Failures here must never fail the order. */
+  alert: (info: AlertInfo) => Promise<void>;
   /** True when a DIFFERENT paid order already has a ready print order for this session. */
   otherReadyOrderForSession: (sessionId: string, shopifyOrderId: string) => Promise<boolean>;
   record: (r: PaidOrderResult & { shopifyOrderId: string; shopifyOrderName?: string }) => Promise<void>;
@@ -54,46 +79,103 @@ export interface PaidOrderDeps {
 const attr = (o: ShopifyPaidOrder, name: string) =>
   o.note_attributes?.find((a) => a.name === name)?.value?.trim() || "";
 
+export interface HandleOptions {
+  /**
+   * Manual retry of an order that is NOT ready: take a fresh snapshot of the
+   * session instead of reusing the saved one (e.g. a held, empty order that
+   * was fixed by hand).
+   */
+  refreeze?: boolean;
+}
+
 /**
  * Decide what a paid Shopify order means for printing, and (if it is a print
  * order) build and validate it. NOTHING is written to Photo Finale; the only
- * side effect is `deps.record`. Orders with no print line item are ignored.
+ * side effects are `deps.freeze`, `deps.record` and `deps.alert`. Orders with
+ * no print line item are ignored.
  *
- * What was paid for comes ONLY from the Shopify order and the code:
- *  - the book: the print product's variant (standard/luxury, quantity 1) +
- *    the theme's slot list from code (the theme's tier must match the variant);
- *  - extras: EXTRAS_FREE_CAP + units of the paid extra-print variants.
- * The session rows are only what is being printed, never what was paid for.
+ * What was paid for comes ONLY from the Shopify order and the code: the book
+ * (Standard/Luxury variant, quantity 1, slot list from code) and extras
+ * (the free cap + units of the paid extra-print variants). What is printed is
+ * the snapshot frozen the first time the order is seen — payment means the
+ * book is finished — and every later build or retry reuses that snapshot.
  */
-export async function handlePaidOrder(order: ShopifyPaidOrder, deps: PaidOrderDeps): Promise<PaidOrderResult> {
+export async function handlePaidOrder(
+  order: ShopifyPaidOrder,
+  deps: PaidOrderDeps,
+  opts: HandleOptions = {}
+): Promise<PaidOrderResult> {
   const orderId = String(order.id);
-  const done = async (r: PaidOrderResult) => {
-    if (r.status !== "ignored") await deps.record({ ...r, shopifyOrderId: orderId, shopifyOrderName: order.name });
-    return r;
-  };
-  const refuse = (...reasons: string[]) => done({ status: "refused", reasons, warnings: [] });
-
+  const token = attr(order, "session_token");
   const v = deps.variants;
   const lines = order.line_items ?? [];
   const bookLines = lines.filter((l) => [v.standardVariantId, v.luxuryVariantId].includes(String(l.variant_id)));
   if (bookLines.length === 0) return { status: "ignored", reasons: ["no print line item"], warnings: [] };
+
+  const existing = await deps.loadExisting(orderId);
+  if (existing?.status === "ready" && !opts.refreeze) {
+    // A webhook retry for an order we already finished: nothing to redo, nothing to re-alert.
+    return { status: "ready", reasons: [], warnings: [], snapshot: existing.snapshot };
+  }
+  if (opts.refreeze && existing?.status === "ready") {
+    throw new Error("order is already ready — refusing to re-freeze it");
+  }
+
+  const done = async (r: PaidOrderResult) => {
+    await deps.record({ ...r, shopifyOrderId: orderId, shopifyOrderName: order.name });
+    if ((r.status === "held" || r.status === "refused") && existing?.status !== r.status) {
+      try {
+        await deps.alert({ status: r.status, shopifyOrderId: orderId, shopifyOrderName: order.name, sessionToken: token, reasons: r.reasons });
+      } catch (err) {
+        console.error("print order alert failed:", err);
+      }
+    }
+    return r;
+  };
+  const refuse = (...reasons: string[]) => done({ status: "refused", reasons, warnings: [] });
+
   if (bookLines.length > 1 || (bookLines[0].quantity ?? 1) !== 1) {
     return refuse("print line item must appear once with quantity 1 — handle this order by hand");
   }
   const tier = String(bookLines[0].variant_id) === v.luxuryVariantId ? "luxury" : "standard";
-
-  const token = attr(order, "session_token");
   const theme = attr(order, "book_theme");
   if (!token) return refuse("order has no session_token attribute");
-  const themeDef = BOOK_THEMES.find((t) => t.id === theme);
-  if (!themeDef) return refuse(`unknown book_theme "${theme}"`);
-  if (getProductForTheme(theme) !== "memory_book") {
-    return refuse(`${themeDef.product} orders are not supported for printing yet`);
+
+  // Checks that need no session first (unknown / unsupported book, wrong price tier).
+  const early = validatePrintRequest({ bookTheme: theme, filledBookSlots: 0, extraPrints: 0, variantTier: tier });
+  if (early.errors.length > 0) return refuse(...early.errors);
+
+  let loaded;
+  try {
+    loaded = await deps.loadSession(token);
+  } catch (err) {
+    return refuse((err as Error).message);
   }
-  const themeTier = themeDef.tier === "luxury" ? "luxury" : "standard"; // "retiring" books sell at the standard price
-  if (themeTier !== tier) {
-    return refuse(`paid for the ${tier} print product but ${theme} is a ${themeTier} book`);
+  if (loaded.session.book_theme !== theme) {
+    return refuse(`order says ${theme || "(no book_theme)"} but the session is ${loaded.session.book_theme}`);
   }
+  if (await deps.otherReadyOrderForSession(loaded.session.id, orderId)) {
+    return refuse("this session already has a ready print order from another purchase");
+  }
+
+  // Freeze at payment (first sight), or reuse what was frozen. Never live rows after that.
+  const snapshot =
+    existing?.snapshot && !opts.refreeze
+      ? existing.snapshot
+      : await deps.freeze(orderId, loaded.photoRows, loaded.extraRows);
+  const finish = (r: PaidOrderResult) => done({ ...r, sessionId: loaded.session.id, snapshot });
+
+  const extraQty = lines
+    .filter((l) => v.extraVariantIds.includes(String(l.variant_id)))
+    .reduce((n, l) => n + (l.quantity ?? 0), 0);
+  const check = validatePrintRequest({
+    bookTheme: theme,
+    filledBookSlots: snapshot.photoRows.filter((r) => r.status !== "empty").length,
+    extraPrints: snapshot.extraRows.filter((r) => r.storage_path).reduce((n, r) => n + (r.quantity ?? 0), 0),
+    paidExtras: extraQty,
+    variantTier: tier,
+  });
+  if (check.errors.length > 0) return finish({ status: "refused", reasons: check.errors, warnings: [] });
 
   const a = order.shipping_address;
   const shipTo: ShipTo = {
@@ -105,47 +187,25 @@ export async function handlePaidOrder(order: ShopifyPaidOrder, deps: PaidOrderDe
     fname: order.customer?.first_name ?? a?.first_name ?? undefined,
     lname: order.customer?.last_name ?? a?.last_name ?? undefined,
   };
-
-  let loaded;
-  try {
-    loaded = await deps.loadSession(token);
-  } catch (err) {
-    return refuse((err as Error).message);
-  }
-  if (loaded.session.book_theme !== theme) {
-    return refuse(`order says ${theme} but the session is ${loaded.session.book_theme}`);
-  }
-  if (await deps.otherReadyOrderForSession(loaded.session.id, orderId)) {
-    return refuse("this session already has a ready print order from another purchase");
-  }
-
-  const extraQty = lines
-    .filter((l) => v.extraVariantIds.includes(String(l.variant_id)))
-    .reduce((n, l) => n + (l.quantity ?? 0), 0);
   const paid: PaidEntitlement = {
     bookSlotKeys: getSlots(theme).map((s) => s.key),
-    maxExtras: EXTRAS_FREE_CAP + extraQty,
+    maxExtras: check.maxExtras,
   };
 
   try {
     const built = await buildOrder({
       bookTheme: theme,
-      photoRows: loaded.photoRows,
-      extraRows: loaded.extraRows,
+      photoRows: snapshot.photoRows,
+      extraRows: snapshot.extraRows,
       fetchImage: loaded.fetchImage,
       externalId: orderId,
       shipTo,
       customer,
       paid,
     });
-    return done({
-      status: "ready", reasons: [], warnings: built.warnings,
-      externalId: built.folderName, printCount: built.printCount, sessionId: loaded.session.id,
-    });
+    return finish({ status: "ready", reasons: [], warnings: built.warnings, externalId: built.folderName, printCount: built.printCount });
   } catch (err) {
-    if (err instanceof PrintOrderHeld) {
-      return done({ status: "held", reasons: [err.message], warnings: [], sessionId: loaded.session.id });
-    }
-    return done({ status: "refused", reasons: [(err as Error).message], warnings: [], sessionId: loaded.session.id });
+    if (err instanceof PrintOrderHeld) return finish({ status: "held", reasons: [err.message], warnings: [] });
+    return finish({ status: "refused", reasons: [(err as Error).message], warnings: [] });
   }
 }

@@ -15,6 +15,7 @@ import {
 import { ProgressBar } from "@/components/ProgressBar";
 import { SectionGroup } from "@/components/SectionGroup";
 import { ExtraSlotCard } from "@/components/ExtraSlotCard";
+import { EXTRAS_FREE_CAP } from "@/lib/print-orders/config";
 import { CropModal } from "@/components/CropModal";
 import { SaveButton } from "@/components/SaveButton";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
@@ -30,6 +31,8 @@ export default function UploadPage() {
   const initializeSlots = usePhotoStore((s) => s.initializeSlots);
   const photos = usePhotoStore((s) => s.photos);
   const extras = usePhotoStore((s) => s.extras);
+  // The cap only stops NEW extras: a saved session that is already over it still loads in full.
+  const extrasFull = extras.length >= EXTRAS_FREE_CAP;
   const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const router = useRouter();
 
@@ -139,7 +142,9 @@ export default function UploadPage() {
             <h2 className="text-base font-semibold text-gray-800">
               Extra Prints
             </h2>
-            <span className="text-xs text-gray-400 font-medium">Optional</span>
+            <span className="text-xs text-gray-400 font-medium">
+              Optional · {extras.length} of {EXTRAS_FREE_CAP}
+            </span>
           </div>
 
           {/* Existing extras */}
@@ -153,13 +158,15 @@ export default function UploadPage() {
 
           <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm text-center">
             <p className="text-sm text-gray-500 mb-3">
-              {extras.length > 0
+              {extrasFull
+                ? `You've added the most extra prints we can include (${EXTRAS_FREE_CAP}).`
+                : extras.length > 0
                 ? "Add another print?"
                 : "Need more prints for the blank pages at the back of your book?"}
             </p>
             <div className="flex gap-2 justify-center flex-wrap">
               {EXTRA_PRINT_SIZES.map((size) => (
-                <ExtraButton key={size} size={size} />
+                <ExtraButton key={size} size={size} disabled={extrasFull} />
               ))}
             </div>
             <p className="text-xs text-gray-400 mt-3">
@@ -196,7 +203,7 @@ export default function UploadPage() {
   );
 }
 
-function ExtraButton({ size }: { size: PrintSize }) {
+function ExtraButton({ size, disabled }: { size: PrintSize; disabled: boolean }) {
   const addExtra = usePhotoStore((s) => s.addExtra);
   // Every extra is added portrait, so label the button with the portrait
   // reading of the size (4x3 → 3x4").
@@ -205,7 +212,8 @@ function ExtraButton({ size }: { size: PrintSize }) {
   return (
     <button
       onClick={() => addExtra(size, "portrait")}
-      className="px-4 py-2 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100 transition-colors"
+      disabled={disabled}
+      className="px-4 py-2 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-rose-50"
     >
       + Add {label}&quot; print
     </button>
