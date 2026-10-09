@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { removeFromCloud } from "@/lib/remove-from-cloud";
 import { Cropper, CropperRef } from "react-advanced-cropper";
 import "react-advanced-cropper/dist/style.css";
 import { usePhotoStore } from "@/store/photo-store";
@@ -108,7 +109,13 @@ export function CropModal() {
   // Remove the un-openable photo entirely so it can't linger as an
   // uploaded-but-uncroppable slot (which would otherwise inflate counts
   // and produce an empty ZIP).
-  const handleRemoveAndClose = () => {
+  const handleRemoveAndClose = async () => {
+    try {
+      await removeFromCloud(editingSlot, Boolean(extra));
+    } catch (err) {
+      alert((err as Error).message);
+      return;
+    }
     if (extra) {
       removeExtra(editingSlot);
     } else {

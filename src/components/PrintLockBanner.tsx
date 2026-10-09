@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useSaveStore } from "@/store/save-store";
+import { usePrintLockStore } from "@/store/print-lock-store";
 
 /**
  * Shown when the open book has a print order: locked once the order is ready
@@ -9,7 +10,8 @@ import { useSaveStore } from "@/store/save-store";
  */
 export function PrintLockBanner() {
   const sessionToken = useSaveStore((s) => s.sessionToken);
-  const [lock, setLock] = useState<"frozen" | "held" | null>(null);
+  const lock = usePrintLockStore((s) => s.lock);
+  const setLock = usePrintLockStore((s) => s.setLock);
 
   useEffect(() => {
     if (!sessionToken) return;
@@ -23,7 +25,7 @@ export function PrintLockBanner() {
     return () => {
       cancelled = true;
     };
-  }, [sessionToken]);
+  }, [sessionToken, setLock]);
 
   if (!lock) return null;
   return (

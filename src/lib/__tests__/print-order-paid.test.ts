@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { getPrintDimensions, getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
 import { EXTRAS_FREE_CAP } from "@/lib/print-orders/config";
 import { handlePaidOrder, type AlertInfo, type PaidOrderDeps, type PaidOrderResult, type PrintSnapshot, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
-import { lockFromStatuses } from "@/lib/print-orders/freeze";
+import { lockFromStatuses, pickReusableSession, type PrintLock } from "@/lib/print-orders/freeze";
 import { printingMessage, tierForTheme, validatePrintRequest } from "@/lib/print-orders/print-request";
 import { verifyShopifyHmac } from "@/lib/print-orders/webhook-hmac";
 import { buildOrder } from "@/lib/print-orders/build-order";
@@ -291,4 +291,14 @@ test("session lock: ready/refused freeze, held stays editable, none is unlocked"
   assert.equal(lockFromStatuses(["ready"]), "frozen");
   assert.equal(lockFromStatuses(["refused"]), "frozen");
   assert.equal(lockFromStatuses(["held", "ready"]), "frozen");
+});
+
+test("starting a book: a frozen session is never reused, so a new one is created; held and unlocked are reused", async () => {
+  const locks: Record<string, PrintLock> = { newest: "frozen", middle: "held", oldest: null };
+  const lockOf = async (id: string) => locks[id];
+  const candidates = [{ id: "newest" }, { id: "middle" }, { id: "oldest" }]; // newest first
+  assert.equal((await pickReusableSession(candidates, lockOf))?.id, "middle");
+  assert.equal(await pickReusableSession([{ id: "newest" }], lockOf), null); // only a frozen one -> create new
+  assert.equal(await pickReusableSession([], lockOf), null);
+  assert.equal((await pickReusableSession([{ id: "oldest" }], lockOf))?.id, "oldest");
 });

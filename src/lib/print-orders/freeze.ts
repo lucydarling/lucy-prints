@@ -35,3 +35,18 @@ export function lockFromStatuses(statuses: string[]): PrintLock {
   if (statuses.includes("held")) return "held";
   return null;
 }
+
+/**
+ * Which existing session (newest first) may a "start / save this book" call
+ * reuse? A frozen one never — its owner always gets a new book — so the first
+ * session that is not frozen wins, and null means "create a new session".
+ */
+export async function pickReusableSession<T extends { id: string }>(
+  candidates: T[],
+  lockOf: (sessionId: string) => Promise<PrintLock> = getPrintLock
+): Promise<T | null> {
+  for (const c of candidates) {
+    if ((await lockOf(c.id)) !== "frozen") return c;
+  }
+  return null;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
+import { removeFromCloud } from "@/lib/remove-from-cloud";
 import Image from "next/image";
 import { getPrintDimensions, getPrintSizeLabel, type PhotoSlot } from "@/lib/photo-slots";
 import { usePhotoStore } from "@/store/photo-store";
@@ -217,9 +218,14 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
             Re-crop
           </button>
           <button
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              removePhoto(slot.key);
+              try {
+                await removeFromCloud(slot.key, false);
+                removePhoto(slot.key);
+              } catch (err) {
+                alert((err as Error).message);
+              }
             }}
             className="p-1.5 text-gray-300 hover:text-red-400 transition-colors"
             aria-label="Remove photo"
