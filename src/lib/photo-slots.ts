@@ -628,6 +628,37 @@ export function choiceFromPrintLabel(
   return { layoutId: layout.id, orientation: isSquarePrintSize(layout.size) ? layout.orientations[0] : orientation };
 }
 
+/**
+ * Rebuild each region's layout choice from how its photos were stored
+ * (`print_size` holds the size as it prints: "3x4", "6x4"…). The first photo
+ * of a region (in region order) that matches one of its layouts decides.
+ * Shared by the resume page and the server-side print-order builder.
+ */
+export function regionChoicesFromStoredPhotos(
+  themeId: string | null | undefined,
+  stored: Record<string, { printSize: string | null | undefined }>
+): Record<string, RegionChoice> {
+  const regionOf = new Map(
+    getSlots(themeId)
+      .filter((s) => s.region)
+      .map((s) => [s.key, { region: s.region!, index: s.regionIndex ?? 0 }])
+  );
+  const choices: Record<string, RegionChoice> = {};
+  for (const region of getRegions(themeId)) {
+    const inRegion = Object.entries(stored)
+      .filter(([key]) => regionOf.get(key)?.region === region.key)
+      .sort(([a], [b]) => (regionOf.get(a)?.index ?? 0) - (regionOf.get(b)?.index ?? 0));
+    for (const [, p] of inRegion) {
+      const choice = choiceFromPrintLabel(region, p.printSize);
+      if (choice) {
+        choices[region.key] = choice;
+        break;
+      }
+    }
+  }
+  return choices;
+}
+
 /** Group a theme's photo slots by section for the dashboard */
 export function getSlotsBySection(themeId: string | null | undefined): {
   section: string;

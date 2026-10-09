@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Supabase CLI temp artifacts
 supabase/.temp/
+
+# print-order sample output (private test harness)
+/print-orders-out/

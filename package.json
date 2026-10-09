@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --import tsx --test \"src/**/*.test.ts\""
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "print-order:sample": "node --env-file=.env.local --import tsx scripts/print-order-sample.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",
@@ -20,6 +21,7 @@
     "react-advanced-cropper": "^0.20.1",
     "react-dom": "19.2.3",
     "resend": "^6.9.3",
+    "sharp": "^0.35.5",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
