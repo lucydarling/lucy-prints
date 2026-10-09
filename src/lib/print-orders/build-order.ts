@@ -43,10 +43,28 @@ export interface BuildOrderParams {
   customer: { fname?: string; lname?: string };
   testMode?: boolean;
   /**
-   * The number of prints the customer was charged for. When given, the order
-   * is refused unless it contains exactly this many.
+   * Exact print count to require (used by the manual sample script).
    */
   expectedPrintCount?: number;
+  /**
+   * What the customer paid for, computed by the caller from the Shopify
+   * order and the code — never from the session rows read here.
+   */
+  paid?: PaidEntitlement;
+}
+
+export interface PaidEntitlement {
+  /** Every book slot key the paid book includes (from getSlots, in code). */
+  bookSlotKeys: string[];
+  /** Most extra prints allowed (free allowance + paid extras). */
+  maxExtras: number;
+}
+
+/** A paid slot has no photo yet — the order waits; nothing is built or sent. */
+export class PrintOrderHeld extends Error {
+  constructor(public readonly missingSlots: string[]) {
+    super(`Print order held: ${missingSlots.length} paid slot(s) have no photo yet (${missingSlots.slice(0, 8).join(", ")}${missingSlots.length > 8 ? ", …" : ""})`);
+  }
 }
 
 export interface OrderFile {
@@ -143,6 +161,24 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
   }
 
   if (jobs.length === 0) errors.push("session has no printable photos");
+
+  if (p.paid) {
+    const paidKeys = new Set(p.paid.bookSlotKeys);
+    const filled = new Set(p.photoRows.filter((r) => r.status !== "empty").map((r) => r.slot_key));
+    const unpaid = [...filled].filter((k) => !paidKeys.has(k));
+    if (unpaid.length > 0) {
+      errors.push(`photos in slots the customer did not pay for: ${unpaid.join(", ")}`);
+    }
+    const extraTotal = jobs.filter((j) => j.base.startsWith("extra_")).reduce((n, j) => n + j.quantity, 0);
+    if (extraTotal > p.paid.maxExtras) {
+      errors.push(`session has ${extraTotal} extra prints but only ${p.paid.maxExtras} were paid for or allowed`);
+    }
+    if (errors.length > 0) {
+      throw new Error(`Print order refused:\n - ${[...new Set(errors)].join("\n - ")}`);
+    }
+    const missing = p.paid.bookSlotKeys.filter((k) => !filled.has(k));
+    if (missing.length > 0) throw new PrintOrderHeld(missing);
+  }
 
   const images: OrderFile[] = [];
   const items: PrintOrderInput["items"] = [];

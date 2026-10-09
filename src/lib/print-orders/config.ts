@@ -47,3 +47,10 @@ export const PRINT_PRODUCTS: Record<PrintSize, PrintProductConfig> = {
 /** Print resolution. Images under it are flagged (warning); under HARD_MIN_FRACTION of it they are refused. */
 export const TARGET_DPI = 300;
 export const HARD_MIN_FRACTION = 0.5;
+
+/**
+ * Extra prints (the Extra Prints section) are currently free — there is no price
+ * anywhere in the app. This is the most a single order may include.
+ * PLACEHOLDER — Kevin to set the real cap before go-live.
+ */
+export const EXTRAS_FREE_CAP = 12;
