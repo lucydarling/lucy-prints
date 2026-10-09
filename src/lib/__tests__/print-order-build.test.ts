@@ -194,3 +194,17 @@ test("regionChoicesFromStoredPhotos matches the per-region choiceFromPrintLabel"
   assert.deepEqual(regionChoicesFromStoredPhotos(theme, stored)[region.key], choiceFromPrintLabel(region, label));
   assert.deepEqual(regionChoicesFromStoredPhotos(theme, { [`${region.key}_1`]: { printSize: "bogus" } }), {});
 });
+
+test("a stored size that differs from the slot refuses when either is non-square, warns when both are square", async () => {
+  const a = await fixture();
+  a.params.photoRows.find((r) => r.slot_key === "ultrasound")!.print_size = "4x4"; // slot is 4x3
+  await assert.rejects(buildOrder(a.params), /ultrasound: stored as 4x4 but the book slot prints 4x3 — shapes differ/);
+
+  const b = await fixture();
+  b.params.photoRows.find((r) => r.slot_key === "baby_bump")!.print_size = "4x6"; // slot is 3x3
+  await assert.rejects(buildOrder(b.params), /baby_bump: stored as 4x6/);
+
+  const c = await fixture();
+  c.params.photoRows.find((r) => r.slot_key === "ultrasound")!.print_size = "3x4"; // same size, turned
+  await assert.rejects(buildOrder(c.params), /ultrasound: stored as 3x4/);
+});

@@ -2,6 +2,7 @@ import {
   getBookSlots,
   getPrintDimensions,
   getPrintSizeLabel,
+  isSquarePrintSize,
   parsePrintLabel,
   regionChoicesFromStoredPhotos,
   type PrintOrientation,
@@ -103,8 +104,21 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
       continue;
     }
     const stored = parsePrintLabel(row.print_size);
-    if (stored && stored.size !== slot.size) {
-      warnings.push(`${slot.key}: stored as ${row.print_size} but the book slot prints ${getPrintSizeLabel(slot.size, slot.orientation)} — ordered as the slot size`);
+    if (stored) {
+      const sizeDiffers = stored.size !== slot.size;
+      const turnedDiffers =
+        !sizeDiffers && !isSquarePrintSize(slot.size) && row.print_size !== getPrintSizeLabel(slot.size, slot.orientation);
+      if (sizeDiffers || turnedDiffers) {
+        const msg = `${slot.key}: stored as ${row.print_size} but the book slot prints ${getPrintSizeLabel(slot.size, slot.orientation)}`;
+        // Two squares differ only in scale, so ordering as the slot size is safe;
+        // anything non-square would print at the wrong shape.
+        if (isSquarePrintSize(stored.size) && isSquarePrintSize(slot.size)) {
+          warnings.push(`${msg} — ordered as the slot size`);
+        } else {
+          errors.push(`${msg} — shapes differ, refusing`);
+          continue;
+        }
+      }
     }
     jobs.push({ base: slot.key, size: slot.size, orientation: slot.orientation, path: row.storage_path, quantity: 1 });
   }
