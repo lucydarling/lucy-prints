@@ -9,7 +9,9 @@ import {
   type PrintSize,
 } from "@/lib/photo-slots";
 import {
+  ASPECT_TOLERANCE,
   DEFAULT_DELIVERY_TYPE,
+  DESTINATION,
   PRINT_PRODUCTS,
   TEST_ID_PREFIX,
   TEST_MODE,
@@ -83,6 +85,8 @@ export interface BuiltOrder {
   /** Prints by size, extras counted by quantity. */
   countBySize: Partial<Record<PrintSize, number>>;
   warnings: string[];
+  /** Where this order is meant to go (a demo dealer while testing). Informational until delivery exists. */
+  destination: typeof DESTINATION;
 }
 
 const safe = (s: string) => s.replace(/[^a-zA-Z0-9._-]+/g, "_");
@@ -196,6 +200,14 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
       errors.push(err instanceof ImageProblem ? err.message : `${label}: could not load image (${(err as Error).message})`);
       continue;
     }
+    // pfRouter silently center-crops a file whose shape isn't its product's: refuse instead.
+    const ratio = Math.max(prepared.width, prepared.height) / Math.min(prepared.width, prepared.height);
+    if (Math.abs(ratio / product.aspect - 1) > ASPECT_TOLERANCE) {
+      errors.push(
+        `${label}: file is ${prepared.width}x${prepared.height}px (shape ${ratio.toFixed(3)}:1) but ${product.productCode} is ${product.aspect}:1 — Photo Finale would crop it`
+      );
+      continue;
+    }
     warnings.push(...prepared.warnings);
     const name = `${String(i + 1).padStart(4, "0")}_${safe(job.base)}_${getPrintSizeLabel(job.size, job.orientation)}${
       product.printedAs === "sheet" ? "_on_4x4" : ""
@@ -233,5 +245,6 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
     printCount,
     countBySize,
     warnings,
+    destination: DESTINATION,
   };
 }

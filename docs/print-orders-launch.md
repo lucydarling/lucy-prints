@@ -63,11 +63,17 @@ Database: migrations 008 (`print_orders`) applied 2026-10-09. 009 (`updated_at` 
 - A customer can always start a new book after a ready/refused one (same email + theme creates a new session).
 - Legacy rows saved at 4x4 for a 3x3 slot (118 `baby_bump`, 5 `my_first_10/11`) are scaled down to the slot size.
 
-## 7. Open questions for Photo Finale / Persnickety
-1. Product codes for every size (3x3, 4x4, 4x6, 5x5). Is one code per size right regardless of orientation (6x4 landscape uses the 4x6 code)?
-2. Do they print 3x3 and 3.5x3.5 and 4x3 natively, or should those stay on a 4x4 sheet?
+## 7. Photo Finale / Persnickety: answered and still open
+**Answered (2026-10-09):**
+- `quantity` = copies of that one image (we use one order item per image).
+- One product code per size covers both orientations (6x4 uses the 4x6 code).
+- Any resolution is accepted. We still refuse files under 50% of the print size, only to catch broken/placeholder files.
+- **If a file's shape doesn't match its product, pfRouter silently center-crops it.** So every product has an `aspect` in `config.ts` and the builder refuses an order whose file (after padding) isn't that shape (0.5% tolerance).
+- Testing goes to a separate **demo dealer account**: `DESTINATION` in `config.ts` (`kind: "demo"`), next to `TEST_MODE`. Not used for delivery yet.
+
+**Still open:**
+1. The real product codes for every size (3x3, 4x4, 4x6, 5x5), and the demo dealer name/hotfolder for `DESTINATION`.
+2. Do they print 3x3, 3.5x3.5 and 4x3 natively, or should those stay on a 4x4 sheet?
 3. Padding placement on 4x4 sheets: image bottom-left, padding top/right, no trim guides. OK for their trimming?
-4. How `quantity` works on a single-image order item (N copies of that image?).
-5. Delivery method into pfRouter (cloud folder? which one, credentials, folder naming) and the exact `delivery_type` values our dealer account has active.
-6. Files at exactly print size, or is a larger file scaled by them?
-7. What happens to a half-written folder (we write images first, XML last)?
+4. Delivery method into pfRouter (cloud folder? which, credentials, folder naming) and the `delivery_type` values our dealer account has active.
+5. What happens to a half-written folder (we write images first, XML last)?

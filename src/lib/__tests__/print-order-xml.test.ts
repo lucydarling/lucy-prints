@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_PRINT_SIZES, isAlwaysPaddedTo4x4 } from "@/lib/photo-slots";
-import { PRINT_PRODUCTS } from "@/lib/print-orders/config";
+import { ALL_PRINT_SIZES, getPrintDimensions, isAlwaysPaddedTo4x4 } from "@/lib/photo-slots";
+import { DESTINATION, PRINT_PRODUCTS, TEST_MODE } from "@/lib/print-orders/config";
 import { buildOrderXml, escapeXmlAttr, validateOrder, type PrintOrderInput } from "@/lib/print-orders/order-xml";
 
 const valid = (): PrintOrderInput => ({
@@ -72,4 +72,17 @@ test("special characters are escaped", () => {
   assert.match(xml, /address1="Smith &amp; Sons &lt;&quot;Unit 5&quot;&gt;"/);
   assert.match(xml, /city="Zürich"/);
   assert.equal(escapeXmlAttr("a\u0000b\nc"), "ab c");
+});
+
+test("each product's aspect matches the shape of the file it receives (sheet if padded, else the print)", () => {
+  for (const size of ALL_PRINT_SIZES) {
+    const cfg = PRINT_PRODUCTS[size];
+    const d = cfg.printedAs === "sheet" ? { width: cfg.sheetWidth!, height: cfg.sheetHeight! } : getPrintDimensions(size);
+    assert.equal(cfg.aspect, Math.max(d.width, d.height) / Math.min(d.width, d.height), size);
+  }
+});
+
+test("test mode only ever points at the demo dealer", () => {
+  if (TEST_MODE) assert.equal(DESTINATION.kind, "demo");
+  assert.ok(DESTINATION.dealer && DESTINATION.hotfolder);
 });

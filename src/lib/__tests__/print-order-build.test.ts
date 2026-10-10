@@ -208,3 +208,18 @@ test("a stored size that differs from the slot refuses when either is non-square
   c.params.photoRows.find((r) => r.slot_key === "ultrasound")!.print_size = "3x4"; // same size, turned
   await assert.rejects(buildOrder(c.params), /ultrasound: stored as 3x4/);
 });
+
+test("a file whose shape is not its product's is refused (pfRouter would silently crop it)", async () => {
+  // A 4x6 extra whose stored file is square: shape 1:1 against a 1.5:1 product.
+  const bad = await fixture({}, { "s/e1.jpg": await img(1200, 1200) });
+  await assert.rejects(buildOrder(bad.params), /extra_1 \(4x6\): file is 1200x1200px \(shape 1\.000:1\) but TBD-4X6 is 1\.5:1 — Photo Finale would crop it/);
+
+  // A 4x4 slot given a 4:3 file is refused.
+  const wide = await fixture({}, { "s/baby_photo.jpg": await img(1200, 900) });
+  await assert.rejects(buildOrder(wide.params), /baby_photo \(4x4\): file is 1200x900px \(shape 1\.333:1\) but TBD-4X4 is 1:1/);
+
+  // Padded sizes pass because the SHEET is what is checked; portrait and landscape 4x6 both pass.
+  const built = await buildOrder((await fixture()).params);
+  assert.equal(built.printCount, 6);
+  assert.equal(built.destination.kind, "demo");
+});
