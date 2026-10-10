@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
+import { removeFromCloud } from "@/lib/remove-from-cloud";
 import Image from "next/image";
 import { usePhotoStore, type ExtraPrint } from "@/store/photo-store";
 import { detectImageOrientation, prepareImageFile } from "@/lib/image-prep";
@@ -225,9 +226,14 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
       <div className="flex-shrink-0 flex items-center gap-1">
         {hasPhoto ? (
           <button
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              removeExtra(extra.id);
+              try {
+                await removeFromCloud(extra.id, true);
+                removeExtra(extra.id);
+              } catch (err) {
+                alert((err as Error).message);
+              }
             }}
             className="p-1.5 text-gray-300 hover:text-red-400 transition-colors"
             aria-label="Remove extra print"
