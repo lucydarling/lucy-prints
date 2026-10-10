@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ALL_PRINT_SIZES, getPrintDimensions, isAlwaysPaddedTo4x4 } from "@/lib/photo-slots";
-import { DESTINATION, PRINT_PRODUCTS, TEST_MODE } from "@/lib/print-orders/config";
+import { PRINT_PRODUCTS, productEntry, resolveDestination } from "@/lib/print-orders/config";
 import { buildOrderXml, escapeXmlAttr, validateOrder, type PrintOrderInput } from "@/lib/print-orders/order-xml";
 
 const valid = (): PrintOrderInput => ({
@@ -82,7 +82,24 @@ test("each product's aspect matches the shape of the file it receives (sheet if 
   }
 });
 
-test("test mode only ever points at the demo dealer", () => {
-  if (TEST_MODE) assert.equal(DESTINATION.kind, "demo");
-  assert.ok(DESTINATION.dealer && DESTINATION.hotfolder);
+test("a padded size's aspect follows its print method: sheet → the sheet's shape, native → the print's own", () => {
+  assert.equal(PRINT_PRODUCTS["4x3"].printedAs, "sheet");
+  assert.equal(PRINT_PRODUCTS["4x3"].aspect, 1);
+  assert.equal(PRINT_PRODUCTS["3.5x3.5"].aspect, 1);
+  // Flip 4x3 to native and it becomes a 4:3 product.
+  assert.equal(productEntry("4x3", { productCode: "X", printedAs: "native" }).aspect, 4 / 3);
+  assert.equal(productEntry("4x6", { productCode: "X", printedAs: "native" }).aspect, 1.5);
+  assert.throws(() => productEntry("4x3", { productCode: "X", printedAs: "sheet" }), /needs sheetWidth/);
+});
+
+test("destination: demo by default with test mode on; live only with the env var and test mode off", () => {
+  assert.equal(resolveDestination(undefined, true).kind, "demo");
+  assert.equal(resolveDestination("", true).hotfolder, "demo");
+  assert.equal(resolveDestination("demo", true).kind, "demo");
+  assert.equal(resolveDestination("live", false).kind, "live");
+  assert.throws(() => resolveDestination("live", true), /TEST_MODE is on/);
+  assert.throws(() => resolveDestination(undefined, false), /TEST_MODE is off/);
+  assert.throws(() => resolveDestination("demo", false), /TEST_MODE is off/);
+  assert.throws(() => resolveDestination("LIVE", false), /must be "demo" or "live"/);
+  assert.throws(() => resolveDestination("prod", true), /must be "demo" or "live"/);
 });

@@ -49,7 +49,6 @@ function main() {
     console.log(`Order folder: ${location}`);
     console.log(`ZIP:          ${zipPath}`);
     console.log(`Prints: ${order.printCount}`, order.countBySize);
-    console.log(`Destination (not used yet): ${order.destination.kind} dealer ${order.destination.dealer}`);
     for (const w of order.warnings) console.log(`WARNING: ${w}`);
   })();
 }

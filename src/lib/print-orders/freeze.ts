@@ -7,7 +7,7 @@ export const FROZEN_MESSAGE =
 
 /**
  * Is this session locked because of a print order?
- *  - "frozen": a print order for it is ready or refused — no edits.
+ *  - "frozen": a print order for it is ready, refused, sent or error — no edits.
  *  - "held": a print order is waiting for photos — the customer may still add them.
  *  - null: no print order.
  * Fails OPEN (null) if the lookup errors or the table does not exist yet:
@@ -29,9 +29,10 @@ export async function getPrintLock(sessionId: string): Promise<PrintLock> {
   return lockFromStatuses((data ?? []).map((r) => r.status as string));
 }
 
-/** ready or refused → frozen; otherwise held → held; otherwise unlocked. */
+/** ready, refused, sent or error → frozen; otherwise held → held; otherwise unlocked. */
+const FROZEN_STATUSES = new Set(["ready", "refused", "sent", "error"]);
 export function lockFromStatuses(statuses: string[]): PrintLock {
-  if (statuses.some((s) => s === "ready" || s === "refused")) return "frozen";
+  if (statuses.some((s) => FROZEN_STATUSES.has(s))) return "frozen";
   if (statuses.includes("held")) return "held";
   return null;
 }

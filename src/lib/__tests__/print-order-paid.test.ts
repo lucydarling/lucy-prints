@@ -157,6 +157,18 @@ test("a webhook retry for an order that is already ready does nothing and sends 
   assert.equal(d.frozen.length, 0);
 });
 
+test("a webhook or manual retry never touches an order that was sent or errored", async () => {
+  for (const status of ["sent", "error"]) {
+    const d = deps({ existing: { status, snapshot: { frozenAt: "x", photoRows: [], extraRows: [] } } });
+    const r = await handlePaidOrder(orderJson(), d.d);
+    assert.equal(r.status, status);
+    assert.equal(d.recorded.length, 0);
+    assert.equal(d.frozen.length, 0);
+    assert.equal(d.alerts.length, 0);
+    await assert.rejects(handlePaidOrder(orderJson(), deps({ existing: { status } }).d, { refreeze: true }), new RegExp(`already ${status}`));
+  }
+});
+
 test("a repeated refusal alerts once, not on every retry", async () => {
   const a = deps({ extras: EXTRAS_FREE_CAP + 1 });
   assert.equal((await handlePaidOrder(orderJson(), a.d)).status, "refused");

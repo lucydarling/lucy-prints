@@ -218,8 +218,21 @@ test("a file whose shape is not its product's is refused (pfRouter would silentl
   const wide = await fixture({}, { "s/baby_photo.jpg": await img(1200, 900) });
   await assert.rejects(buildOrder(wide.params), /baby_photo \(4x4\): file is 1200x900px \(shape 1\.333:1\) but TBD-4X4 is 1:1/);
 
-  // Padded sizes pass because the SHEET is what is checked; portrait and landscape 4x6 both pass.
+});
+
+test("files whose shape matches their product pass: square, 4x6 both ways, a 4x3 padded onto a 4x4 sheet", async () => {
+  // The fixture holds a 4x4 and a 3x3 (square), a 4x6 portrait, a 6x4 landscape and a 4x3 (padded to a 4x4 sheet).
   const built = await buildOrder((await fixture()).params);
   assert.equal(built.printCount, 6);
-  assert.equal(built.destination.kind, "demo");
+  const names = built.images.map((f) => f.name);
+  assert.ok(names.some((n) => n.includes("baby_photo_4x4")));
+  assert.ok(names.some((n) => /extra_1_4x6\.jpg$/.test(n)));
+  assert.ok(names.some((n) => /extra_2_6x4\.jpg$/.test(n)));
+  const padded = built.images.find((f) => f.name.includes("ultrasound_4x3_on_4x4"))!;
+  const meta = await sharp(padded.data).metadata();
+  assert.equal(meta.width, meta.height, "4x3 is delivered as a square sheet");
+
+  // A file one pixel off is within tolerance; a clearly different shape is not.
+  const nearly = await fixture({}, { "s/e1.jpg": await img(1200, 1801) });
+  assert.equal((await buildOrder(nearly.params)).printCount, 6);
 });

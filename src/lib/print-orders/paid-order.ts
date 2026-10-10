@@ -27,7 +27,7 @@ export interface VariantConfig {
   extraVariantIds: string[];
 }
 
-export type PaidOrderStatus = "ignored" | "ready" | "held" | "refused";
+export type PaidOrderStatus = "ignored" | "ready" | "held" | "refused" | "sent" | "error";
 
 /** The exact rows a paid order prints, frozen at payment. Builds and retries read ONLY this. */
 export interface PrintSnapshot {
@@ -81,7 +81,7 @@ export interface PaidOrderDeps {
   freeze: (shopifyOrderId: string, photoRows: SessionPhotoRow[], extraRows: SessionExtraRow[]) => Promise<PrintSnapshot>;
   /** Email Kevin about a refused or held order. Failures here must never fail the order. */
   alert: (info: AlertInfo) => Promise<void>;
-  /** True when a DIFFERENT paid order already has a ready print order for this session. */
+  /** True when a DIFFERENT paid order already has a ready, sent or error print order for this session. */
   otherReadyOrderForSession: (sessionId: string, shopifyOrderId: string) => Promise<boolean>;
   record: (r: PaidOrderResult & { shopifyOrderId: string; shopifyOrderName?: string }) => Promise<void>;
 }
@@ -123,6 +123,11 @@ export async function handlePaidOrder(
   if (bookLines.length === 0) return { status: "ignored", reasons: ["no print line item"], warnings: [] };
 
   const existing = await deps.loadExisting(orderId);
+  // Sent to the printer (or failed there): never re-checked, re-frozen or overwritten here.
+  if (existing?.status === "sent" || existing?.status === "error") {
+    if (opts.refreeze) throw new Error(`order is already ${existing.status} — refusing to re-freeze it`);
+    return { status: existing.status, reasons: [], warnings: [], snapshot: existing.snapshot };
+  }
   if (existing?.status === "ready" && !opts.refreeze) {
     // A webhook retry for an order we already finished: nothing to redo, nothing to re-alert.
     return { status: "ready", reasons: [], warnings: [], snapshot: existing.snapshot };

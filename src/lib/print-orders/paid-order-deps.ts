@@ -50,7 +50,7 @@ export function realPaidOrderDeps(): PaidOrderDeps {
         .from("print_orders")
         .select("shopify_order_id")
         .eq("session_id", sessionId)
-        .eq("status", "ready")
+        .in("status", ["ready", "sent", "error"])
         .neq("shopify_order_id", shopifyOrderId)
         .limit(1);
       if (error) throw new Error(`print_orders lookup failed: ${error.message}`);
