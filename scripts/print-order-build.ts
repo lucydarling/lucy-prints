@@ -11,9 +11,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { buildFromSnapshot, frozenOnly, requireReadySnapshot } from "@/lib/print-orders/build-from-snapshot";
+import { rebuildRecordedOrder, type RecordedOrderRow } from "@/lib/print-orders/build-from-snapshot";
+import { downloadPhoto } from "@/lib/print-orders/storage";
 import { LocalFolderDestination, orderToZip, writeOrderFolder } from "@/lib/print-orders/destination";
-import type { PrintSnapshot } from "@/lib/print-orders/paid-order";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -30,22 +30,7 @@ async function main() {
     .eq("shopify_order_id", orderId)
     .maybeSingle();
   if (error) throw new Error(`print_orders lookup failed: ${error.message}`);
-  const snapshot = requireReadySnapshot(orderId, row ? { status: row.status as string, snapshot: row.snapshot as PrintSnapshot | null } : null);
-
-  const download = async (storagePath: string): Promise<Buffer> => {
-    const { data, error: dlError } = await supabaseAdmin.storage.from("photos").download(storagePath);
-    if (dlError || !data) throw new Error(`download failed: ${dlError?.message ?? "no data"}`);
-    return Buffer.from(await data.arrayBuffer());
-  };
-  const order = await buildFromSnapshot(orderId, snapshot, frozenOnly(orderId, download));
-
-  // The rebuilt order must be the one that was recorded as ready.
-  if (row!.external_id && row!.external_id !== order.folderName) {
-    throw new Error(`rebuilt id ${order.folderName} differs from the recorded ${row!.external_id} — refusing`);
-  }
-  if (row!.print_count != null && row!.print_count !== order.printCount) {
-    throw new Error(`rebuilt ${order.printCount} prints but ${row!.print_count} were recorded — refusing`);
-  }
+  const order = await rebuildRecordedOrder(orderId, row as RecordedOrderRow | null, downloadPhoto);
 
   const { location } = await writeOrderFolder(order, new LocalFolderDestination(outDir));
   const zipPath = path.join(outDir, `${order.folderName}.zip`);

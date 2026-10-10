@@ -24,16 +24,7 @@ export class LocalFolderDestination implements OrderDestination {
   }
 }
 
-/**
- * NOT IMPLEMENTED — future cloud-folder delivery to Photo Finale's hotfolder
- * (delivery method still to be confirmed with Photo Finale). Intentionally
- * throws so nothing can be sent by accident.
- */
-export class CloudFolderDestination implements OrderDestination {
-  async writeOrder(): Promise<{ location: string }> {
-    throw new Error("CloudFolderDestination is not implemented — nothing is sent to Photo Finale.");
-  }
-}
+// Cloud delivery: DropboxDestination in ./dropbox-destination.ts.
 
 export function writeOrderFolder(order: BuiltOrder, destination: OrderDestination) {
   return destination.writeOrder(order);

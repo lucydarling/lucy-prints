@@ -1,0 +1,5 @@
+{
+  "crons": [
+    { "path": "/api/cron/print-order-errors", "schedule": "0 15 * * *" }
+  ]
+}

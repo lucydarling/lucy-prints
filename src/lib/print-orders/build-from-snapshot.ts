@@ -44,10 +44,12 @@ export const frozenPrefix = (shopifyOrderId: string) => `print-orders/${shopifyO
  */
 export function requireReadySnapshot(
   shopifyOrderId: string,
-  row: { status: string; snapshot?: PrintSnapshot | null } | null
+  row: { status: string; snapshot?: PrintSnapshot | null } | null,
+  /** Statuses allowed to build. Only a re-send passes "sent" as well. */
+  allowed: string[] = ["ready"]
 ): PrintSnapshot {
   if (!row) throw new Error(`no print order recorded for Shopify order ${shopifyOrderId}`);
-  if (row.status !== "ready") {
+  if (!allowed.includes(row.status)) {
     throw new Error(`order ${shopifyOrderId} is "${row.status}", not ready — refusing to build it`);
   }
   if (!row.snapshot) throw new Error(`order ${shopifyOrderId} has no saved snapshot`);
@@ -71,4 +73,33 @@ export function frozenOnly(
     if (!p.startsWith(prefix)) throw new Error(`refusing to read ${p}: not a frozen copy of order ${shopifyOrderId}`);
     return fetchImage(p);
   };
+}
+
+export interface RecordedOrderRow {
+  status: string;
+  snapshot: PrintSnapshot | null;
+  external_id: string | null;
+  print_count: number | null;
+}
+
+/**
+ * Rebuild a recorded order exactly as it was recorded: from its snapshot and
+ * frozen copies only, refusing unless the status is allowed and the rebuilt
+ * id and print count match the row. Used by print-order:build and print-order:deliver.
+ */
+export async function rebuildRecordedOrder(
+  shopifyOrderId: string,
+  row: RecordedOrderRow | null,
+  download: (storagePath: string) => Promise<Buffer>,
+  allowed: string[] = ["ready"]
+): Promise<BuiltOrder> {
+  const snapshot = requireReadySnapshot(shopifyOrderId, row, allowed);
+  const order = await buildFromSnapshot(shopifyOrderId, snapshot, frozenOnly(shopifyOrderId, download));
+  if (row!.external_id && row!.external_id !== order.folderName) {
+    throw new Error(`rebuilt id ${order.folderName} differs from the recorded ${row!.external_id} — refusing`);
+  }
+  if (row!.print_count != null && row!.print_count !== order.printCount) {
+    throw new Error(`rebuilt ${order.printCount} prints but ${row!.print_count} were recorded — refusing`);
+  }
+  return order;
 }

@@ -211,29 +211,34 @@ export async function sendMagicLinkEmail({
 }
 
 /**
- * Tell Kevin a print order was held or refused. Test-mode orders only for now;
- * nothing here touches the customer.
+ * Tell Kevin a print order was held or refused, or that the print partner's
+ * pfRouter rejected one we sent (status "error"). Nothing here touches the customer.
  */
 export async function sendPrintOrderAlert(info: {
-  status: "held" | "refused";
+  status: "held" | "refused" | "error";
   shopifyOrderId: string;
   shopifyOrderName?: string;
-  sessionToken: string;
+  sessionToken?: string;
   reasons: string[];
 }) {
   const to = process.env.PRINT_ORDER_ALERT_TO || "kevin@lucydarling.com";
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const name = info.shopifyOrderName || info.shopifyOrderId;
+  const isError = info.status === "error";
   return sendEmail({
     to,
-    subject: `[Photo Lab] Print order ${info.status.toUpperCase()}: ${name}`,
-    html: `<p>A paid print order was <strong>${info.status}</strong> and needs a person.</p>
+    subject: isError
+      ? `[Photo Lab] Print order ERROR at the printer: ${name}`
+      : `[Photo Lab] Print order ${info.status.toUpperCase()}: ${name}`,
+    html: `<p>${isError
+      ? "The print partner's system (pfRouter) <strong>rejected</strong> a print order we sent. It is now <strong>error</strong> in print_orders."
+      : `A paid print order was <strong>${info.status}</strong> and needs a person.`}</p>
 <ul>
 <li>Order: ${esc(name)} (Shopify id ${esc(info.shopifyOrderId)})</li>
-<li>Session token: ${esc(info.sessionToken || "(none on the order)")}</li>
+${isError ? "" : `<li>Session token: ${esc(info.sessionToken || "(none on the order)")}</li>`}
 </ul>
-<p>Reason:</p>
-<ul>${info.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
-<p>Nothing was sent to the print partner.</p>${info.status === "held" ? `<p>A held order stays editable by the customer. Once photos are added, retry with <code>npm run print-order:retry -- ${esc(info.shopifyOrderId)}</code> — it takes a fresh snapshot.</p>` : ""}`,
+<p>${isError ? "pfRouter's reason" : "Reason"}:</p>
+<ul>${info.reasons.map((r) => `<li style="white-space:pre-wrap">${esc(r)}</li>`).join("")}</ul>
+<p>${isError ? "Nothing is retried automatically. This alert is sent once." : "Nothing was sent to the print partner."}</p>${info.status === "held" ? `<p>A held order stays editable by the customer. Once photos are added, retry with <code>npm run print-order:retry -- ${esc(info.shopifyOrderId)}</code> — it takes a fresh snapshot.</p>` : ""}`,
   });
 }
