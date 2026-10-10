@@ -1,6 +1,8 @@
 /**
- * Private test harness: build a Photo Finale order folder (+ ZIP) from a
- * session, locally. Sends nothing anywhere.
+ * TESTING ONLY — reads LIVE session data (the customer's current photos), not
+ * what was frozen at payment, and uses placeholder ship-to details. Do NOT use
+ * it to prepare a real order: use `npm run print-order:build` for that.
+ * Builds a Photo Finale order folder (+ ZIP) locally. Sends nothing anywhere.
  *
  *   npm run print-order:sample -- <session-token> [--expect N] [--out DIR]
  */
@@ -18,7 +20,7 @@ function main() {
   };
   const token = args[0];
   if (!token || token.startsWith("--")) {
-    throw new Error("usage: print-order:sample <session-token> [--expect N] [--out DIR]");
+    throw new Error("usage (TESTING ONLY, reads live session data): print-order:sample <session-token> [--expect N] [--out DIR]");
   }
   const outDir = path.resolve(flag("--out") ?? "print-orders-out");
   const expect = flag("--expect");

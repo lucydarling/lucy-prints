@@ -9,6 +9,7 @@ import { lockFromStatuses, pickReusableSession, type PrintLock } from "@/lib/pri
 import { printingMessage, tierForTheme, validatePrintRequest } from "@/lib/print-orders/print-request";
 import { verifyShopifyHmac } from "@/lib/print-orders/webhook-hmac";
 import { buildOrder } from "@/lib/print-orders/build-order";
+import { buildFromSnapshot, frozenOnly, requireReadySnapshot } from "@/lib/print-orders/build-from-snapshot";
 
 const STD = "111";
 const LUX = "222";
@@ -301,4 +302,65 @@ test("starting a book: a frozen session is never reused, so a new one is created
   assert.equal(await pickReusableSession([{ id: "newest" }], lockOf), null); // only a frozen one -> create new
   assert.equal(await pickReusableSession([], lockOf), null);
   assert.equal((await pickReusableSession([{ id: "oldest" }], lockOf))?.id, "oldest");
+});
+
+test("the saved snapshot carries what a later build needs; building it reads only frozen copies and gives the same order", async () => {
+  const live = { current: sessionRows(getSlots(THEME).slice(4).map((s) => s.key)) }; // 4 filled at payment
+  const first = deps({ liveRows: live, extras: 2 });
+  const r = await handlePaidOrder(orderJson(), first.d);
+  assert.equal(r.status, "ready", r.reasons.join(";"));
+  const snap = r.snapshot!;
+  assert.equal(snap.order?.bookTheme, THEME);
+  assert.deepEqual(snap.order?.shipTo.city, "Springfield");
+  assert.equal(snap.order?.paidExtras, 0);
+
+  // The build gets a fetcher that serves frozen copies ONLY; live paths would throw.
+  const served: string[] = [];
+  const frozenFetch = frozenOnly("5550001", async (p) => {
+    served.push(p);
+    return fetchImage(p);
+  });
+  // Frozen test paths are "frozen/<id>/…", so give the guard the matching prefix by re-mapping.
+  const mapped: PrintSnapshot = {
+    ...snap,
+    photoRows: snap.photoRows.map((x) => ({ ...x, storage_path: x.storage_path.replace("frozen/5550001/", "print-orders/5550001/") })),
+    extraRows: snap.extraRows.map((x) => ({ ...x, storage_path: x.storage_path ? "print-orders/5550001/" + x.storage_path : x.storage_path })),
+  };
+  const fetchFrozen = async (p: string) => {
+    if (p.includes("/p/")) return img(1200, 1200); // an extra
+    const slot = getSlots(THEME).find((sl) => p.endsWith(sl.key))!;
+    const d = getPrintDimensions(slot.size, slot.orientation);
+    return img(d.width, d.height);
+  };
+  const guarded = frozenOnly("5550001", async (p) => { served.push(p); return fetchFrozen(p); });
+  const built = await buildFromSnapshot("5550001", mapped, guarded);
+  assert.equal(built.folderName, "TEST-5550001");
+  assert.equal(built.printCount, 4 + 2);
+  assert.ok(served.every((p) => p.startsWith("print-orders/5550001/")));
+  assert.match(built.xml.data.toString(), /city="Springfield" state="IL" zip="62701" country="US"/);
+
+  // A fetch of a live path is refused outright.
+  await assert.rejects(frozenFetch("p/1200x1200"), /not a frozen copy of order 5550001/);
+});
+
+test("manual build: only a ready order, only from its own frozen copies", () => {
+  const snap: PrintSnapshot = {
+    frozenAt: "x",
+    photoRows: [{ slot_key: "a", storage_path: "print-orders/77/a", print_size: "4x4", status: "cropped" }],
+    extraRows: [],
+  };
+  assert.throws(() => requireReadySnapshot("77", null), /no print order recorded/);
+  assert.throws(() => requireReadySnapshot("77", { status: "held", snapshot: snap }), /is "held", not ready/);
+  assert.throws(() => requireReadySnapshot("77", { status: "refused", snapshot: snap }), /is "refused", not ready/);
+  assert.throws(() => requireReadySnapshot("77", { status: "ready", snapshot: null }), /no saved snapshot/);
+  const live: PrintSnapshot = { ...snap, photoRows: [{ ...snap.photoRows[0], storage_path: "abc-session/a.jpg" }] };
+  assert.throws(() => requireReadySnapshot("77", { status: "ready", snapshot: live }), /outside print-orders\/77\/.*refusing to read live files/);
+  assert.equal(requireReadySnapshot("77", { status: "ready", snapshot: snap }), snap);
+});
+
+test("a snapshot from before order details were saved cannot be built", async () => {
+  await assert.rejects(
+    buildFromSnapshot("1", { frozenAt: "x", photoRows: [], extraRows: [] }, async () => Buffer.alloc(0)),
+    /no order details/
+  );
 });

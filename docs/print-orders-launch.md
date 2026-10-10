@@ -7,7 +7,7 @@ Nothing is sent to Photo Finale. Delivery is blocked on the open questions at th
 - Shopify `orders/paid` webhook → `POST /api/webhooks/shopify/orders-paid` (Node runtime, HMAC-verified).
 - For a print order it freezes the photos at payment, checks them, and records `ready` / `held` / `refused` in `print_orders`. Refused and held outcomes email Kevin.
 - Sessions lock after a `ready` or `refused` order (409 on upload, delete, notes); a `held` session stays editable.
-- Order folder builder (Photo Finale `apm_order` XML + JPEGs), `TEST-` ids, local-folder/ZIP output only.
+- Order folder builder (Photo Finale `apm_order` XML + JPEGs), `TEST-` ids, local-folder/ZIP output only, buildable from the frozen snapshot (`print-order:build`).
 - **Not built:** the checkout button on the site, the per-order delivery to Photo Finale, the prepaid-discount-code flow, "Ordered" labels in the book switcher / "my books" email.
 
 ## 2. Environment variables (Vercel, Production)
@@ -39,9 +39,22 @@ Database: migrations 008 (`print_orders`) applied 2026-10-09. 009 (`updated_at` 
 `status = ready` in `print_orders` means: the order was paid, the photos were frozen (rows in `snapshot`, files copied to `photos/print-orders/<order id>/…`), and the order built and validated (sizes, images, XML rules, extras within the cap of 12). **Nothing was delivered anywhere.** `external_id` carries the `TEST-` prefix. `CloudFolderDestination` deliberately throws. Test mode is `TEST_MODE` in `src/lib/print-orders/config.ts`; leave it on until delivery is built and Photo Finale confirms.
 
 ## 5. Retry and manual send
-- **Retry the check:** `npm run print-order:retry -- <numeric Shopify order id>` (needs the Admin env vars). A `held` order always re-freezes on retry, so first let the customer add photos. `--refreeze` forces a fresh snapshot of a refused order. A `ready` order is never re-frozen.
-- **Build a folder by hand:** `npm run print-order:sample -- <session token>` writes `print-orders-out/<id>/` and a ZIP locally (placeholder ship-to, `TEST-` id). **Gap:** this reads the live session, not the frozen snapshot — for a real order, build from `print_orders.snapshot` (to be added with delivery).
-- **Never delete** `print-orders/<order id>/` files or `print_orders` rows by hand.
+**Retry the check** — `npm run print-order:retry -- <numeric Shopify order id>` (needs the Admin env vars). A `held` order always re-freezes on retry, so let the customer add photos first. `--refreeze` forces a fresh snapshot of a refused order. A `ready` order is never re-frozen.
+
+**Manual send (until delivery is built)** — for an order whose `print_orders.status` is `ready`:
+1. `npm run print-order:build -- <numeric Shopify order id>` (add `--out DIR` to choose where; default `print-orders-out/`).
+   - It reads **only** `print_orders.snapshot` and the frozen copies under `photos/print-orders/<order id>/`. It never reads live session rows, and refuses to read any file outside that folder.
+   - It refuses unless the order is `ready`, and refuses if the rebuilt id or print count differs from what was recorded.
+   - It uses the same code as the webhook (`buildFromSnapshot`), so the XML and validation are identical. The ship-to and customer name come from the Shopify order, saved in the snapshot at payment.
+   - Output: `print-orders-out/TEST-<order id>/` (images, then the XML) and `TEST-<order id>.zip`. Read any `WARNING:` lines (images off-size or scaled down).
+2. Open the XML and spot-check: ship-to address, item count = `print_count` in `print_orders`, product codes (still `TBD-…` placeholders until Photo Finale answers — replace them only once confirmed).
+3. Hand the **folder** (one subfolder per order, exactly one `.xml`, every image beside it) to Photo Finale however they confirm (question 5 below). Do not create `.pfrouter-partner.json`.
+4. Test mode: the id carries a `TEST-` prefix. For a real hand-off, flip `TEST_MODE` in `config.ts` and confirm the product codes with Photo Finale first — do not send `TEST-` orders as real ones.
+5. Note in the Shopify order that it was sent (nothing records delivery yet).
+
+`npm run print-order:sample -- <session token>` is **testing only**: it reads the customer's LIVE session and uses placeholder ship-to details. Never use it for a real order.
+
+**Never delete** `print-orders/<order id>/` files or `print_orders` rows by hand.
 
 ## 6. Behaviour to know about
 - Payment = finished: whatever is filled prints. Only an order with zero photos is held.

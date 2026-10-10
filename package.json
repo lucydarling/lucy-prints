@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "print-order:sample": "node --env-file=.env.local --import tsx scripts/print-order-sample.ts",
-    "print-order:retry": "node --env-file=.env.local --import tsx scripts/print-order-retry.ts"
+    "print-order:retry": "node --env-file=.env.local --import tsx scripts/print-order-retry.ts",
+    "print-order:build": "node --env-file=.env.local --import tsx scripts/print-order-build.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",

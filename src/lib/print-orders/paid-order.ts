@@ -1,6 +1,6 @@
-import { getSlots } from "@/lib/photo-slots";
 import { validatePrintRequest } from "./print-request";
-import { buildOrder, PrintOrderHeld, type PaidEntitlement, type SessionExtraRow, type SessionPhotoRow } from "./build-order";
+import { buildFromSnapshot } from "./build-from-snapshot";
+import { PrintOrderHeld, type SessionExtraRow, type SessionPhotoRow } from "./build-order";
 import type { ShipTo } from "./order-xml";
 
 /** The parts of a Shopify order (webhook body or Admin REST order) that we read. */
@@ -34,6 +34,16 @@ export interface PrintSnapshot {
   frozenAt: string;
   photoRows: SessionPhotoRow[];
   extraRows: SessionExtraRow[];
+  /** What the order was for, taken from the Shopify order at payment — so a build needs nothing live. */
+  order?: SnapshotOrderInfo;
+}
+
+export interface SnapshotOrderInfo {
+  bookTheme: string;
+  /** Extra prints paid for on top of the free allowance. */
+  paidExtras: number;
+  shipTo: ShipTo;
+  customer: { fname?: string; lname?: string };
 }
 
 export interface PaidOrderResult {
@@ -159,24 +169,9 @@ export async function handlePaidOrder(
   }
 
   // Freeze at payment (first sight), or reuse what was frozen. Never live rows after that.
-  const snapshot =
-    existing?.snapshot && existing.status !== "held" && !opts.refreeze
-      ? existing.snapshot
-      : await deps.freeze(orderId, loaded.photoRows, loaded.extraRows);
-  const finish = (r: PaidOrderResult) => done({ ...r, sessionId: loaded.session.id, snapshot });
-
   const extraQty = lines
     .filter((l) => v.extraVariantIds.includes(String(l.variant_id)))
     .reduce((n, l) => n + (l.quantity ?? 0), 0);
-  const check = validatePrintRequest({
-    bookTheme: theme,
-    filledBookSlots: snapshot.photoRows.filter((r) => r.status !== "empty").length,
-    extraPrints: snapshot.extraRows.filter((r) => r.storage_path).reduce((n, r) => n + (r.quantity ?? 0), 0),
-    paidExtras: extraQty,
-    variantTier: tier,
-  });
-  if (check.errors.length > 0) return finish({ status: "refused", reasons: check.errors, warnings: [] });
-
   const a = order.shipping_address;
   const shipTo: ShipTo = {
     fname: a?.first_name ?? "", lname: a?.last_name ?? "", address1: a?.address1 ?? "",
@@ -187,22 +182,27 @@ export async function handlePaidOrder(
     fname: order.customer?.first_name ?? a?.first_name ?? undefined,
     lname: order.customer?.last_name ?? a?.last_name ?? undefined,
   };
-  const paid: PaidEntitlement = {
-    bookSlotKeys: getSlots(theme).map((s) => s.key),
-    maxExtras: check.maxExtras,
-  };
+
+  // Freeze at payment (first sight), or reuse what was frozen. Never live rows after that.
+  const frozen =
+    existing?.snapshot && existing.status !== "held" && !opts.refreeze
+      ? existing.snapshot
+      : await deps.freeze(orderId, loaded.photoRows, loaded.extraRows);
+  // The snapshot also records what the order was for, so building it later needs nothing live.
+  const snapshot: PrintSnapshot = { ...frozen, order: { bookTheme: theme, paidExtras: extraQty, shipTo, customer } };
+  const finish = (r: PaidOrderResult) => done({ ...r, sessionId: loaded.session.id, snapshot });
+
+  const check = validatePrintRequest({
+    bookTheme: theme,
+    filledBookSlots: snapshot.photoRows.filter((r) => r.status !== "empty").length,
+    extraPrints: snapshot.extraRows.filter((r) => r.storage_path).reduce((n, r) => n + (r.quantity ?? 0), 0),
+    paidExtras: extraQty,
+    variantTier: tier,
+  });
+  if (check.errors.length > 0) return finish({ status: "refused", reasons: check.errors, warnings: [] });
 
   try {
-    const built = await buildOrder({
-      bookTheme: theme,
-      photoRows: snapshot.photoRows,
-      extraRows: snapshot.extraRows,
-      fetchImage: loaded.fetchImage,
-      externalId: orderId,
-      shipTo,
-      customer,
-      paid,
-    });
+    const built = await buildFromSnapshot(orderId, snapshot, loaded.fetchImage);
     return finish({ status: "ready", reasons: [], warnings: built.warnings, externalId: built.folderName, printCount: built.printCount });
   } catch (err) {
     if (err instanceof PrintOrderHeld) return finish({ status: "held", reasons: [err.message], warnings: [] });
