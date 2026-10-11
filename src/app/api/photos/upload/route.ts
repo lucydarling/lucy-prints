@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getSlots } from "@/lib/photo-slots";
+import { checkUploadSize } from "@/lib/image-validation";
 import { FROZEN_MESSAGE, getPrintLock } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
@@ -9,6 +10,8 @@ import {
   tooManyRequestsResponse,
 } from "@/lib/rate-limit";
 
+// sharp (image decoding) needs the Node.js runtime.
+export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB
@@ -162,6 +165,14 @@ export async function POST(req: NextRequest) {
     // Strict allowlist: a book slot must belong to THIS session's book.
     if (!isExtra && !isSlotOfBook(slotKey, session.book_theme)) {
       return NextResponse.json({ error: "Unknown slot" }, { status: 400 });
+    }
+
+    // Decode the file and refuse stubs/corrupt images before they are stored
+    // and marked "cropped" — a broken photo here is a broken print later.
+    const slotSize = isExtra ? undefined : getSlots(session.book_theme).find((s) => s.key === slotKey)?.size;
+    const sizeCheck = await checkUploadSize(buffer, printSize, slotSize);
+    if (!sizeCheck.ok) {
+      return NextResponse.json({ error: sizeCheck.message }, { status: 400 });
     }
 
     // Upload to Supabase Storage
