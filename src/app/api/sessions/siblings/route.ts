@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 import { isThemeAllowed } from "@/lib/preview-gate";
+import { printButtonAllowed } from "@/lib/print-orders/print-gate";
+import { orderedSessionIds } from "@/lib/print-orders/ordered";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const { data: sessions } = await supabaseAdmin
       .from("sessions")
-      .select("token, book_theme, baby_name, photo_count")
+      .select("id, token, book_theme, baby_name, photo_count")
       .eq("email", current.email)
       .eq("status", "active")
       .order("last_activity_at", { ascending: false, nullsFirst: false });
@@ -55,7 +57,11 @@ export async function POST(req: NextRequest) {
     // A hidden book (the journal, until it's public) is listed only for a
     // browser that has unlocked it.
     const cookie = req.cookies;
-    const enriched = (sessions || []).filter((s) => isThemeAllowed(s.book_theme, cookie)).map((s) => {
+    const visible = (sessions || []).filter((s) => isThemeAllowed(s.book_theme, cookie));
+    // "Ordered" labels exist only while print ordering is on for this browser; otherwise
+    // the response is exactly what it was before.
+    const ordered = printButtonAllowed(cookie) ? await orderedSessionIds(visible.map((s) => s.id as string)) : new Set<string>();
+    const enriched = visible.map((s) => {
       const theme = BOOK_THEMES.find((t) => t.id === s.book_theme);
       return {
         token: s.token,
@@ -63,6 +69,7 @@ export async function POST(req: NextRequest) {
         themeName: theme?.name ?? s.book_theme,
         babyName: s.baby_name as string | null,
         photoCount: s.photo_count || 0,
+        ...(ordered.has(s.id as string) ? { ordered: true } : {}),
       };
     });
 

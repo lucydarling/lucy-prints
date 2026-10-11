@@ -12,6 +12,7 @@
     "print-order:retry": "node --env-file=.env.local --import tsx scripts/print-order-retry.ts",
     "print-order:build": "node --env-file=.env.local --import tsx scripts/print-order-build.ts",
     "print-order:deliver": "node --env-file=.env.local --import tsx scripts/print-order-deliver.ts",
+    "print-order:email-test": "node --env-file=.env.local --import tsx scripts/print-order-email-test.ts",
     "print-order:check-errors": "node --env-file=.env.local --import tsx scripts/print-order-check-errors.ts",
     "dropbox:connect": "node --env-file=.env.local --import tsx scripts/dropbox-connect.ts"
   },
