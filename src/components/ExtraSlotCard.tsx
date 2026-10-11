@@ -11,6 +11,7 @@ import {
   isSquarePrintSize,
   type PrintOrientation,
 } from "@/lib/photo-slots";
+import { UploadErrorNote } from "./UploadErrorNote";
 
 interface ExtraSlotCardProps {
   extra: ExtraPrint;
@@ -192,6 +193,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
         <p className="text-xs text-gray-400 mt-0.5">
           {sizeLabel}&quot; {shapeLabel} print
         </p>
+        <UploadErrorNote slotKey={extra.id} />
 
         {/* Square sizes look the same either way — only offer the choice
             where it changes the shape of the print. */}
