@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getPrintLock } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
+import { printButtonAllowed } from "@/lib/print-orders/print-gate";
 
 export const runtime = "nodejs";
 
@@ -24,5 +25,10 @@ export async function GET(
   if (!session || !isThemeAllowed(session.book_theme, req.cookies)) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
-  return NextResponse.json({ printStatus: await getPrintLock(session.id) });
+  // printEnabled is added ONLY when true, so with print ordering off the
+  // response is byte-for-byte what it was before.
+  return NextResponse.json({
+    printStatus: await getPrintLock(session.id),
+    ...(printButtonAllowed(req.cookies) ? { printEnabled: true } : {}),
+  });
 }
