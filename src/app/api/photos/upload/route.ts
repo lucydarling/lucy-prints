@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getSlots } from "@/lib/photo-slots";
 import { checkUploadSize } from "@/lib/image-validation";
+import { reportUploadCheckSkipped } from "@/lib/upload-check-alert";
 import { FROZEN_MESSAGE, getPrintLock } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
@@ -10,7 +11,7 @@ import {
   tooManyRequestsResponse,
 } from "@/lib/rate-limit";
 
-// sharp (image decoding) needs the Node.js runtime.
+// sharp (image decoding, loaded lazily by the size check) needs the Node.js runtime.
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -173,6 +174,10 @@ export async function POST(req: NextRequest) {
     const sizeCheck = await checkUploadSize(buffer, printSize, slotSize);
     if (!sizeCheck.ok) {
       return NextResponse.json({ error: sizeCheck.message }, { status: 400 });
+    }
+    // The check itself couldn't run (sharp is broken, not the photo): accept, log, alert hourly.
+    if (sizeCheck.skipped) {
+      await reportUploadCheckSkipped(sizeCheck.skipped, { sessionId: session.id, slotKey: extraId || slotKey });
     }
 
     // Upload to Supabase Storage

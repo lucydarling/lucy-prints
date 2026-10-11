@@ -7,6 +7,7 @@ import { getPrintDimensions, getPrintSizeLabel, type PhotoSlot } from "@/lib/pho
 import { usePhotoStore } from "@/store/photo-store";
 import { prepareImageFile } from "@/lib/image-prep";
 import { SlotDetailsPanel } from "./SlotDetailsPanel";
+import { UploadErrorNote } from "./UploadErrorNote";
 
 interface PhotoSlotCardProps {
   slot: PhotoSlot;
@@ -195,6 +196,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
         <p className="text-xs text-gray-400 mt-0.5">
           {getPrintSizeLabel(slot.size, slot.orientation)}&quot; print
         </p>
+        <UploadErrorNote slotKey={slot.key} />
         {slot.dateField && (
           <input
             type="date"

@@ -212,10 +212,12 @@ export async function sendMagicLinkEmail({
 
 /**
  * Tell Kevin a print order was held or refused, or that the print partner's
- * pfRouter rejected one we sent (status "error"). Nothing here touches the customer.
+ * pfRouter rejected one we sent (status "error"), or that the photo upload
+ * size check is down and uploads are going through unchecked ("upload-check").
+ * Nothing here touches the customer.
  */
 export async function sendPrintOrderAlert(info: {
-  status: "held" | "refused" | "error";
+  status: "held" | "refused" | "error" | "upload-check";
   shopifyOrderId: string;
   shopifyOrderName?: string;
   sessionToken?: string;
@@ -225,6 +227,14 @@ export async function sendPrintOrderAlert(info: {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const name = info.shopifyOrderName || info.shopifyOrderId;
   const isError = info.status === "error";
+  if (info.status === "upload-check") {
+    return sendEmail({
+      to,
+      subject: "[Photo Lab] Upload size check is DOWN — uploads accepted unchecked",
+      html: `<p>The photo upload size/damage check could not run (the image library failed), so uploads are being <strong>accepted without it</strong>. Customers are not affected; only the check is off.</p>
+<ul>${info.reasons.map((r) => `<li style="white-space:pre-wrap">${esc(r)}</li>`).join("")}</ul>`,
+    });
+  }
   return sendEmail({
     to,
     subject: isError

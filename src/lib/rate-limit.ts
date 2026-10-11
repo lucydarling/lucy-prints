@@ -172,3 +172,30 @@ export function tooManyRequestsResponse(retryAfterSeconds: number): NextResponse
     }
   );
 }
+
+// ---------------------------------------------------------------------------
+// One-shot claims (e.g. "alert at most once an hour")
+// ---------------------------------------------------------------------------
+const localClaims = new Map<string, number>();
+
+/**
+ * True the first time `key` is claimed within `ttlSeconds`, false after —
+ * across all server instances via Redis (SET NX EX). If Redis is unavailable
+ * it falls back to this instance's memory, so a Redis outage can mean one
+ * claim per instance, never zero and never unbounded.
+ */
+export async function claimOnce(key: string, ttlSeconds: number): Promise<boolean> {
+  const client = getRedis();
+  if (client) {
+    try {
+      return (await client.set(key, "1", { nx: true, ex: ttlSeconds })) === "OK";
+    } catch (err) {
+      console.error("[rate-limit] claimOnce Redis error — using in-memory fallback.", err);
+    }
+  }
+  const now = Date.now();
+  const until = localClaims.get(key) ?? 0;
+  if (until > now) return false;
+  localClaims.set(key, now + ttlSeconds * 1000);
+  return true;
+}

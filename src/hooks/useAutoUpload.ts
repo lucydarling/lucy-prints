@@ -180,12 +180,21 @@ export function useAutoUpload() {
         }
       })
       .catch((err) => {
-        markUploadError(nextSlotKey, err.message || "Upload failed");
+        markUploadError(nextSlotKey, uploadErrorMessage(err));
       });
   }, [sessionToken, uploadQueue, uploadingSlot, photos, extras, setUploadingSlot, markUploaded, markUploadError]);
 }
 
-async function uploadPhoto({
+/** Shown under a photo whose upload failed for a reason other than the photo itself. */
+export const UPLOAD_FAILED_MESSAGE = "This photo didn't upload. Tap \u201cfailed \u2014 tap to retry\u201d at the top to try again.";
+
+/** The note shown to the customer: the server's own words for a 4xx, otherwise a plain retry hint. */
+export function uploadErrorMessage(err: unknown): string {
+  const e = err as { message?: string; customerFacing?: boolean };
+  return e?.customerFacing && e.message ? e.message : UPLOAD_FAILED_MESSAGE;
+}
+
+export async function uploadPhoto({
   sessionToken,
   slotKey,
   croppedUrl,
@@ -231,10 +240,13 @@ async function uploadPhoto({
       });
 
       if (!uploadRes.ok) {
-        const data = await uploadRes.json();
+        const data = await uploadRes.json().catch(() => ({}));
         const err = new Error(data.error || `Upload failed (${uploadRes.status})`);
-        // 409 = the book was sent to print; retrying can never succeed.
-        if (uploadRes.status === 409) throw Object.assign(err, { noRetry: true });
+        // Any 4xx (photo too small or damaged, book sent to print, unknown
+        // slot…) will fail the same way again: stop now and show the message.
+        if (uploadRes.status >= 400 && uploadRes.status < 500) {
+          throw Object.assign(err, { noRetry: true, customerFacing: true });
+        }
         throw err;
       }
 
