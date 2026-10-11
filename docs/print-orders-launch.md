@@ -11,7 +11,8 @@ Nothing is sent to Photo Finale or Persnickety. `live/` is never written (`LIVE_
 - Builder refuses any file whose shape (after padding) is not its product's `aspect` (pfRouter would silently center-crop it). `aspect` is derived from the print method in `config.ts`.
 - **Delivery (manual):** `npm run print-order:deliver -- <order id>` uploads to Dropbox and marks the order `sent` (section 5).
 - **`_error` check:** `GET /api/cron/print-order-errors` (Vercel Cron, daily at 15:00 UTC, `CRON_SECRET`-gated) and `npm run print-order:check-errors`. Each sent order found in `<hotfolder>/_error/` becomes `error` with pfRouter's `reason.txt`, and Kevin gets one alert.
-- **Not built:** the checkout button on the site, automatic delivery from the webhook, the prepaid-discount-code flow, "Ordered" labels in the book switcher / "my books" email.
+- **Step 4 (customer-facing, hidden):** the "Print my photos" button on `/review`, a server-side checkout route, customer emails, and "Ordered" labels. All of it is invisible until print ordering is turned on (section 8).
+- **Not built:** automatic delivery from the webhook; the **prepaid-prints discount-code flow** (skipped on purpose, section 9); the **shipped** email is built but wired to nothing.
 
 ## 2. Environment variables (Vercel, Production)
 Already set (see `.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SHOPIFY_DOMAIN`, `NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD`, `NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY`, `KV_REST_API_URL` / `KV_REST_API_TOKEN` (rate limiting).
@@ -26,14 +27,25 @@ New for print orders:
 | `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `DROPBOX_REFRESH_TOKEN`, `DROPBOX_ROOT_PATH` | Dropbox delivery (local `.env.local`) and the `_error` cron (Vercel). The refresh token comes from `npm run dropbox:connect`. | For delivery / cron |
 | `CRON_SECRET` | Gates `/api/cron/print-order-errors`; Vercel Cron sends it as a bearer token. Without it the route answers 500. | For the cron |
 | `PRINT_DESTINATION` | `demo` (default) or `live`. `live` also needs `TEST_MODE` off, and is blocked anyway while `LIVE_DELIVERY_ALLOWED` is false. **Do not set it.** | No |
+| `PRINT_ORDERS_ENABLED` | `true` shows the button to everyone and opens the checkout route. **Unset/anything else = off** (the launch switch). | No (default off) |
+| `PRINT_PREVIEW_SECRET` | 16+ characters. `/review?print_preview=<secret>` sets an httpOnly cookie in that browser; that cookie opens print ordering for that browser even with the flag off. | For the private preview |
 | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_ADMIN_DOMAIN` | Manual retry only (`print-order:retry`): Admin API token with `read_orders`, and the `*.myshopify.com` host. Not needed by the webhook. | Retry only |
 
-Database: 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) applied; 010 (`sent`/`error` statuses, `sent_at`, `destination`, `error_reason`, `error_at`) applied and verified 2026-10-10.
+Database: 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) applied; 010 (`sent`/`error` statuses, `sent_at`, `destination`, `error_reason`, `error_at`) applied and verified 2026-10-10. **011** (`customer_email`, `received_email_sent_at`, `held_email_sent_at`, `shipped_email_sent_at`) is written in `supabase/migrations/011_print_orders_customer_email.sql`; it must be applied **before** the step-4 code is deployed, because the webhook's upsert writes `customer_email`.
 
 ## 3. Shopify setup
 1. **Product** "Custom Photo Prints for Memory Book" (currently **Draft**, both variants $0.00; Standard `48078680424673`, Luxury `48078680457441`): set the Standard and Luxury prices and set it to Active. Price is flat per book; `photo_count` never affects price.
-2. **Shipping & handling:** make sure the cart charges shipping for this product (placeholder in plan: $6).
-3. **Checkout link:** the button (not yet wired) must open `buildCheckoutUrl` (`src/lib/shopify.ts`) so the cart carries `session_token` and `book_theme`. The webhook refuses a paid order without them. It should show `printingMessage()` ("You're printing X of Y photos") and run `validatePrintRequest()` first.
+2. **Shipping & handling = $6 flat, US only, as a shipping-profile rate (not a line item).** Exact steps (done by Kevin in Shopify admin; the store's current settings were not visible when this was written, so verify each screen):
+   1. Settings → **Shipping and delivery** → under *Shipping*, **Create custom shipping profile** (name: `Photo prints`).
+   2. **Add products** → pick **Custom Photo Prints for Memory Book** (both variants). A product belongs to exactly one profile, so this moves it out of *General*.
+   3. Set the ship-from location to the same one the other products use (iDrive Fulfillment, Salt Lake City).
+   4. **Create shipping zone** → name `United States`, country **United States** only → **Add rate** → *Set up your own rate*: name `Shipping & handling`, price **$6.00**. Do **not** add conditions (no "free over $75", no weight/price tiers). Save the zone, then **Save** the profile.
+   5. **Keep the $75 free-shipping rule from waiving it.** The $75 rule must not be a store-wide *Free shipping* discount. Check Discounts in admin: any **Free shipping** discount (automatic or code) applies to *every* shipping line in a cart, including this one. If one exists, delete it or move the free-over-$75 behaviour into the *General* profile as a conditional rate ("Free, order $75+") so it only applies to those products.
+   6. **Rebuy:** open Rebuy admin and check each of Cart / Smart Cart (free-shipping progress bar, **Discounts**) and any *Automations* that create or apply a discount. A progress bar alone is display-only and can't waive anything, but a Rebuy rule that applies a Shopify free-shipping discount can. Turn off any Rebuy rule that applies shipping discounts, or exclude the print product from it. (Rebuy's own screens were not inspected; trust the test in step 7.)
+   7. **Test (pass/fail):** with the product Active, open the checkout URL from the internal preview with the cart containing only the print product, and read the shipping line at checkout: it must say `Shipping & handling $6.00`. Then add a $75+ item in a second cart and check the print line still shows $6.00 (the cart-clear step means customers normally have prints only). Anything other than $6.00 means a free-shipping discount or Rebuy rule is still waiving it.
+   8. A non-US address must show *no shipping options* (prints are US-only to start). Photo Finale shipping countries are still open (section 7).
+   Placeholders: prints $20, S&H $6 in `config.ts`/the plan. Kevin sets the real prices and the Active status.
+3. **Checkout link:** built. `POST /api/sessions/[token]/print-checkout` counts the saved book from the database, runs `validatePrintRequest()`, and returns the `printingMessage()` line plus a URL that clears the cart (`/cart/clear?return_to=…`) and then adds the variant with `session_token`, `book_theme` and `photo_count` as cart attributes. The button shows the line with a confirm step, then redirects. The webhook refuses a paid order without those attributes.
 4. **Webhook:** Shopify admin → Settings → Notifications → Webhooks → Create webhook:
    - Event: **Order payment** (`orders/paid`), Format: JSON
    - URL: `https://memories.lucydarling.com/api/webhooks/shopify/orders-paid`
@@ -99,3 +111,28 @@ Database: 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) ap
 4. Is the dealer chosen by which hotfolder an order lands in (`demo/` vs `live/`)? Is `_error` inside each hotfolder? What happens to a processed order folder?
 5. How is a repeated `external_id` treated? (Gates `RESEND_ENABLED`.)
 6. Shipping speeds: the `delivery_type` values our dealer has active (Chari's team). Tracking (Jason, next week).
+
+## 8. Customer-facing pieces (step 4) and how to turn them on
+Everything below is invisible to customers until the switch is flipped. With it off, `/review` still shows the old "Direct print ordering coming soon" note, `print-status`, `siblings` and the my-books email return exactly what they did before, and `POST …/print-checkout` answers 404.
+
+**Who sees it:** (a) everyone, when `PRINT_ORDERS_ENABLED=true`; (b) only a browser that opened `https://memories.lucydarling.com/review?print_preview=<PRINT_PREVIEW_SECRET>` (httpOnly cookie, 30 days; a wrong secret just lands on a clean `/review`). Session emails are never used as a key: they aren't verified.
+
+**The button** is on `/review`. It is blocked, with the reason shown and no redirect, when the book isn't saved, photos are still uploading or failed, there is nothing saved to print, extras are over 12, the book can't be printed through the Photo Lab, or the book already has / is waiting on a print order. Otherwise it shows "You're printing X of Y photos…" with a confirm, then goes to Shopify.
+
+**Customer emails** (Resend, `prints@lucydarling.com`; `npm run print-order:email-test` sends samples to Kevin):
+- **Order received** — when the webhook records a `ready` order (counts, ship-to, "we prepare your prints and mail them"). Sent once per order (`received_email_sent_at`).
+- **We need photos (held)** — zero saved photos; links back to the book. Once per order (`held_email_sent_at`).
+- **Refused — NO customer email.** Kevin gets the alert and handles it by hand.
+- **Shipped** — template and `sendPrintOrderShipped()` exist but nothing calls them. Wire it when Photo Finale sends tracking details (`shipped_email_sent_at` is reserved).
+- While `TEST_MODE` is on, customer emails are sent only to `@lucydarling.com` addresses; others are skipped and logged. If migration 011 isn't applied, no customer email is sent (the check fails closed).
+
+**"Ordered" labels** — a book with a `ready`, `sent`, `refused` or `error` order is labelled "Ordered" in the book switcher and the my-books email (button reads "View This Book"). A `held` order isn't labelled (the customer can still edit). Labels follow the same switch as the button.
+
+**Before going live** (not done): apply 011 → deploy → set the real prices and Active status → do the S&H steps in section 3 → register the webhook (section 3.4) → set `PRINT_ORDERS_ENABLED=true`. Delivery to the printer stays manual (`print-order:deliver`) and `LIVE_DELIVERY_ALLOWED` stays false.
+
+## 9. Prepaid prints as discount codes — NOT built (future, needs a product decision)
+No "prepaid prints" product exists in Shopify (checked 2026-10-11: only "Custom Photo Prints for Memory Book", Draft). Until one does, there is nothing to detect, so no code, table or Admin API scope was added, and `SHOPIFY_ADMIN_*` is not in Vercel production. Design agreed for when it is built:
+- Detect a prepaid purchase on `orders/paid` (a separate line item/variant).
+- Issue a one-time Shopify discount code (Admin GraphQL `discountCodeBasicCreate`): **100% off the print product for the matching tier only** (a Standard prepay can't be used on a Luxury book), shipping excluded (S&H is still charged), `usageLimit` 1, 5-year `endsAt`, non-refundable. 100% of the product rather than a fixed amount, so the credit survives a price change.
+- Store it in a `print_credits` table (code, discount id, source order, email, tier, status, expires_at, used_order); apply with `?discount=CODE` on the checkout URL when the buyer's email has an unused credit; mark it used when a later order's `discount_codes` contains it.
+- Needs `write_discounts` + `read_discounts` on the Admin API app and the token in Vercel production.

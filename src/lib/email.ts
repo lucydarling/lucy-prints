@@ -269,7 +269,7 @@ export function customerEmailAllowed(to: string, testMode: boolean = TEST_MODE):
   return !testMode || /@lucydarling\.com$/i.test(to.trim());
 }
 
-async function sendCustomerEmail(params: { to: string; subject: string; html: string }): Promise<"sent" | "skipped"> {
+export async function sendCustomerEmail(params: { to: string; subject: string; html: string }): Promise<"sent" | "skipped"> {
   if (!customerEmailAllowed(params.to)) {
     console.warn(`[print-order-email] TEST_MODE: not sending "${params.subject}" to a non-lucydarling.com address`);
     return "skipped";
