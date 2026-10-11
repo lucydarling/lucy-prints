@@ -11,7 +11,7 @@ import {
   isSquarePrintSize,
   type PrintOrientation,
 } from "@/lib/photo-slots";
-import { UploadErrorNote } from "./UploadErrorNote";
+import { UploadErrorNote, useHasUploadError } from "./UploadErrorNote";
 
 interface ExtraSlotCardProps {
   extra: ExtraPrint;
@@ -37,6 +37,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
 
+  const hasUploadError = useHasUploadError(extra.id);
   const hasPhoto = extra.previewUrl || extra.croppedUrl;
   const displayUrl = extra.croppedUrl || extra.previewUrl;
   const isSquare = isSquarePrintSize(extra.size);
@@ -145,7 +146,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
               unoptimized
               className="object-cover"
             />
-            {extra.croppedUrl && (
+            {extra.croppedUrl && !hasUploadError && (
               <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                 <svg
                   className="w-2.5 h-2.5 text-white"
