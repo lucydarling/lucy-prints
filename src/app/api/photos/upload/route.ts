@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getSlots } from "@/lib/photo-slots";
+import { FROZEN_MESSAGE, getPrintLock } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
@@ -151,6 +152,11 @@ export async function POST(req: NextRequest) {
     // a browser that has unlocked it — answered exactly like an unknown session.
     if (!session || !isThemeAllowed(session.book_theme, req.cookies)) {
       return NextResponse.json({ error: "Invalid or expired session" }, { status: 404 });
+    }
+
+    // A book that has been sent to print no longer takes photos or crops.
+    if ((await getPrintLock(session.id)) === "frozen") {
+      return NextResponse.json({ error: FROZEN_MESSAGE }, { status: 409 });
     }
 
     // Strict allowlist: a book slot must belong to THIS session's book.

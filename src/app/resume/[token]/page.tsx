@@ -5,12 +5,9 @@ import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
 import {
-  choiceFromPrintLabel,
+  regionChoicesFromStoredPhotos,
   getProductForTheme,
-  getRegions,
-  getSlots,
   type PrintSize,
-  type RegionChoice,
 } from "@/lib/photo-slots";
 import { clearShelvedBook, openBook, shelvedBookFor } from "@/lib/open-book";
 import type { PhotoEntry } from "@/store/photo-store";
@@ -203,27 +200,8 @@ export default function ResumePage({
         }
       }
 
-      // Restore each region's layout from how its photos were stored
-      // (print_size holds the size as it prints: "3x4", "6x4"…). The first
-      // photo that matches one of the region's layouts decides.
-      const regionOf = new Map(
-        getSlots(data.session.bookTheme)
-          .filter((s) => s.region)
-          .map((s) => [s.key, { region: s.region!, index: s.regionIndex ?? 0 }])
-      );
-      const choices: Record<string, RegionChoice> = {};
-      for (const region of getRegions(data.session.bookTheme)) {
-        const stored = Object.entries(data.photos)
-          .filter(([key]) => regionOf.get(key)?.region === region.key)
-          .sort(([a], [b]) => (regionOf.get(a)?.index ?? 0) - (regionOf.get(b)?.index ?? 0));
-        for (const [, p] of stored) {
-          const choice = choiceFromPrintLabel(region, p.printSize);
-          if (choice) {
-            choices[region.key] = choice;
-            break;
-          }
-        }
-      }
+      // Restore each region's layout from how its photos were stored.
+      const choices = regionChoicesFromStoredPhotos(data.session.bookTheme, data.photos);
       if (Object.keys(choices).length > 0) {
         usePhotoStore.setState((s) => ({
           regionLayouts: { ...s.regionLayouts, ...choices },

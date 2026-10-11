@@ -10,6 +10,7 @@ import {
   isJournalTheme,
   isSideBookTheme,
 } from "@/lib/klaviyo";
+import { pickReusableSession } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
@@ -49,14 +50,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Valid book theme required" }, { status: 400 });
     }
 
-    // Check for existing session with same email + theme
-    const { data: existing } = await supabaseAdmin
+    // Check for an existing session with same email + theme. A book that has
+    // been sent to print is never reused: its owner starts a new one.
+    const { data: candidates } = await supabaseAdmin
       .from("sessions")
       .select("id, token, photo_count")
       .eq("email", email.toLowerCase().trim())
       .eq("book_theme", bookTheme)
       .eq("status", "active")
-      .maybeSingle();
+      .order("created_at", { ascending: false });
+    const existing = await pickReusableSession(candidates ?? []);
 
     if (existing) {
       // Update baby info + refresh the activity timestamp.

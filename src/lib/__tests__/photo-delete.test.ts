@@ -29,6 +29,10 @@ test("print lock: ready/refused are frozen, held stays editable, none is unlocke
   assert.equal(lockFromStatuses(["ready"]), "frozen");
   assert.equal(lockFromStatuses(["refused"]), "frozen");
   assert.equal(lockFromStatuses(["held", "ready"]), "frozen");
+  // Sent to the printer, or failed there: still never editable.
+  assert.equal(lockFromStatuses(["sent"]), "frozen");
+  assert.equal(lockFromStatuses(["error"]), "frozen");
+  assert.equal(lockFromStatuses(["held", "sent"]), "frozen");
 });
 
 test("removeFromCloud: drops queued/uploaded state, deletes on the server, surfaces server errors", async () => {
