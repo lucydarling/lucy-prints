@@ -17,6 +17,7 @@ import { RESEND_ENABLED, LIVE_DELIVERY_ALLOWED, resolveDestination, type Destina
 import type { RecordedOrderRow } from "@/lib/print-orders/build-from-snapshot";
 import type { PrintSnapshot } from "@/lib/print-orders/paid-order";
 import { GET as cronGET } from "@/app/api/cron/print-order-errors/route";
+import { POST as webhookPOST } from "@/app/api/webhooks/shopify/orders-paid/route";
 
 const ROOT = "/LucyDarling-PrintOrders";
 const DEMO: Destination = resolveDestination("demo", true);
@@ -406,5 +407,22 @@ test("cron route: refuses without CRON_SECRET configured, and without the right 
   } finally {
     if (saved === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = saved;
+  }
+});
+
+test("webhook route: no signature is 401 whether or not the secret is set; a signed request with no secret is 500", async () => {
+  const saved = process.env.SHOPIFY_WEBHOOK_SECRET;
+  const req = (hmac?: string) =>
+    new NextRequest("http://x/api/webhooks/shopify/orders-paid", { method: "POST", body: "{}", headers: hmac ? { "x-shopify-hmac-sha256": hmac } : {} });
+  try {
+    delete process.env.SHOPIFY_WEBHOOK_SECRET;
+    assert.equal((await webhookPOST(req())).status, 401);
+    assert.equal((await webhookPOST(req("abc"))).status, 500);
+    process.env.SHOPIFY_WEBHOOK_SECRET = "whsec";
+    assert.equal((await webhookPOST(req())).status, 401);
+    assert.equal((await webhookPOST(req("bad"))).status, 401);
+  } finally {
+    if (saved === undefined) delete process.env.SHOPIFY_WEBHOOK_SECRET;
+    else process.env.SHOPIFY_WEBHOOK_SECRET = saved;
   }
 });

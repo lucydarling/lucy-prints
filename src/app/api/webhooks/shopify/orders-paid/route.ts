@@ -15,11 +15,17 @@ export const maxDuration = 60;
  * print_orders. Test mode: external ids carry a TEST- prefix and NOTHING is
  * delivered to a print partner. Not linked from anywhere.
  *
- * A bad or missing signature answers 401 with no detail. Our own failures
+ * A bad or missing signature answers 401 with no detail (a missing one even
+ * before SHOPIFY_WEBHOOK_SECRET is set; a signed request then gets 500 so
+ * Shopify retries once it is). Our own failures
  * (database down) answer 500 so Shopify retries; a refused or held print
  * order is a recorded business outcome and answers 200.
  */
 export async function POST(req: NextRequest) {
+  // No signature at all is never Shopify: 401, even before the secret is configured.
+  if (!req.headers.get("x-shopify-hmac-sha256")) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const secret = process.env.SHOPIFY_WEBHOOK_SECRET ?? "";
   if (!secret) {
     console.error("SHOPIFY_WEBHOOK_SECRET is not set — refusing all webhooks");
