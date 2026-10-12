@@ -137,6 +137,26 @@ export const ASPECT_TOLERANCE = 0.005;
 export const MIN_PRINTS_PER_ORDER = 5;
 
 /**
+ * Klaviyo "time for another print round" property (print_round_due), see
+ * round-reminders.ts. Thresholds in one place so they are easy to tune.
+ */
+export const ROUND_REMINDER = {
+  /** welcome_baby: the baby is this many whole months old (inclusive range). */
+  WELCOME_BABY_MIN_MONTHS: 3,
+  WELCOME_BABY_MAX_MONTHS: 12,
+  /** first_year: from this age on. */
+  FIRST_YEAR_MIN_MONTHS: 13,
+  /** welcome_baby and first_year need at least this many unprinted prints. */
+  MIN_UNPRINTED: 10,
+  /** first_year: stay quiet if an order was placed in the last this-many days. */
+  FIRST_YEAR_QUIET_DAYS: 60,
+  /** growing_up: the child is this many whole years old or more... */
+  GROWING_UP_MIN_YEARS: 5,
+  /** ...and has at least this many unprinted prints (one order's minimum). */
+  GROWING_UP_MIN_UNPRINTED: MIN_PRINTS_PER_ORDER,
+} as const;
+
+/**
  * Hidden sanity limit — customers are never shown it and extras are charged per
  * print with no cap. It only catches a mistake (a runaway quantity). Counted
  * by quantity, per order.

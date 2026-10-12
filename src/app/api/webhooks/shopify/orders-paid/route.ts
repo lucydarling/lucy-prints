@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handlePaidOrder, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
 import { realPaidOrderDeps } from "@/lib/print-orders/paid-order-deps";
 import { verifyShopifyHmac } from "@/lib/print-orders/webhook-hmac";
+import { syncPrintRoundReminders } from "@/lib/print-orders/round-reminder-sync";
 
 // Image decoding (sharp) and node:crypto need the Node.js runtime.
 export const runtime = "nodejs";
@@ -47,6 +48,11 @@ export async function POST(req: NextRequest) {
   }
   try {
     const result = await handlePaidOrder(order, realPaidOrderDeps());
+    // Refresh the Klaviyo round-reminder properties (only when print ordering is
+    // on for everyone; never throws, never changes the webhook's answer).
+    if (result.status === "ready" && result.sessionId) {
+      await syncPrintRoundReminders(result.sessionId, { flagOnly: true });
+    }
     return NextResponse.json({ status: result.status });
   } catch (err) {
     console.error("print order webhook failed:", err);

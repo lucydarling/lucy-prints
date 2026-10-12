@@ -467,6 +467,48 @@ async function patchProfile(
 }
 
 // ─────────────────────────────────────────────
+// Profile properties only (print round reminders)
+// ─────────────────────────────────────────────
+
+/**
+ * Writes ONLY the given custom properties on the profile for `email`
+ * (creating the profile if it does not exist). Touches no consent, list or
+ * other property. Never throws; returns whether Klaviyo accepted it.
+ */
+export async function setProfileProperties(
+  email: string,
+  properties: Record<string, unknown>
+): Promise<boolean> {
+  if (!process.env.KLAVIYO_API_KEY) return false;
+  const attributes = { email: email.toLowerCase().trim(), properties };
+  try {
+    const res = await fetch(`${KLAVIYO_BASE}/profiles/`, {
+      method: "POST",
+      headers: klaviyoHeaders(),
+      body: JSON.stringify({ data: { type: "profile", attributes } }),
+    });
+    if (res.status === 200 || res.status === 201) return true;
+    if (res.status === 409) {
+      const json = await res.json();
+      const id: string | undefined = json?.errors?.[0]?.meta?.duplicate_profile_id;
+      if (!id) return false;
+      const patch = await fetch(`${KLAVIYO_BASE}/profiles/${id}/`, {
+        method: "PATCH",
+        headers: klaviyoHeaders(),
+        body: JSON.stringify({ data: { type: "profile", id, attributes: { properties } } }),
+      });
+      if (!patch.ok) console.error(`[Klaviyo] Property patch failed (${patch.status})`);
+      return patch.ok;
+    }
+    console.error(`[Klaviyo] Property write failed (${res.status})`);
+    return false;
+  } catch (err) {
+    console.error("[Klaviyo] Property write error:", err);
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────
 // SMS consent subscription
 // ─────────────────────────────────────────────
 

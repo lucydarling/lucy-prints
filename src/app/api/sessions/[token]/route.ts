@@ -9,6 +9,7 @@ import {
   isSideBookTheme,
 } from "@/lib/klaviyo";
 import { isThemeAllowed } from "@/lib/preview-gate";
+import { syncPrintRoundReminders } from "@/lib/print-orders/round-reminder-sync";
 
 /**
  * PATCH /api/sessions/[token]
@@ -108,6 +109,9 @@ export async function PATCH(
       if (syncStatusError) {
         console.error("Klaviyo sync status persist error (patch):", syncStatusError);
       }
+
+      // Round-reminder properties: only when print ordering is on for this caller.
+      if (!isSideBook) await syncPrintRoundReminders(session.id, { jar: req.cookies });
 
       // If a birthdate was just added for the first time, fire the signup event
       // so the milestone flow starts. We check `babyBirthdate` from the request

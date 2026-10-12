@@ -11,6 +11,7 @@ import {
   isSideBookTheme,
 } from "@/lib/klaviyo";
 import { isThemeAllowed } from "@/lib/preview-gate";
+import { syncPrintRoundReminders } from "@/lib/print-orders/round-reminder-sync";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -101,6 +102,9 @@ export async function POST(req: NextRequest) {
       if (syncStatusError) {
         console.error("Klaviyo sync status persist error (existing):", syncStatusError);
       }
+
+      // Round-reminder properties: only when print ordering is on for this caller.
+      if (!isSideBook) await syncPrintRoundReminders(existing.id, { jar: req.cookies });
 
       return NextResponse.json({
         token: existing.token,
