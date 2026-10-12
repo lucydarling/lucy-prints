@@ -8,7 +8,9 @@ import { DropboxApiError, DropboxClient, dropboxCredentialsFromEnv, joinPath, ty
  *   staging/<folder>-run-<id>/   built here first (never shared, never watched)
  *   demo/<folder>/               the demo dealer's hotfolder (pfRouter: one subfolder = one order)
  *   demo/_error/<folder>/        where pfRouter moves a rejected order, with reason.txt
- *   demo/processed/<folder>/     where pfRouter moves an accepted order (postAction "move"; Photo Finale, 2026-10-12)
+ *   processed/demo/<folder>/     where pfRouter moves an accepted order (postAction "move"). OUTSIDE the
+ *   processed/live/<folder>/     hotfolders on purpose: pfRouter treats every subfolder of a hotfolder as an order.
+ *                                We configure this destination ourselves; we only ever READ it (never writable).
  *   live/…                       the real dealer — nothing writes here until LIVE_DELIVERY_ALLOWED
  */
 export const STAGING = "staging";
@@ -42,7 +44,7 @@ export const orderPath = (c: DropboxClient, dest: Destination, folder: string) =
 export const errorPath = (c: DropboxClient, dest: Destination, folder?: string) =>
   folder ? joinPath(c.root, dest.hotfolder, ERROR_FOLDER, folder) : joinPath(c.root, dest.hotfolder, ERROR_FOLDER);
 export const processedPath = (c: DropboxClient, dest: Destination, folder: string) =>
-  joinPath(c.root, dest.hotfolder, PROCESSED_FOLDER, folder);
+  joinPath(c.root, PROCESSED_FOLDER, dest.hotfolder, folder);
 const runPrefix = (folder: string) => `${folder}-run-`;
 
 /**
@@ -84,10 +86,10 @@ export class DropboxDestination implements OrderDestination {
     if (await this.client.getMetadata(errorPath(this.client, this.dest, folder))) {
       throw new Error(`${folder} is already in ${ERROR_FOLDER} — refusing to send it again`);
     }
-    // pfRouter moves an accepted order out of the hotfolder into processed/, so the
-    // hotfolder check above no longer sees it; this keeps a re-run from sending it twice.
+    // pfRouter moves an accepted order out of the hotfolder into <root>/processed/<demo|live>/,
+    // so the hotfolder check above no longer sees it; this keeps a re-run from sending it twice.
     if (await this.client.getMetadata(processedPath(this.client, this.dest, folder))) {
-      throw new Error(`${folder} is already in ${PROCESSED_FOLDER} — refusing to send it again`);
+      throw new Error(`${folder} is already in ${PROCESSED_FOLDER}/${this.dest.hotfolder} — refusing to send it again`);
     }
 
     try {

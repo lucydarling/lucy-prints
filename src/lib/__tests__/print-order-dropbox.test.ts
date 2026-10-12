@@ -10,7 +10,7 @@ import {
   joinPath,
   normalizeRoot,
 } from "@/lib/print-orders/dropbox";
-import { DropboxDestination, assertDestinationWritable, dropboxClientFor } from "@/lib/print-orders/dropbox-destination";
+import { DropboxDestination, assertDestinationWritable, dropboxClientFor, processedPath } from "@/lib/print-orders/dropbox-destination";
 import { RESEND_DISABLED_MESSAGE, deliverPrintOrder, type DeliverDeps } from "@/lib/print-orders/deliver";
 import { checkErrorFolder, externalIdFromFolder } from "@/lib/print-orders/error-monitor";
 import { RESEND_ENABLED, LIVE_DELIVERY_ALLOWED, resolveDestination, type Destination } from "@/lib/print-orders/config";
@@ -300,18 +300,41 @@ test("deliver: once pfRouter has moved the order to processed/, a re-run is refu
   const first = deliverDeps(fake, readyRow());
   await deliverPrintOrder(ORDER_ID, {}, first.deps);
   assert.deepEqual(first.marks, [[ORDER_ID, "ready"]]);
-  // pfRouter's postAction "move": demo/<order> -> demo/processed/<order>
+  // pfRouter's postAction "move": demo/<order> -> <root>/processed/demo/<order> (outside the hotfolder)
   const files = fake.children(`${ROOT}/demo/TEST-${ORDER_ID}`);
-  for (const f of files) fake.addFile(`${ROOT}/demo/processed/TEST-${ORDER_ID}/${f.name}`, Buffer.from("x"));
+  for (const f of files) fake.addFile(`${ROOT}/processed/demo/TEST-${ORDER_ID}/${f.name}`, Buffer.from("x"));
   const gone = `${ROOT}/demo/TEST-${ORDER_ID}`.toLowerCase();
   for (const k of [...fake.nodes.keys()]) if (k === gone || k.startsWith(`${gone}/`)) fake.nodes.delete(k);
   assert.equal(fake.has(`${ROOT}/demo/TEST-${ORDER_ID}`), false);
 
   // Even with the DB row wrongly back at "ready" (the "marking sent failed" case), the order is not sent twice.
   const again = deliverDeps(fake, readyRow());
-  await assert.rejects(deliverPrintOrder(ORDER_ID, {}, again.deps), /already in processed/);
+  await assert.rejects(deliverPrintOrder(ORDER_ID, {}, again.deps), /already in processed\/demo/);
   assert.deepEqual(again.marks, []);
   assert.equal(fake.has(`${ROOT}/demo/TEST-${ORDER_ID}`), false);
+});
+
+test("processed/: lives outside both hotfolders, is read-only for us, and a processed live order is not re-sent", async () => {
+  const demo = DEMO;
+  const live = LIVE;
+  const fake = new FakeDropbox();
+  const c = client(fake);
+  assert.equal(processedPath(c, demo, "TEST-1"), `${ROOT}/processed/demo/TEST-1`);
+  assert.equal(processedPath(c, live, "1"), `${ROOT}/processed/live/1`);
+  // Reading inside the root works (the guard's reads cover the new paths)...
+  fake.addFile(`${ROOT}/processed/demo/TEST-1/a.jpg`, Buffer.from("x"));
+  assert.ok(await c.getMetadata(processedPath(c, demo, "TEST-1")));
+  // ...but we never write or delete there, and nothing escapes the root.
+  await assert.rejects(c.ensureFolder(`${ROOT}/processed/demo/TEST-2`), DropboxPathRefused);
+  await assert.rejects(c.upload(`${ROOT}/processed/demo/TEST-2/a.jpg`, Buffer.from("x")), DropboxPathRefused);
+  await assert.rejects(c.delete(`${ROOT}/processed/demo/TEST-1`), DropboxPathRefused);
+  await assert.rejects(c.getMetadata(`${ROOT}/processed/../../Other`), DropboxPathRefused);
+  // A hotfolder-level "processed" is NOT where we look any more.
+  const fake2 = new FakeDropbox();
+  fake2.addFile(`${ROOT}/demo/processed/TEST-${ORDER_ID}/a.jpg`, Buffer.from("x"));
+  const ok = deliverDeps(fake2, readyRow());
+  await deliverPrintOrder(ORDER_ID, {}, ok.deps); // not blocked: that folder is not the processed location
+  assert.deepEqual(ok.marks, [[ORDER_ID, "ready"]]);
 });
 
 test("deliver: refuses anything not ready; a sent order needs --force, and resend stays disabled", async () => {
