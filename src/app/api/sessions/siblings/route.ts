@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { BOOK_THEMES } from "@/lib/photo-slots";
+import { BOOK_THEMES, getSlots } from "@/lib/photo-slots";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import { printButtonAllowed } from "@/lib/print-orders/print-gate";
-import { orderedSessionIds } from "@/lib/print-orders/ordered";
+import { printedCounts } from "@/lib/print-orders/ordered";
 import {
   checkRateLimit,
   RATE_LIMITS,
@@ -58,9 +58,9 @@ export async function POST(req: NextRequest) {
     // browser that has unlocked it.
     const cookie = req.cookies;
     const visible = (sessions || []).filter((s) => isThemeAllowed(s.book_theme, cookie));
-    // "Ordered" labels exist only while print ordering is on for this browser; otherwise
+    // "X of 49 printed" exists only while print ordering is on for this browser; otherwise
     // the response is exactly what it was before.
-    const ordered = printButtonAllowed(cookie) ? await orderedSessionIds(visible.map((s) => s.id as string)) : new Set<string>();
+    const printed = printButtonAllowed(cookie) ? await printedCounts(visible.map((s) => s.id as string)) : new Map<string, number>();
     const enriched = visible.map((s) => {
       const theme = BOOK_THEMES.find((t) => t.id === s.book_theme);
       return {
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         themeName: theme?.name ?? s.book_theme,
         babyName: s.baby_name as string | null,
         photoCount: s.photo_count || 0,
-        ...(ordered.has(s.id as string) ? { ordered: true } : {}),
+        ...(printed.get(s.id as string) ? { printedSoFar: printed.get(s.id as string), bookSlots: getSlots(s.book_theme).length } : {}),
       };
     });
 

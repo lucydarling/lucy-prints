@@ -1,8 +1,8 @@
 /**
  * Shopify integration config for lucy-prints checkout.
  *
- * Product: "Custom Photo Prints for Memory Book"
- * Created as Draft in Shopify admin — set pricing & activate when ready.
+ * Product: "Custom Photo Prints for Memory Book", one variant "Photo print" (id via
+ * NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT; see print-orders/config.ts). Price is per print.
  *
  * Variant IDs and store domain come from env vars so they can differ
  * between staging and production without a code change.
@@ -12,70 +12,42 @@ const SHOPIFY_STORE_DOMAIN =
   process.env.NEXT_PUBLIC_SHOPIFY_DOMAIN || "www.lucydarling.com";
 
 /**
- * Throw a clear, actionable error when a required Shopify variant id is missing,
- * rather than silently building a checkout link to a nonexistent variant (which
- * fails opaquely at Shopify's cart).
- *
- * The env reads below are written as static `process.env.NEXT_PUBLIC_*` accesses
- * (not dynamic lookups) so Next.js can inline them into the client bundle.
- */
-function requireVariant(envName: string, value: string | undefined): string {
-  if (!value) {
-    throw new Error(
-      `Missing required env var ${envName}. Set the Shopify photo-print variant ids ` +
-        `(NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD and NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY) ` +
-        `in your environment before building checkout links.`
-    );
-  }
-  return value;
-}
-
-/** Shopify variant IDs for the photo print product (required env vars) */
-export const SHOPIFY_VARIANTS = {
-  get standard() {
-    return requireVariant(
-      "NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD",
-      process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD
-    );
-  },
-  get luxury() {
-    return requireVariant(
-      "NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY",
-      process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY
-    );
-  },
-} as const;
-
-/**
  * Build a Shopify cart permalink that sends the customer straight to checkout
- * with the correct variant, quantity = 1, and session metadata as cart attributes.
+ * with one line per print variant (quantity = prints at that price) and the
+ * round as cart attributes.
  *
  * URL format:
- *   https://www.lucydarling.com/cart/{variantId}:1?attributes[session_token]=xxx&attributes[book_theme]=xxx&attributes[photo_count]=xx
+ *   https://www.lucydarling.com/cart/{variantA}:{qty},{variantB}:{qty}?attributes[round_id]=…&attributes[session_token]=…
  *
- * Cart attributes appear on the Shopify order, so fulfillment
- * can pull the photos from Supabase using the session token.
+ * Cart attributes appear on the Shopify order. `round_id` names the exact list
+ * of prints recorded at the click; the webhook prints that list and nothing else.
  */
 export function buildCheckoutUrl({
-  tier,
+  quantities,
   sessionToken,
   bookTheme,
-  photoCount,
+  roundId,
+  printCount,
 }: {
-  tier: "standard" | "luxury";
+  /** variant id → quantity */
+  quantities: Record<string, number>;
   sessionToken: string;
   bookTheme: string;
-  photoCount: number;
+  roundId: string;
+  printCount: number;
 }): string {
-  const variantId = SHOPIFY_VARIANTS[tier];
+  const lines = Object.entries(quantities).filter(([, q]) => q > 0);
+  if (lines.length === 0) throw new Error("checkout needs at least one print");
+  const cart = lines.map(([id, q]) => `${id}:${q}`).join(",");
 
   const params = new URLSearchParams({
     "attributes[session_token]": sessionToken,
     "attributes[book_theme]": bookTheme,
-    "attributes[photo_count]": String(photoCount),
+    "attributes[round_id]": roundId,
+    "attributes[photo_count]": String(printCount),
   });
 
-  return `https://${SHOPIFY_STORE_DOMAIN}/cart/${variantId}:1?${params.toString()}`;
+  return `https://${SHOPIFY_STORE_DOMAIN}/cart/${cart}?${params.toString()}`;
 }
 
 /**

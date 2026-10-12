@@ -204,6 +204,7 @@ export async function uploadPhoto({
   orientation,
   isExtra,
   extraId,
+  reprint,
 }: {
   sessionToken: string;
   slotKey: string;
@@ -214,6 +215,8 @@ export async function uploadPhoto({
   orientation?: string;
   isExtra: boolean;
   extraId?: string;
+  /** A replacement crop for an already-printed slot (a paid reprint). */
+  reprint?: boolean;
 }) {
   // Convert base64 data URL to blob
   const res = await fetch(croppedUrl);
@@ -229,6 +232,7 @@ export async function uploadPhoto({
   if (orientation) formData.append("orientation", orientation);
   if (isExtra) formData.append("isExtra", "true");
   if (extraId) formData.append("extraId", extraId);
+  if (reprint) formData.append("reprint", "true");
 
   // Retry up to 3 times with exponential backoff
   let lastError: Error | null = null;

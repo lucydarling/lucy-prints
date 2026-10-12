@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { removeFromCloud } from "@/lib/remove-from-cloud";
+import { usePrintedStore } from "@/store/printed-store";
 import Image from "next/image";
 import { usePhotoStore, type ExtraPrint } from "@/store/photo-store";
 import { detectImageOrientation, prepareImageFile } from "@/lib/image-prep";
@@ -34,6 +35,8 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
   const setExtraOrientation = usePhotoStore((s) => s.setExtraOrientation);
   const removeExtra = usePhotoStore((s) => s.removeExtra);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A printed extra is locked, quantity included; a new extra prints more.
+  const printed = usePrintedStore((s) => s.printedExtras.includes(extra.id));
   const [isDragOver, setIsDragOver] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
 
@@ -120,7 +123,8 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
 
   return (
     <div
-      className={`flex items-center gap-3 p-3 rounded-xl bg-white border shadow-sm transition-colors ${
+      inert={printed}
+      className={`flex items-center gap-3 p-3 rounded-xl bg-white border shadow-sm transition-colors ${printed ? "opacity-70 " : ""}${
         isDragOver
           ? "border-rose-400 bg-rose-50"
           : "border-gray-100"
@@ -194,6 +198,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
         <p className="text-xs text-gray-400 mt-0.5">
           {sizeLabel}&quot; {shapeLabel} print
         </p>
+        {printed && <p className="mt-1 text-xs font-medium text-emerald-700">Printed</p>}
         <UploadErrorNote slotKey={extra.id} />
 
         {/* Square sizes look the same either way — only offer the choice

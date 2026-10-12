@@ -76,7 +76,7 @@ export async function sendMyBooksEmail({
   sessions,
 }: {
   to: string;
-  sessions: Array<{ token: string; themeName: string; babyName?: string | null; photoCount: number; ordered?: boolean }>;
+  sessions: Array<{ token: string; themeName: string; babyName?: string | null; photoCount: number; printedSoFar?: number; bookSlots?: number }>;
 }) {
   const subject =
     sessions.length === 1
@@ -94,9 +94,9 @@ export async function sendMyBooksEmail({
       return `
         <div style="border:1px solid #F3F4F6;border-radius:10px;padding:16px 20px;margin-bottom:12px;">
           <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 2px 0;">${label}</p>
-          <p style="font-size:13px;color:#9CA3AF;margin:0 0 12px 0;">${s.photoCount} photo${s.photoCount !== 1 ? "s" : ""} saved${s.ordered ? ` &middot; <strong style="color:#6B7280;">Ordered</strong>` : ""}</p>
+          <p style="font-size:13px;color:#9CA3AF;margin:0 0 12px 0;">${s.photoCount} photo${s.photoCount !== 1 ? "s" : ""} saved${s.printedSoFar ? ` &middot; <strong style="color:#6B7280;">${s.printedSoFar} of ${s.bookSlots} printed</strong>` : ""}</p>
           <a href="${resumeUrl}" style="display:inline-block;background-color:#F43F5E;color:#FFFFFF;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">
-            ${s.ordered ? "View This Book" : "Continue This Book"}
+            Continue This Book
           </a>
         </div>`;
     })
@@ -336,35 +336,48 @@ function shipToHtml(a: PrintEmailShipTo): string {
 export function printOrderReceivedEmail(info: {
   bookName: string;
   babyName?: string | null;
-  bookPrints: number;
+  /** This round's counts. */
+  newPhotos: number;
   extraPrints: number;
+  reprints: number;
+  /** Progress after this order: distinct book slots printed, out of the book's slots. */
+  printedSoFar: number;
+  bookSlots: number;
   shipTo: PrintEmailShipTo;
   orderName?: string;
 }): { subject: string; html: string } {
   const what = info.babyName ? `${info.babyName}'s ${info.bookName}` : info.bookName;
-  const extras = info.extraPrints > 0 ? ` plus ${info.extraPrints} extra print${info.extraPrints === 1 ? "" : "s"}` : "";
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const parts = [
+    info.newPhotos > 0 ? plural(info.newPhotos, "new photo") : "",
+    info.extraPrints > 0 ? plural(info.extraPrints, "extra print") : "",
+    info.reprints > 0 ? plural(info.reprints, "reprint") : "",
+  ].filter(Boolean);
+  const printing = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0] ?? "";
+  const progress = info.bookSlots > 0 ? `${info.printedSoFar} of ${info.bookSlots} photos printed so far` : "";
   return {
     subject: `We've got your photo order${info.orderName ? ` (${info.orderName})` : ""}`,
     html: printEmailShell("We've got your photo order", `
         <p style="${P}">Your photos for <strong>${escHtml(what)}</strong> are on their way to print.</p>
         <div style="border:1px solid #F3F4F6;border-radius:10px;padding:16px 20px;margin:0 0 16px 0;">
           <p style="font-size:13px;color:#9CA3AF;margin:0 0 4px 0;">Printing</p>
-          <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 12px 0;">${info.bookPrints} photo${info.bookPrints === 1 ? "" : "s"}${escHtml(extras)}</p>
+          <p style="font-size:14px;font-weight:600;color:#1F2937;margin:0 0 ${progress ? "4px" : "12px"} 0;">${escHtml(printing)}</p>
+          ${progress ? `<p style="font-size:13px;color:#6B7280;margin:0 0 12px 0;">${escHtml(progress)}</p>` : ""}
           <p style="font-size:13px;color:#9CA3AF;margin:0 0 4px 0;">Shipping to</p>
           <p style="font-size:14px;color:#1F2937;line-height:1.5;margin:0;">${shipToHtml(info.shipTo)}</p>
         </div>
         <p style="${P}">What happens next: we prepare your prints and mail them to the address above.</p>
-        <p style="font-size:12px;color:#9CA3AF;line-height:1.5;margin:0;">Your book is now locked so the order can&rsquo;t change. You can always start a new book.</p>`),
+        <p style="font-size:12px;color:#9CA3AF;line-height:1.5;margin:0;">The photos in this order are now locked. Your book stays open, so you can keep adding photos for your next order.</p>`),
   };
 }
 
-/** "We need photos": the order was paid but nothing is saved to print yet. */
+/** "We're checking your order": paid, but part of the book changed between checkout and payment. */
 export function printOrderHeldEmail(info: { resumeUrl: string; orderName?: string }): { subject: string; html: string } {
   return {
-    subject: "Add your photos to finish your print order",
-    html: printEmailShell("Add your photos to finish your order", `
-        <p style="${P}">We received your print order${info.orderName ? ` (${escHtml(info.orderName)})` : ""}, but there aren&rsquo;t any saved photos in your book yet, so there&rsquo;s nothing to print.</p>
-        <p style="${P}">Add your photos, then reply to this email and we&rsquo;ll send your order to print.</p>
+    subject: "We're checking your print order",
+    html: printEmailShell("We're checking your order", `
+        <p style="${P}">We received your print order${info.orderName ? ` (${escHtml(info.orderName)})` : ""}, but part of your book changed between checkout and payment, so we&rsquo;re checking it before it goes to print. You don&rsquo;t need to pay again.</p>
+        <p style="${P}">If you removed a photo by mistake, add it back and reply to this email.</p>
         <a href="${escHtml(info.resumeUrl)}" style="display:block;text-align:center;background-color:#FAB8A9;color:#FFFFFF;padding:14px 24px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;">
           Back to My Photo Book
         </a>`),

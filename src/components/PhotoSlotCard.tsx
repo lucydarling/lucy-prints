@@ -8,6 +8,8 @@ import { usePhotoStore } from "@/store/photo-store";
 import { prepareImageFile } from "@/lib/image-prep";
 import { SlotDetailsPanel } from "./SlotDetailsPanel";
 import { UploadErrorNote, useHasUploadError } from "./UploadErrorNote";
+import { useSaveStore } from "@/store/save-store";
+import { refreshPrintedState, usePrintedStore } from "@/store/printed-store";
 
 interface PhotoSlotCardProps {
   slot: PhotoSlot;
@@ -23,6 +25,12 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
   const detailsMode = usePhotoStore((s) => s.detailsMode);
   const hasUploadError = useHasUploadError(slot.key);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const reprintInputRef = useRef<HTMLInputElement>(null);
+  // A printed photo is locked; it can only be replaced by a paid reprint.
+  const printed = usePrintedStore((s) => s.printedSlots.includes(slot.key));
+  const reprintPending = usePrintedStore((s) => s.reprintSlots.includes(slot.key));
+  const setReprintDraft = usePrintedStore((s) => s.setReprintDraft);
+  const sessionToken = useSaveStore((s) => s.sessionToken);
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
@@ -44,6 +52,32 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
     },
     [slot.key, setPhoto, setEditingSlot]
   );
+
+  const handleReprintFile = async (file: File) => {
+    setIsConverting(true);
+    const result = await prepareImageFile(file);
+    setIsConverting(false);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    setReprintDraft({ slotKey: slot.key, url: result.url });
+  };
+
+  const removeReprint = async () => {
+    if (!sessionToken) return;
+    const res = await fetch("/api/photos/delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionToken, slotKey: slot.key, reprint: true }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Couldn't remove the replacement. Please try again.");
+      return;
+    }
+    await refreshPrintedState(sessionToken);
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,13 +103,15 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
+      if (printed) return;
       const file = e.dataTransfer.files?.[0];
       if (file) handleFile(file);
     },
-    [handleFile]
+    [handleFile, printed]
   );
 
   const handleClick = () => {
+    if (printed) return;
     if (hasPhoto) {
       setEditingSlot(slot.key);
     } else {
@@ -116,7 +152,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
               className="object-cover"
             />
             {/* Re-crop hover overlay */}
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <div className={`absolute inset-0 bg-black/40 opacity-0 transition-opacity flex items-center justify-center ${printed ? "hidden" : "group-hover:opacity-100"}`}>
               <span className="text-white text-[10px] font-semibold leading-tight text-center">Re-crop</span>
             </div>
             {photo?.status === "cropped" && !hasUploadError && (
@@ -198,7 +234,12 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
           {getPrintSizeLabel(slot.size, slot.orientation)}&quot; print
         </p>
         <UploadErrorNote slotKey={slot.key} />
-        {slot.dateField && (
+        {printed && (
+          <p className="mt-1 text-xs font-medium text-emerald-700">
+            Printed{reprintPending ? " · replacement added to your next order" : ""}
+          </p>
+        )}
+        {slot.dateField && !printed && (
           <input
             type="date"
             value={photo?.milestoneDate || ""}
@@ -211,7 +252,21 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
 
       {/* Actions */}
       <div className="flex-shrink-0 flex items-center gap-1">
-        {hasPhoto ? (
+        {printed ? (
+          reprintPending ? (
+            <button onClick={removeReprint} className="px-2 py-1.5 text-xs font-medium text-gray-500 hover:text-red-500 transition-colors">
+              Remove replacement
+            </button>
+          ) : (
+            <button
+              onClick={() => reprintInputRef.current?.click()}
+              disabled={isConverting}
+              className="px-3 py-1.5 text-xs font-medium text-rose-600 bg-rose-50 rounded-full hover:bg-rose-100 transition-colors disabled:opacity-50"
+            >
+              {isConverting ? "Converting…" : "Replace photo"}
+            </button>
+          )
+        ) : hasPhoto ? (
           <>
           <button
             onClick={() => setEditingSlot(slot.key)}
@@ -260,6 +315,17 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
       </div>
 
       <input
+        ref={reprintInputRef}
+        type="file"
+        accept="image/*,.heic,.heif"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleReprintFile(file);
+          e.target.value = "";
+        }}
+        className="hidden"
+      />
+      <input
         ref={fileInputRef}
         type="file"
         accept="image/*,.heic,.heif"
@@ -267,7 +333,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
         className="hidden"
       />
     </div>
-    {detailsMode && !slot.region && <SlotDetailsPanel slotKey={slot.key} />}
+    {detailsMode && !slot.region && !printed && <SlotDetailsPanel slotKey={slot.key} />}
     </div>
   );
 }

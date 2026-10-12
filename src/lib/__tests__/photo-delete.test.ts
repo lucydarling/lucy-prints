@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { DELETE } from "@/app/api/photos/delete/route";
-import { lockFromStatuses } from "@/lib/print-orders/freeze";
+import { emptyPrinted, lockDecision } from "@/lib/print-orders/printed";
 import { removeFromCloud } from "@/lib/remove-from-cloud";
 import { useSaveStore } from "@/store/save-store";
 
@@ -23,16 +23,25 @@ test("delete route rejects malformed requests before touching the database", asy
   assert.equal((await call({ sessionToken: "t", extraId: "not_extra_1" })).status, 400); // wrong namespace
 });
 
-test("print lock: ready/refused are frozen, held stays editable, none is unlocked", () => {
-  assert.equal(lockFromStatuses([]), null);
-  assert.equal(lockFromStatuses(["held"]), "held");
-  assert.equal(lockFromStatuses(["ready"]), "frozen");
-  assert.equal(lockFromStatuses(["refused"]), "frozen");
-  assert.equal(lockFromStatuses(["held", "ready"]), "frozen");
-  // Sent to the printer, or failed there: still never editable.
-  assert.equal(lockFromStatuses(["sent"]), "frozen");
-  assert.equal(lockFromStatuses(["error"]), "frozen");
-  assert.equal(lockFromStatuses(["held", "sent"]), "frozen");
+test("per-slot lock: a printed slot or extra refuses edits (409), everything else is open", () => {
+  const printed = { slots: new Map([["month_3", 1]]), extras: new Set(["extra_1_a"]) };
+  assert.equal(lockDecision(emptyPrinted(), { isExtra: false, key: "month_3" }), null);
+  assert.equal(lockDecision(printed, { isExtra: false, key: "month_4" }), null, "an unprinted slot stays editable");
+  assert.equal(lockDecision(printed, { isExtra: true, key: "extra_2_b" }), null, "an extra added after an order is allowed");
+  const slot = lockDecision(printed, { isExtra: false, key: "month_3" })!;
+  assert.equal(slot.status, 409);
+  assert.match(String(slot.body.error), /paid reprint/);
+  assert.equal(slot.body.canReprint, true);
+  const extra = lockDecision(printed, { isExtra: true, key: "extra_1_a" })!;
+  assert.equal(extra.status, 409);
+  assert.match(String(extra.body.error), /extra print has already been printed/);
+});
+
+test("reprint mode is only for a printed book slot", () => {
+  const printed = { slots: new Map([["month_3", 1]]), extras: new Set(["extra_1_a"]) };
+  assert.equal(lockDecision(printed, { isExtra: false, key: "month_3", reprint: true }), null);
+  assert.equal(lockDecision(printed, { isExtra: false, key: "month_4", reprint: true })!.status, 400);
+  assert.equal(lockDecision(printed, { isExtra: true, key: "extra_1_a", reprint: true })!.status, 400);
 });
 
 test("removeFromCloud: drops queued/uploaded state, deletes on the server, surfaces server errors", async () => {

@@ -129,9 +129,65 @@ export const HARD_MIN_FRACTION = 0.5;
 export const ASPECT_TOLERANCE = 0.005;
 
 /**
- * Extra prints (the Extra Prints section) are currently free — there is no price
- * anywhere in the app. This is the most a PRINT ORDER may include (enforced by
- * validatePrintRequest only; the ZIP flow and the extras UI are NOT capped).
- * Final: 12 (Kevin, 2026-10-09).
+ * Printing in rounds (step 5). Everything below marked PLACEHOLDER is
+ * waiting on Chari — confirm before any real order.
  */
-export const EXTRAS_FREE_CAP = 12;
+
+/** PLACEHOLDER — confirm with Chari: fewest prints one order may contain (new photos + extras + reprints). */
+export const MIN_PRINTS_PER_ORDER = 5;
+
+/**
+ * Hidden sanity limit — customers are never shown it and extras are charged per
+ * print with no cap. It only catches a mistake (a runaway quantity). Counted
+ * by quantity, per order.
+ */
+export const MAX_EXTRAS_PER_ORDER = 100;
+
+/** An unpaid round (recorded when the customer clicks "Print my photos") stops being payable after this long. */
+export const ROUND_TTL_HOURS = 24;
+
+/** PLACEHOLDER — confirm with Chari: shipping and handling per order (a flat Shopify shipping-profile rate, not computed here). */
+export const SHIPPING_AND_HANDLING_CENTS = 600;
+
+/**
+ * Which Shopify variant sells each kind of print. One logical key per price
+ * point; today there is a single "Photo print" variant, so every size, every
+ * extra and every reprint maps to the same key. To price a size differently,
+ * add a key, point that size at it, and add its variant id to VARIANT_ENV.
+ */
+export type PrintVariantKey = "print";
+export const VARIANT_KEY_BY_SIZE: Record<PrintSize, PrintVariantKey> = {
+  "3x3": "print",
+  "3.5x3.5": "print",
+  "4x3": "print",
+  "4x4": "print",
+  "4x6": "print",
+  "5x5": "print",
+};
+/** Extras and reprints are sold at the same price point as the same size of book photo. */
+export type PrintItemKind = "book" | "extra" | "reprint";
+export function variantKeyFor(size: PrintSize, kind: PrintItemKind): PrintVariantKey {
+  void kind; // extras and reprints share the size's price point today; a per-kind price would branch here
+  return VARIANT_KEY_BY_SIZE[size];
+}
+/**
+ * PLACEHOLDER — price per print in cents, confirm with Chari. The real price is the
+ * Shopify variant's; this copy is only for the breakdown shown before checkout.
+ */
+export const PRICE_CENTS_BY_VARIANT_KEY: Record<PrintVariantKey, number> = { print: 2000 };
+/**
+ * The variant id for each key: NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT (the old Standard
+ * variant 48078680424673, renamed "Photo print" in Shopify; the Luxury variant is
+ * gone). NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD is accepted as a fallback until the
+ * new name is set. Static env reads so Next inlines them. Read lazily so a missing
+ * id fails with a clear message.
+ */
+export function variantIdForKey(key: PrintVariantKey, env: NodeJS.ProcessEnv = process.env): string {
+  const id = key === "print" ? env.NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT || env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD : undefined;
+  if (!id) throw new Error(`Missing env var for the "${key}" print variant (NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT)`);
+  return id;
+}
+/** Every variant id that counts as a print line on a paid order. */
+export function allPrintVariantIds(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [...new Set((Object.keys(PRICE_CENTS_BY_VARIANT_KEY) as PrintVariantKey[]).map((k) => variantIdForKey(k, env)))];
+}

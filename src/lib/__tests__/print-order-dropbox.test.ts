@@ -210,7 +210,6 @@ function snapshot(): PrintSnapshot {
     extraRows: [],
     order: {
       bookTheme: "little_artist",
-      paidExtras: 0,
       shipTo: { fname: "Pat", lname: "Smith", address1: "12 Main St", city: "Springfield", state: "IL", zip: "62701", country: "US" },
       customer: { fname: "Pat", lname: "Smith" },
     },

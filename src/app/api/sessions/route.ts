@@ -10,7 +10,6 @@ import {
   isJournalTheme,
   isSideBookTheme,
 } from "@/lib/klaviyo";
-import { pickReusableSession } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
@@ -50,8 +49,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Valid book theme required" }, { status: 400 });
     }
 
-    // Check for an existing session with same email + theme. A book that has
-    // been sent to print is never reused: its owner starts a new one.
+    // Check for an existing session with same email + theme. A book keeps
+    // going after a print order (printing is in rounds), so it is reused.
     const { data: candidates } = await supabaseAdmin
       .from("sessions")
       .select("id, token, photo_count")
@@ -59,7 +58,7 @@ export async function POST(req: NextRequest) {
       .eq("book_theme", bookTheme)
       .eq("status", "active")
       .order("created_at", { ascending: false });
-    const existing = await pickReusableSession(candidates ?? []);
+    const existing = candidates?.[0] ?? null;
 
     if (existing) {
       // Update baby info + refresh the activity timestamp.

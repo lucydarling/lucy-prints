@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { getSlots } from "@/lib/photo-slots";
 import { checkUploadSize } from "@/lib/image-validation";
 import { reportUploadCheckSkipped } from "@/lib/upload-check-alert";
-import { FROZEN_MESSAGE, getPrintLock } from "@/lib/print-orders/freeze";
+import { getPrintedState, lockDecision } from "@/lib/print-orders/printed";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import {
   checkRateLimit,
@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
     const orientation = formData.get("orientation") as string | null;
     const isExtra = formData.get("isExtra") === "true";
     const extraId = formData.get("extraId") as string | null;
+    // A replacement crop for a slot that has already been printed (a paid reprint).
+    const isReprint = formData.get("reprint") === "true";
 
     if (!sessionToken || !slotKey || !imageFile) {
       return NextResponse.json(
@@ -158,10 +160,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid or expired session" }, { status: 404 });
     }
 
-    // A book that has been sent to print no longer takes photos or crops.
-    if ((await getPrintLock(session.id)) === "frozen") {
-      return NextResponse.json({ error: FROZEN_MESSAGE }, { status: 409 });
-    }
+    // Printed slots and extras are locked; unprinted ones (and the session as a whole) stay editable.
+    const printed = await getPrintedState(session.id);
+    const locked = lockDecision(printed, { isExtra, key: isExtra ? extraId || slotKey : slotKey, reprint: isReprint });
+    if (locked) return NextResponse.json(locked.body, { status: locked.status });
 
     // Strict allowlist: a book slot must belong to THIS session's book.
     if (!isExtra && !isSlotOfBook(slotKey, session.book_theme)) {
@@ -181,9 +183,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Upload to Supabase Storage
-    const storagePath = isExtra
-      ? `${session.id}/extras/${extraId || slotKey}.${ext}`
-      : `${session.id}/${slotKey}.${ext}`;
+    // A reprint never touches the live slot's file or row: it is stored on its own path.
+    const storagePath = isReprint
+      ? `${session.id}/reprints/${slotKey}-${Date.now()}.${ext}`
+      : isExtra
+        ? `${session.id}/extras/${extraId || slotKey}.${ext}`
+        : `${session.id}/${slotKey}.${ext}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from("photos")
@@ -198,7 +203,28 @@ export async function POST(req: NextRequest) {
     }
 
     // Upsert photo record in database
-    if (isExtra) {
+    if (isReprint) {
+      // One pending reprint per slot: a new crop replaces the pending one (its file is kept, never deleted).
+      const { data: pending } = await supabaseAdmin
+        .from("print_reprints")
+        .select("id")
+        .eq("session_id", session.id)
+        .eq("slot_key", slotKey)
+        .eq("status", "pending")
+        .maybeSingle();
+      const { error: dbError } = pending
+        ? await supabaseAdmin
+            .from("print_reprints")
+            .update({ storage_path: storagePath, print_size: printSize || "4x4", updated_at: new Date().toISOString() })
+            .eq("id", pending.id)
+        : await supabaseAdmin
+            .from("print_reprints")
+            .insert({ session_id: session.id, slot_key: slotKey, storage_path: storagePath, print_size: printSize || "4x4" });
+      if (dbError) {
+        console.error("DB write error (reprint):", dbError);
+        return NextResponse.json({ error: "Failed to save the replacement photo" }, { status: 500 });
+      }
+    } else if (isExtra) {
       const { error: dbError } = await supabaseAdmin
         .from("session_extras")
         .upsert(
@@ -239,6 +265,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // (A reprint changes no live row, so photo_count is unaffected.)
     // photo_count is maintained automatically by the session_photos_count_sync
     // trigger (migration 004) — no manual recompute needed here. We only touch
     // last_activity_at to keep the session's inactivity-expiry clock fresh.

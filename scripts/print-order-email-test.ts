@@ -22,7 +22,7 @@ if (only && !kinds.includes(only)) {
 
 const all = [
   printOrderReceivedEmail({
-    bookName: "Little Artist", babyName: "Ada", bookPrints: 14, extraPrints: 3, orderName: "#TEST-1001",
+    bookName: "Little Artist", babyName: "Ada", newPhotos: 14, extraPrints: 3, reprints: 1, printedSoFar: 24, bookSlots: 49, orderName: "#TEST-1001",
     shipTo: { fname: "Sample", lname: "Customer", address1: "123 Sample St", address2: "Apt 4", city: "Springfield", state: "IL", zip: "62701", country: "US" },
   }),
   printOrderHeldEmail({ resumeUrl: "https://memories.lucydarling.com/resume/sample-token", orderName: "#TEST-1001" }),

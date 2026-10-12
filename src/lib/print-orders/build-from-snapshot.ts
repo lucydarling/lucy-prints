@@ -1,12 +1,12 @@
-import { EXTRAS_FREE_CAP } from "./config";
+import { MAX_EXTRAS_PER_ORDER } from "./config";
 import { buildOrder, type BuiltOrder } from "./build-order";
 import type { PrintSnapshot } from "./paid-order";
 import { getSlots } from "@/lib/photo-slots";
 
 /**
  * Build the order folder from the photos frozen at payment — and from nothing
- * else. The snapshot carries the frozen rows (pointing at copies under
- * print-orders/<order id>/), the book, the paid extras and the ship-to, so no
+ * else. The snapshot carries the frozen rows of that round (pointing at copies under
+ * print-orders/<order id>/), the book and the ship-to, so no
  * live session row is ever read. The webhook and the manual
  * `print-order:build` script both call this, so they validate and write the
  * same XML.
@@ -14,7 +14,9 @@ import { getSlots } from "@/lib/photo-slots";
 export async function buildFromSnapshot(
   shopifyOrderId: string,
   snapshot: PrintSnapshot,
-  fetchImage: (storagePath: string) => Promise<Buffer>
+  fetchImage: (storagePath: string) => Promise<Buffer>,
+  /** The prints this order was charged for (the round's total), when known. */
+  expectedPrintCount?: number
 ): Promise<BuiltOrder> {
   const info = snapshot.order;
   if (!info) {
@@ -28,9 +30,10 @@ export async function buildFromSnapshot(
     externalId: shopifyOrderId,
     shipTo: info.shipTo,
     customer: info.customer,
+    expectedPrintCount,
     paid: {
       bookSlotKeys: getSlots(info.bookTheme).map((s) => s.key),
-      maxExtras: EXTRAS_FREE_CAP + info.paidExtras,
+      maxExtras: MAX_EXTRAS_PER_ORDER,
     },
   });
 }

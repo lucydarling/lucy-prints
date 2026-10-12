@@ -1,8 +1,7 @@
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
-import sharp from "sharp";
-import { getPrintDimensions, getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
+import { getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
 import {
   PRINT_PREVIEW_COOKIE,
   printButtonAllowed,
@@ -11,7 +10,9 @@ import {
   printPreviewKeyMatches,
 } from "@/lib/print-orders/print-gate";
 import { prepareCheckout } from "@/lib/print-orders/checkout-prepare";
-import { handlePaidOrder, type CustomerNotice, type PaidOrderDeps, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
+import { MAX_EXTRAS_PER_ORDER, MIN_PRINTS_PER_ORDER } from "@/lib/print-orders/config";
+import { emptyPrinted } from "@/lib/print-orders/printed";
+import { buildCheckoutUrl } from "@/lib/shopify";
 import {
   customerEmailAllowed,
   printOrderHeldEmail,
@@ -26,8 +27,7 @@ const jar = (cookies: Record<string, string>) => ({ get: (n: string) => (n in co
 beforeEach(() => {
   delete process.env.PRINT_ORDERS_ENABLED;
   process.env.PRINT_PREVIEW_SECRET = SECRET;
-  process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD = "111";
-  process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY = "222";
+  process.env.NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT = "111";
   process.env.NEXT_PUBLIC_SHOPIFY_DOMAIN = "www.example-shop.test";
 });
 
@@ -95,53 +95,66 @@ test("flag off: the checkout route answers 404 before touching anything", async 
 // ---------- the checkout decision ----------
 
 const photoRows = (n: number) =>
-  getSlots(THEME).slice(0, n).map((s) => {
-    const d = getPrintDimensions(s.size, s.orientation);
-    return { slot_key: s.key, storage_path: `p/${s.key}`, print_size: getPrintSizeLabel(s.size, s.orientation), status: "cropped" as const, _d: d };
-  });
-const base: { token: string; bookTheme: string; extraRows: []; lock: null } = { token: "tok123", bookTheme: THEME, extraRows: [], lock: null };
+  getSlots(THEME).slice(0, n).map((s) => ({
+    slot_key: s.key, storage_path: `p/${s.key}`, print_size: getPrintSizeLabel(s.size, s.orientation), status: "cropped" as const,
+  }));
+const base = { token: "tok123", bookTheme: THEME, extraRows: [] as never[], reprintRows: [] as never[], printed: emptyPrinted(), variantId: () => "111" };
+const createRound = async () => "round-1";
 
-test("checkout: a saved book gets the confirm line and a cart-clearing Shopify URL carrying the token", () => {
-  const r = prepareCheckout({ ...base, photoRows: photoRows(5) });
+test("checkout: a saved book gets the confirm line, the price breakdown and a cart-clearing Shopify URL carrying the round", async () => {
+  const r = await prepareCheckout({ ...base, photoRows: photoRows(6), createRound });
   assert.ok(r.ok);
   if (!r.ok) return;
-  assert.match(r.message, /^You're printing 5 of \d+ photos$/);
+  assert.match(r.message, /^You're printing 6 new photos\. 0 of \d+ printed so far\.$/);
+  assert.equal(r.price.lines[0].quantity, 6);
+  assert.equal(r.price.totalCents, 6 * r.price.lines[0].unitCents + r.price.shippingCents);
   const u = new URL(r.url);
   assert.match(u.host, /lucydarling\.com$|example-shop\.test$/);
   assert.equal(u.pathname, "/cart/clear");
   const inner = new URL(u.searchParams.get("return_to")!, "https://x.test");
-  assert.equal(inner.pathname, "/cart/111:1");
+  assert.equal(inner.pathname, "/cart/111:6");
   assert.equal(inner.searchParams.get("attributes[session_token]"), "tok123");
   assert.equal(inner.searchParams.get("attributes[book_theme]"), THEME);
+  assert.equal(inner.searchParams.get("attributes[round_id]"), "round-1");
 });
 
-test("checkout: blocks an empty book, a locked book, a held book and an unprintable book, with a reason and no URL", () => {
-  for (const [name, input] of [
-    ["empty", { ...base, photoRows: [] }],
-    ["slots without a stored file or marked empty", { ...base, photoRows: [{ ...photoRows(1)[0], storage_path: "" }, { ...photoRows(2)[1], status: "empty" }] }],
-    ["frozen", { ...base, photoRows: photoRows(3), lock: "frozen" as const }],
-    ["held", { ...base, photoRows: photoRows(3), lock: "held" as const }],
-    ["unknown book", { ...base, bookTheme: "nope", photoRows: photoRows(3) }],
+test("checkout: the cart has one line per variant (per-size variants are supported)", () => {
+  const url = buildCheckoutUrl({ quantities: { "111": 4, "222": 2 }, sessionToken: "t", bookTheme: THEME, roundId: "r", printCount: 6 });
+  assert.match(new URL(url).pathname, /^\/cart\/111:4,222:2$/);
+  assert.throws(() => buildCheckoutUrl({ quantities: {}, sessionToken: "t", bookTheme: THEME, roundId: "r", printCount: 0 }), /at least one print/);
+});
+
+test("checkout: blocks an empty book, nothing new, an under-minimum round and an unprintable book, with a reason, no URL and no round recorded", async () => {
+  let recorded = 0;
+  const counting = async () => { recorded += 1; return "r"; };
+  const printedAll = { slots: new Map(photoRows(3).map((x) => [x.slot_key, 1])), extras: new Set<string>() };
+  for (const [name, input, re] of [
+    ["empty", { ...base, photoRows: [] }, /nothing new to print/],
+    ["slots without a stored file or marked empty", { ...base, photoRows: [{ ...photoRows(1)[0], storage_path: "" }, { ...photoRows(2)[1], status: "empty" }] }, /nothing new to print/],
+    ["everything already printed", { ...base, photoRows: photoRows(3), printed: printedAll }, /nothing new to print/],
+    ["under the minimum", { ...base, photoRows: photoRows(MIN_PRINTS_PER_ORDER - 1) }, new RegExp(`at least ${MIN_PRINTS_PER_ORDER} prints`)],
+    ["unknown book", { ...base, bookTheme: "nope", photoRows: photoRows(6) }, /unknown book/],
   ] as const) {
-    const r = prepareCheckout(input as Parameters<typeof prepareCheckout>[0]);
+    const r = await prepareCheckout({ ...(input as object), createRound: counting } as unknown as Parameters<typeof prepareCheckout>[0]);
     assert.equal(r.ok, false, name);
-    assert.ok(!r.ok && r.errors.length > 0 && !("url" in r), name);
+    assert.ok(!r.ok && r.errors.some((e) => re.test(e)) && !("url" in r), name);
   }
+  assert.equal(recorded, 0);
 });
 
-test("checkout: extras over the free cap are blocked at the button, extras within it are counted", () => {
+test("checkout: extras and reprints count toward the minimum; only the hidden 100-extras limit blocks extras", async () => {
   const extra = (n: number) => [{ extra_id: "e", print_size: "4x4", orientation: "portrait", storage_path: "p/e", quantity: n }];
-  assert.equal(prepareCheckout({ ...base, photoRows: photoRows(2), extraRows: extra(13) }).ok, false);
-  const ok = prepareCheckout({ ...base, photoRows: photoRows(2), extraRows: extra(3) });
-  assert.ok(ok.ok && /plus 3 extra prints/.test(ok.message));
-});
-
-test("checkout: a Luxury book is sent to the Luxury variant", () => {
-  const r = prepareCheckout({ ...base, bookTheme: "honey_bee", photoRows: photoRows(2) });
-  assert.ok(r.ok);
-  if (!r.ok) return;
-  const inner = new URL(new URL(r.url).searchParams.get("return_to")!, "https://x.test");
-  assert.equal(inner.pathname, "/cart/222:1");
+  const ok = await prepareCheckout({ ...base, photoRows: photoRows(2), extraRows: extra(3), createRound });
+  assert.ok(ok.ok && /2 new photos and 3 extra prints/.test(ok.message), JSON.stringify(ok));
+  assert.equal((await prepareCheckout({ ...base, photoRows: [], extraRows: extra(40), createRound })).ok, true, "no customer-facing cap");
+  const over = await prepareCheckout({ ...base, photoRows: [], extraRows: extra(MAX_EXTRAS_PER_ORDER + 1), createRound });
+  assert.ok(!over.ok && /looks like a mistake/.test(over.errors[0]));
+  const printed = { slots: new Map([[getSlots(THEME)[0].key, 1]]), extras: new Set<string>() };
+  const reprints = Array.from({ length: MIN_PRINTS_PER_ORDER }, (_, i) => ({ id: `rp${i}`, slot_key: getSlots(THEME)[0].key, storage_path: "x", print_size: "4x4" }));
+  const withReprints = await prepareCheckout({ ...base, photoRows: [], printed, reprintRows: reprints.slice(0, 1), createRound });
+  assert.equal(withReprints.ok, false, "one reprint alone is under the minimum");
+  const mix = await prepareCheckout({ ...base, photoRows: photoRows(MIN_PRINTS_PER_ORDER - 1).slice(1), printed, reprintRows: reprints.slice(0, 1), extraRows: extra(3), createRound });
+  assert.ok(mix.ok && /1 reprint/.test(mix.message), JSON.stringify(mix));
 });
 
 // ---------- customer emails ----------
@@ -157,97 +170,20 @@ test("TEST_MODE: customer emails go only to @lucydarling.com addresses", () => {
 
 test("emails: received lists counts and ship-to and escapes customer-supplied text; held links back to the book; shipped carries tracking", () => {
   const r = printOrderReceivedEmail({
-    bookName: "Little Artist", babyName: "Zoë <b>", bookPrints: 14, extraPrints: 3,
+    bookName: "Little Artist", babyName: "Zoë <b>", newPhotos: 14, extraPrints: 3, reprints: 1, printedSoFar: 24, bookSlots: 49,
     shipTo: { fname: "Pat", lname: "Smith", address1: "12 Main St", city: "Springfield", state: "IL", zip: "62701", country: "US" },
     orderName: "#1001",
   });
-  assert.match(r.html, /14 photos plus 3 extra prints/);
+  assert.match(r.html, /14 new photos, 3 extra prints and 1 reprint/);
+  assert.match(r.html, /24 of 49 photos printed so far/);
   assert.match(r.html, /12 Main St/);
   assert.ok(!r.html.includes("<b>") && r.html.includes("&lt;b&gt;"));
   assert.ok(!/google\.com\/url/.test(r.html));
   const h = printOrderHeldEmail({ resumeUrl: "https://memories.lucydarling.com/resume/tok", orderName: "#1001" });
   assert.match(h.html, /href="https:\/\/memories\.lucydarling\.com\/resume\/tok"/);
-  assert.match(h.html, /reply to this email and we.{1,8}ll send your order to print/);
+  assert.match(h.html, /you don.{1,8}t need to pay again/i);
   const s = printOrderShippedEmail({ bookName: "Little Artist", carrier: "USPS", trackingNumber: "9400", trackingUrl: "https://track.test/9400" });
   assert.match(s.html, /9400/);
   for (const e of [r, h, s]) assert.ok(!/free|discount|guarantee|days/i.test(e.html.replace(/<[^>]+>/g, " ")), "no offers or promises");
 });
 
-// ---------- the webhook sends at most the right emails ----------
-
-const STD = "111";
-function notifyDeps(opts: { filled: number; existing?: { status: string } | null; throwNotify?: boolean }) {
-  const notices: CustomerNotice[] = [];
-  const slots = getSlots(THEME);
-  const d: PaidOrderDeps = {
-    variants: { standardVariantId: STD, luxuryVariantId: "222", extraVariantIds: [] },
-    loadSession: async () => ({
-      session: { id: "sess-1", book_theme: THEME, baby_name: "Ada" },
-      photoRows: slots.slice(0, opts.filled).map((s) => {
-        const dim = getPrintDimensions(s.size, s.orientation);
-        return { slot_key: s.key, storage_path: `p/${dim.width}x${dim.height}`, print_size: getPrintSizeLabel(s.size, s.orientation), status: "cropped" };
-      }),
-      extraRows: [],
-      fetchImage: async (p: string) => {
-        const slot = slots.find((s) => s.key === p.split("/").pop())!;
-        const { width: w, height: h } = getPrintDimensions(slot.size, slot.orientation);
-        const noise = Buffer.alloc(w * h * 3);
-        for (let i = 0; i < noise.length; i++) noise[i] = (i * 2654435761) >>> 24;
-        return sharp(noise, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 70 }).toBuffer();
-      },
-    }),
-    loadExisting: async () => opts.existing ?? null,
-    freeze: async (id, photoRows, extraRows) => ({ frozenAt: "2026-10-11T00:00:00Z", photoRows: photoRows.map((r) => ({ ...r, storage_path: `frozen/${id}/${r.slot_key}` })), extraRows }),
-    alert: async () => {},
-    otherReadyOrderForSession: async () => false,
-    record: async () => {},
-    notify: async (n) => {
-      if (opts.throwNotify) throw new Error("resend down");
-      notices.push(n);
-    },
-  };
-  return { d, notices };
-}
-const order = (over: Partial<ShopifyPaidOrder> = {}): ShopifyPaidOrder => ({
-  id: 7770001, name: "#2001", email: "pat@example.test",
-  line_items: [{ variant_id: Number(STD), quantity: 1 }],
-  note_attributes: [{ name: "session_token", value: "tok" }, { name: "book_theme", value: THEME }],
-  shipping_address: { first_name: "Pat", last_name: "Smith", address1: "12 Main St", city: "Springfield", province_code: "IL", zip: "62701", country_code: "US" },
-  ...over,
-});
-
-test("a ready order emails 'received' once; a retry of a ready order sends nothing", async () => {
-  const a = notifyDeps({ filled: 4 });
-  const r = await handlePaidOrder(order(), a.d);
-  assert.equal(r.status, "ready", r.reasons.join(";"));
-  assert.equal(a.notices.length, 1);
-  assert.deepEqual([a.notices[0].kind, a.notices[0].to, a.notices[0].bookPrints, a.notices[0].babyName], ["received", "pat@example.test", 4, "Ada"]);
-  const again = notifyDeps({ filled: 4, existing: { status: "ready" } });
-  await handlePaidOrder(order(), again.d);
-  assert.equal(again.notices.length, 0);
-});
-
-test("an empty (held) order emails 'held' once; a refused order sends the customer nothing", async () => {
-  const h = notifyDeps({ filled: 0 });
-  assert.equal((await handlePaidOrder(order(), h.d)).status, "held");
-  assert.deepEqual(h.notices.map((n) => n.kind), ["held"]);
-  assert.equal(h.notices[0].sessionToken, "tok");
-  const held2 = notifyDeps({ filled: 0, existing: { status: "held" } });
-  await handlePaidOrder(order(), held2.d);
-  assert.equal(held2.notices.length, 0, "a repeated held outcome does not re-email");
-  const ref = notifyDeps({ filled: 3 });
-  const r = await handlePaidOrder(order({ note_attributes: [{ name: "session_token", value: "tok" }, { name: "book_theme", value: "honey_bee" }] }), ref.d);
-  assert.equal(r.status, "refused");
-  assert.equal(ref.notices.length, 0);
-});
-
-test("held then completed: becoming ready sends 'received'; an email failure never fails the order; no email address = no email", async () => {
-  const completed = notifyDeps({ filled: 4, existing: { status: "held" } });
-  await handlePaidOrder(order(), completed.d);
-  assert.deepEqual(completed.notices.map((n) => n.kind), ["received"]);
-  const boom = notifyDeps({ filled: 4, throwNotify: true });
-  assert.equal((await handlePaidOrder(order(), boom.d)).status, "ready");
-  const noEmail = notifyDeps({ filled: 4 });
-  await handlePaidOrder(order({ email: undefined }), noEmail.d);
-  assert.equal(noEmail.notices.length, 0);
-});

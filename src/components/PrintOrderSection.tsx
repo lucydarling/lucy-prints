@@ -9,6 +9,8 @@ import { useSaveStore } from "@/store/save-store";
  * it renders exactly the "coming soon" note that was always there, so with
  * the feature off nothing differs.
  */
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
 export function PrintOrderSection() {
   const sessionToken = useSaveStore((s) => s.sessionToken);
   const uploadQueue = useSaveStore((s) => s.uploadQueue);
@@ -17,10 +19,13 @@ export function PrintOrderSection() {
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
 
   const [enabled, setEnabled] = useState(false);
-  const [lock, setLock] = useState<"frozen" | "held" | null>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const [confirm, setConfirm] = useState<{ url: string; message: string } | null>(null);
+  const [confirm, setConfirm] = useState<{
+    url: string;
+    message: string;
+    price: { lines: Array<{ quantity: number; unitCents: number; cents: number }>; printsCents: number; shippingCents: number; totalCents: number };
+  } | null>(null);
 
   useEffect(() => {
     if (!sessionToken) return;
@@ -30,7 +35,6 @@ export function PrintOrderSection() {
       .then((d) => {
         if (cancelled || !d) return;
         setEnabled(d.printEnabled === true);
-        setLock(d.printStatus ?? null);
       })
       .catch(() => {});
     return () => {
@@ -51,14 +55,6 @@ export function PrintOrderSection() {
     );
   }
 
-  if (lock === "frozen") {
-    return (
-      <div role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900">
-        Your print order has been placed, so this book is now locked. Start a new book to make another.
-      </div>
-    );
-  }
-
   const saving = uploadQueue.length > 0 || uploadingSlot !== null;
   const failed = Object.keys(uploadErrors).length;
 
@@ -72,7 +68,7 @@ export function PrintOrderSection() {
     try {
       const res = await fetch(`/api/sessions/${sessionToken}/print-checkout`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (data.url && data.message) setConfirm({ url: data.url, message: data.message });
+      if (data.url && data.message && data.price) setConfirm({ url: data.url, message: data.message, price: data.price });
       else setErrors(data.errors ?? ["print ordering is not available right now"]);
     } catch {
       setErrors(["print ordering is not available right now"]);
@@ -85,7 +81,7 @@ export function PrintOrderSection() {
     <div className="p-4 rounded-xl bg-white border border-rose-100">
       <p className="text-sm font-semibold text-gray-800 mb-1">Have us print them</p>
       <p className="text-xs text-gray-500 leading-relaxed mb-3">
-        We&apos;ll print and mail your photos. Shipping and handling is added at checkout.
+        We&apos;ll print and mail the photos you haven&apos;t printed yet. Print as you go: your book stays open, and each order prints what you&apos;ve added since the last one.
       </p>
       {saving && <p className="text-xs text-gray-500 mb-2">Saving your photos… one moment.</p>}
       {failed > 0 && (
@@ -116,8 +112,18 @@ export function PrintOrderSection() {
         <div role="dialog" aria-modal="true" aria-label="Confirm print order" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
             <p className="text-base font-semibold text-gray-800 mb-2">{confirm.message}</p>
+            <div className="text-xs text-gray-600 mb-3 space-y-0.5">
+              {confirm.price.lines.map((l, i) => (
+                <p key={i} className="flex justify-between">
+                  <span>{l.quantity} print{l.quantity === 1 ? "" : "s"} × {money(l.unitCents)}</span>
+                  <span>{money(l.cents)}</span>
+                </p>
+              ))}
+              <p className="flex justify-between"><span>Shipping &amp; handling</span><span>{money(confirm.price.shippingCents)}</span></p>
+              <p className="flex justify-between font-semibold text-gray-800 pt-1 border-t border-gray-100"><span>Total</span><span>{money(confirm.price.totalCents)}</span></p>
+            </div>
             <p className="text-xs text-gray-500 leading-relaxed mb-4">
-              Once you pay, this book is sent to print and its photos and details can&apos;t be changed. Only photos that are saved will print. Shipping and handling is added at checkout.
+              Once you pay, the photos in this order are locked. Everything else in your book stays open for your next order. Only photos that are saved will print.
             </p>
             <button
               type="button"

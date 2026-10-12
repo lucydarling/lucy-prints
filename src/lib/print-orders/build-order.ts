@@ -57,7 +57,7 @@ export interface BuildOrderParams {
 export interface PaidEntitlement {
   /** Every book slot key the paid book includes (from getSlots, in code). */
   bookSlotKeys: string[];
-  /** Most extra prints allowed (free allowance + paid extras). */
+  /** Most extra prints allowed in one order (the hidden sanity limit). */
   maxExtras: number;
 }
 
@@ -172,7 +172,7 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
     }
     const extraTotal = jobs.filter((j) => j.base.startsWith("extra_")).reduce((n, j) => n + j.quantity, 0);
     if (extraTotal > p.paid.maxExtras) {
-      errors.push(`session has ${extraTotal} extra prints but only ${p.paid.maxExtras} were paid for or allowed`);
+      errors.push(`session has ${extraTotal} extra prints but the limit is ${p.paid.maxExtras}`);
     }
     if (errors.length > 0) {
       throw new Error(`Print order refused:\n - ${[...new Set(errors)].join("\n - ")}`);

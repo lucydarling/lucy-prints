@@ -13,7 +13,8 @@ interface BookSession {
   babyName: string | null;
   photoCount: number;
   /** Has a print order (only sent when print ordering is on). */
-  ordered?: boolean;
+  printedSoFar?: number;
+  bookSlots?: number;
 }
 
 export function BookSwitcher() {
@@ -137,7 +138,7 @@ export function BookSwitcher() {
                   </p>
                   <p className="text-[10px] text-gray-400 mt-0.5">
                     {book.photoCount} photo{book.photoCount !== 1 ? "s" : ""}
-                    {book.ordered && <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-gray-500">Ordered</span>}
+                    {book.printedSoFar ? <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 font-medium text-gray-500">{book.printedSoFar} of {book.bookSlots} printed</span> : null}
                   </p>
                 </button>
               ))}

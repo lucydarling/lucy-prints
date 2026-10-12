@@ -8,7 +8,6 @@ import {
   isJournalTheme,
   isSideBookTheme,
 } from "@/lib/klaviyo";
-import { FROZEN_MESSAGE, getPrintLock } from "@/lib/print-orders/freeze";
 import { isThemeAllowed } from "@/lib/preview-gate";
 
 /**
@@ -37,10 +36,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    // A book that has been sent to print no longer takes notes or baby details.
-    if ((await getPrintLock(session.id)) === "frozen") {
-      return NextResponse.json({ error: FROZEN_MESSAGE }, { status: 409 });
-    }
+    // Notes and baby details never print, so they stay editable after any order.
 
     // A pregnancy journal never stores a baby's name or birthdate, and Little
     // Years never stores a birthdate (so neither starts the milestone

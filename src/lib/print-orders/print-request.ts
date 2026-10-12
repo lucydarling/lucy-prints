@@ -1,46 +1,39 @@
 import { BOOK_THEMES, getProductForTheme, getSlots } from "@/lib/photo-slots";
-import { EXTRAS_FREE_CAP } from "./config";
+import { MAX_EXTRAS_PER_ORDER, MIN_PRINTS_PER_ORDER } from "./config";
 
-/** The price tier a theme sells at ("retiring" books sell at the standard price). */
-export function tierForTheme(themeId: string): "standard" | "luxury" | null {
-  const t = BOOK_THEMES.find((b) => b.id === themeId);
-  if (!t) return null;
-  return t.tier === "luxury" ? "luxury" : "standard";
-}
-
+/** The counts for one round — what the next order would print. */
 export interface PrintRequest {
   bookTheme: string;
-  /** Book slots that have a photo (not extras). */
-  filledBookSlots: number;
-  /** Extra prints, counted by quantity. */
+  /** Book photos not yet printed. */
+  newPhotos: number;
+  /** Extra prints not yet printed, counted by quantity. */
   extraPrints: number;
-  /** Extra prints bought on top of the free allowance (from the paid order; 0 at the button). */
-  paidExtras?: number;
-  /** The tier of the print product the customer is paying for (the webhook knows it; the button picks it from the theme). */
-  variantTier?: "standard" | "luxury";
+  /** Pending paid reprints. */
+  reprints: number;
+  /** Distinct book slots already printed (for the progress line). */
+  printedSoFar?: number;
 }
 
 export interface PrintRequestCheck {
-  /** Things the customer must fix (button) / that refuse the order (webhook). */
+  /** Things the customer must fix. */
   errors: string[];
-  /** Nothing to print at all. The button blocks it; the webhook holds the order. */
+  /** Nothing new to print at all. */
   empty: boolean;
-  printing: number;
-  of: number;
+  newPhotos: number;
   extras: number;
-  maxExtras: number;
+  reprints: number;
+  total: number;
+  printedSoFar: number;
+  /** Slots in the whole book (the "49"). */
+  of: number;
 }
 
 /**
- * ONE function for "can this be printed?" — called by the checkout button
- * (before the customer pays) and by the orders/paid webhook (after). Anything
- * a customer can cause must be caught here, so a refusal at the webhook is
- * unreachable in normal use. It reads only what it is given: the button
- * passes the customer's own counts, the webhook passes the frozen snapshot's.
+ * ONE function for "can this round be printed?" — the checkout route calls it
+ * before the customer pays, and the webhook calls it on the round it recorded.
  */
 export function validatePrintRequest(r: PrintRequest): PrintRequestCheck {
   const errors: string[] = [];
-  const maxExtras = EXTRAS_FREE_CAP + (r.paidExtras ?? 0);
   const theme = BOOK_THEMES.find((b) => b.id === r.bookTheme);
   if (!r.bookTheme) {
     errors.push("no book is selected");
@@ -49,24 +42,37 @@ export function validatePrintRequest(r: PrintRequest): PrintRequestCheck {
   } else if (getProductForTheme(r.bookTheme) !== "memory_book") {
     errors.push(`${theme.name} cannot be printed through the Photo Lab yet`);
   }
-  if (theme && r.variantTier && tierForTheme(r.bookTheme) !== r.variantTier) {
-    errors.push(`paid for the ${r.variantTier} print product but ${r.bookTheme} is a ${tierForTheme(r.bookTheme)} book`);
+  const total = r.newPhotos + r.extraPrints + r.reprints;
+  const empty = total === 0;
+  if (empty) {
+    errors.push("there is nothing new to print yet — add and save some photos first");
+  } else if (total < MIN_PRINTS_PER_ORDER) {
+    errors.push(`an order needs at least ${MIN_PRINTS_PER_ORDER} prints — you have ${total} so far. Add ${MIN_PRINTS_PER_ORDER - total} more and try again.`);
   }
-  if (r.extraPrints > maxExtras) {
-    errors.push(`${r.extraPrints} extra prints is over the limit of ${maxExtras} — please choose ${maxExtras} extras to print`);
+  if (r.extraPrints > MAX_EXTRAS_PER_ORDER) {
+    errors.push(`${r.extraPrints} extra prints in one order looks like a mistake — please check your extras`);
   }
   return {
     errors,
-    empty: r.filledBookSlots + r.extraPrints === 0,
-    printing: r.filledBookSlots,
-    of: theme ? getSlots(r.bookTheme).length : 0,
+    empty,
+    newPhotos: r.newPhotos,
     extras: r.extraPrints,
-    maxExtras,
+    reprints: r.reprints,
+    total,
+    printedSoFar: r.printedSoFar ?? 0,
+    of: theme ? getSlots(r.bookTheme).length : 0,
   };
 }
 
-/** The line the checkout button shows before redirecting to Shopify. */
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** The line the confirm step shows before redirecting to Shopify. */
 export function printingMessage(c: PrintRequestCheck): string {
-  const extras = c.extras > 0 ? ` plus ${c.extras} extra print${c.extras === 1 ? "" : "s"}` : "";
-  return `You're printing ${c.printing} of ${c.of} photos${extras}`;
+  const parts = [
+    c.newPhotos > 0 ? plural(c.newPhotos, "new photo") : "",
+    c.extras > 0 ? plural(c.extras, "extra print") : "",
+    c.reprints > 0 ? plural(c.reprints, "reprint") : "",
+  ].filter(Boolean);
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0] ?? "nothing new";
+  return `You're printing ${list}. ${c.printedSoFar} of ${c.of} printed so far.`;
 }

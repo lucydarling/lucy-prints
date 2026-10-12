@@ -13,8 +13,8 @@ import {
   type PrintSize,
 } from "@/lib/photo-slots";
 import { ProgressBar } from "@/components/ProgressBar";
-import { PrintLockBanner } from "@/components/PrintLockBanner";
-import { usePrintLockStore } from "@/store/print-lock-store";
+import { PrintProgressBanner } from "@/components/PrintProgressBanner";
+import { ReprintModal } from "@/components/ReprintModal";
 import { SectionGroup } from "@/components/SectionGroup";
 import { ExtraSlotCard } from "@/components/ExtraSlotCard";
 import { CropModal } from "@/components/CropModal";
@@ -32,7 +32,6 @@ export default function UploadPage() {
   const initializeSlots = usePhotoStore((s) => s.initializeSlots);
   const photos = usePhotoStore((s) => s.photos);
   const extras = usePhotoStore((s) => s.extras);
-  const frozen = usePrintLockStore((s) => s.lock === "frozen");
   const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const router = useRouter();
 
@@ -74,12 +73,12 @@ export default function UploadPage() {
       </div>
 
       <ProgressBar />
-      <PrintLockBanner />
+      <PrintProgressBanner />
 
       <ReviewMilestoneBanner themeId={bookTheme} />
 
-      {/* Crop / add / remove / save controls are switched off once the book is locked. */}
-      <div inert={frozen} className={frozen ? "opacity-60" : undefined}>
+      {/* Printed photos are locked one by one in their own cards; the page itself never locks. */}
+      <div>
       {/* Page header */}
       <div className="px-4 pt-4 pb-2 max-w-2xl mx-auto">
         <div className="flex items-start justify-between">
@@ -200,6 +199,7 @@ export default function UploadPage() {
 
       {/* Crop modal */}
       <CropModal />
+      <ReprintModal />
     </div>
   );
 }
