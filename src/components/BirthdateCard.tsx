@@ -86,6 +86,10 @@ export function BirthdateCard() {
     if (!date || saving || !sessionToken) return;
     setSaving(true);
     setFailed(false);
+    // The server answers only after its Klaviyo sync (about 10 s), so close the
+    // card at once and put it back with a message if the save does not go through.
+    const name = babyName ?? "";
+    updateBabyInfo(name, date, false);
     try {
       const res = await fetch(`/api/sessions/${sessionToken}`, {
         method: "PATCH",
@@ -93,8 +97,8 @@ export function BirthdateCard() {
         body: JSON.stringify({ babyBirthdate: date }),
       });
       if (!res.ok) throw new Error(String(res.status));
-      updateBabyInfo(babyName ?? "", date, false);
     } catch {
+      updateBabyInfo(name, "", false);
       setFailed(true);
     } finally {
       setSaving(false);
