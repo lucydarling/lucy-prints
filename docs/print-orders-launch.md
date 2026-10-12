@@ -15,7 +15,7 @@ Nothing is sent to Photo Finale or Persnickety. `live/` is never written (`LIVE_
 - **Not built:** automatic delivery from the webhook; the **prepaid-prints discount-code flow** (skipped on purpose, section 9); the **shipped** email is built but wired to nothing.
 
 ## 2. Environment variables (Vercel, Production)
-Already set (see `.env.local`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SHOPIFY_DOMAIN`, `NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD`, `NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY`, `KV_REST_API_URL` / `KV_REST_API_TOKEN` (rate limiting).
+Already set (see `.env.local`; the three `NEXT_PUBLIC_SHOPIFY_*` ones were missing from Vercel until 2026-10-11, now in Production and Preview): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SHOPIFY_DOMAIN`, `NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD`, `NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY`, `KV_REST_API_URL` / `KV_REST_API_TOKEN` (rate limiting).
 
 New for print orders:
 
@@ -119,6 +119,8 @@ Everything below is invisible to customers until the switch is flipped. With it 
 **Who sees it:** (a) everyone, when `PRINT_ORDERS_ENABLED=true`; (b) only a browser that opened `https://memories.lucydarling.com/review?print_preview=<PRINT_PREVIEW_SECRET>` (httpOnly cookie, 30 days; a wrong secret just lands on a clean `/review`). Session emails are never used as a key: they aren't verified.
 
 **The button** is on `/review`. It is blocked, with the reason shown and no redirect, when the book isn't saved, photos are still uploading or failed, there is nothing saved to print, extras are over 12, the book can't be printed through the Photo Lab, or the book already has / is waiting on a print order. Otherwise it shows "You're printing X of Y photos…" with a confirm, then goes to Shopify.
+
+**Verified 2026-10-11 (production, flag off):** `print-status`, `siblings` and `print-checkout` (404) responses and the page markup match the pre-deploy baseline; with the preview cookie the same endpoints show `printEnabled`, the "Ordered" label and a checkout URL. Following that URL with a cookie jar lands on `…/checkouts/cn/…` with an earlier 2-item cart replaced by one item and the three cart attributes present (tested with an active book variant; the print variant itself is Draft, so its own cart link answers 410 until the product is Active).
 
 **Customer emails** (Resend, `prints@lucydarling.com`; `npm run print-order:email-test` sends samples to Kevin):
 - **Order received** — when the webhook records a `ready` order (counts, ship-to, "we prepare your prints and mail them"). Sent once per order (`received_email_sent_at`).
