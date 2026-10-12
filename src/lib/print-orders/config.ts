@@ -176,14 +176,12 @@ export function variantKeyFor(size: PrintSize, kind: PrintItemKind): PrintVarian
  */
 export const PRICE_CENTS_BY_VARIANT_KEY: Record<PrintVariantKey, number> = { print: 2000 };
 /**
- * The variant id for each key: NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT (the old Standard
- * variant 48078680424673, renamed "Photo print" in Shopify; the Luxury variant is
- * gone). NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD is accepted as a fallback until the
- * new name is set. Static env reads so Next inlines them. Read lazily so a missing
- * id fails with a clear message.
+ * The variant id for each key: NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT (variant
+ * 48078680424673, "Photo print" in Shopify). Static env reads so Next inlines
+ * them. Read lazily so a missing id fails with a clear message.
  */
 export function variantIdForKey(key: PrintVariantKey, env: NodeJS.ProcessEnv = process.env): string {
-  const id = key === "print" ? env.NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT || env.NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD : undefined;
+  const id = key === "print" ? env.NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT : undefined;
   if (!id) throw new Error(`Missing env var for the "${key}" print variant (NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT)`);
   return id;
 }

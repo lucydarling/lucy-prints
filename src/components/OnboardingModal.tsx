@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const ONBOARDED_KEY = "lucy-prints-onboarded";
 
@@ -9,13 +9,20 @@ const ONBOARDED_KEY = "lucy-prints-onboarded";
  * "pregnancy journal" when they arrived for the journal (preview link only).
  */
 export function OnboardingModal({ bookWord = "memory book" }: { bookWord?: string }) {
-  const [show, setShow] = useState(false);
+  // Server render and hydration see "already onboarded" (nothing shown); the
+  // client then reads localStorage. No effect-driven setState needed.
+  const onboarded = useSyncExternalStore(
+    () => () => {},
+    () => localStorage.getItem(ONBOARDED_KEY) !== null,
+    () => true
+  );
+  const [closed, setClosed] = useState(false);
+  const show = !onboarded && !closed;
 
-  useEffect(() => {
-    if (!localStorage.getItem(ONBOARDED_KEY)) {
-      setShow(true);
-    }
-  }, []);
+  function dismiss() {
+    localStorage.setItem(ONBOARDED_KEY, "1");
+    setClosed(true);
+  }
 
   useEffect(() => {
     if (!show) return;
@@ -25,11 +32,6 @@ export function OnboardingModal({ bookWord = "memory book" }: { bookWord?: strin
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [show]);
-
-  function dismiss() {
-    localStorage.setItem(ONBOARDED_KEY, "1");
-    setShow(false);
-  }
 
   if (!show) return null;
 

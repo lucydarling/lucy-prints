@@ -438,7 +438,7 @@ export const BOOK_THEMES = [
   { id: "cottage_garden", name: "Cottage Garden", sku: "BB018MEM", tier: "standard", product: "memory_book" },
   { id: "bowkissed_blush", name: "Bowkissed Blush", sku: "BB019MEM", tier: "standard", product: "memory_book" },
   { id: "my_first_rodeo", name: "My First Rodeo", sku: "BB020MEM", tier: "standard", product: "memory_book" },
-  // Luxury Memory Books (gold embossed fabric covers)
+  // Luxury Memory Books (gold-foiled fabric covers)
   { id: "honey_bee", name: "Honey Bee", sku: "BB012MEM", tier: "luxury", product: "memory_book" },
   { id: "teddy_bears_picnic", name: "Teddy Bear's Picnic", sku: "BB013MEM", tier: "luxury", product: "memory_book" },
   { id: "celestial_skies", name: "Celestial Skies", sku: "BB014MEM", tier: "luxury", product: "memory_book" },

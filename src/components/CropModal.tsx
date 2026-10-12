@@ -14,7 +14,14 @@ import {
   type PrintSize,
 } from "@/lib/photo-slots";
 
+// Outer shell: remounts the modal for each slot, so the load-error state starts
+// clean whenever a different slot opens (no reset effect needed).
 export function CropModal() {
+  const editingSlot = usePhotoStore((s) => s.editingSlot);
+  return <CropModalInner key={editingSlot ?? "none"} />;
+}
+
+function CropModalInner() {
   const editingSlot = usePhotoStore((s) => s.editingSlot);
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const regionLayouts = usePhotoStore((s) => s.regionLayouts);
@@ -37,11 +44,6 @@ export function CropModal() {
       : null
   );
   const previousOrientation = useRef<PrintOrientation | null>(null);
-
-  // Reset the error state whenever a different slot opens the modal.
-  useEffect(() => {
-    setLoadError(false);
-  }, [editingSlot]);
 
   // Flipping orientation changes the stencil's aspect ratio — the cropper
   // needs a nudge to re-fit the crop box to the new shape.

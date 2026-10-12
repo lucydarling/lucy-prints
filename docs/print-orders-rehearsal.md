@@ -11,10 +11,10 @@ Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE
 - [ ] Step 5 code deployed with the flag OFF.
 
 **Shopify product "Custom Photo Prints for Memory Book"**
-1. Variants: keep the Standard variant (id `48078680424673`) and **rename it "Photo print"**. **Delete the Luxury variant** (`48078680457441`).
-2. Price: set the variant to **$20.00** (placeholder; must equal `PRICE_CENTS_BY_VARIANT_KEY.print` ÷ 100).
+1. Variants: one variant, "Photo print" (id `48078680424673`). Done 2026-10-11 (the Luxury variant is deleted).
+2. Price: currently a **$1.00 placeholder** in Shopify. For the rehearsal the paid amount does not matter to the app; for launch set the real price and keep it equal to `PRICE_CENTS_BY_VARIANT_KEY.print` ÷ 100.
 3. Inventory: don't track quantity. "This is a physical product" stays on (shipping is needed).
-4. **Status: Active** (the cart link answers 410 while it is Draft).
+4. **Status: Active** (done; the cart link answers 410 while it is Draft).
 5. **Keep it out of collections and search:**
    - Collections: open the product → *Collections* must be empty. Then check each automated collection's conditions (e.g. "All products", vendor/type/tag rules) so none of them picks it up.
    - Search and recommendations: add the product metafield `seo.hidden` (integer) = `1` (hides it from storefront search, predictive search and the sitemap). Also check the product page's *Sales channels*: publish it to **Online Store only** (not Google & YouTube, Meta, Shop, Faire, etc.).
@@ -24,7 +24,7 @@ Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE
 7. **Free-shipping rules and Rebuy must not waive S&H:** no store-wide *Free shipping* discount (automatic or code), and no Rebuy rule that applies one (launch doc 3.2 steps 5–6). Test: at checkout with a 5+ print cart the line must read `Shipping & handling $6.00`; add a $75+ item in a second cart and re-check.
 
 **Vercel (Production)**
-- [ ] `NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT` = `48078680424673`. (`NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD` still works as a fallback, so nothing breaks if you set the new name later. `NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY` is no longer used and can be removed.) **It is a `NEXT_PUBLIC_` variable, so redeploy after setting it.**
+- [ ] `NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT` = `48078680424673`. Set in Production and Preview. The old `NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD` and `NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY` variables are no longer read by any code and can be deleted from Vercel. **It is a `NEXT_PUBLIC_` variable, so redeploy after setting it.**
 - [ ] `SHOPIFY_WEBHOOK_SECRET` = the signing secret Shopify shows when you create the webhook (below). Redeploy.
 - [ ] Already set: `PRINT_PREVIEW_SECRET`, `PRINT_REPLY_TO`, `NEXT_PUBLIC_APP_URL`, Dropbox vars, `CRON_SECRET`. **Not set: `PRINT_ORDERS_ENABLED`, `PRINT_DESTINATION`.**
 
