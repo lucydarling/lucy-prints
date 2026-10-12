@@ -44,7 +44,7 @@ export class EmailSendError extends Error {
  * the 403 "domain is not verified" failure stayed invisible: the route kept
  * returning 200 while zero mail left the building. Always check `error`.
  */
-async function sendEmail(params: { to: string; subject: string; html: string }) {
+async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }) {
   if (!resend) {
     throw new EmailSendError(
       "missing_api_key",
@@ -57,6 +57,7 @@ async function sendEmail(params: { to: string; subject: string; html: string }) 
     to: params.to,
     subject: params.subject,
     html: params.html,
+    ...(params.replyTo ? { replyTo: params.replyTo } : {}),
   });
 
   if (error) {
@@ -274,7 +275,8 @@ export async function sendCustomerEmail(params: { to: string; subject: string; h
     console.warn(`[print-order-email] TEST_MODE: not sending "${params.subject}" to a non-lucydarling.com address`);
     return "skipped";
   }
-  await sendEmail(params);
+  // Replies go to the support inbox (PRINT_REPLY_TO), not the send-only prints@ address.
+  await sendEmail({ ...params, replyTo: process.env.PRINT_REPLY_TO?.trim() || undefined });
   return "sent";
 }
 
@@ -362,7 +364,7 @@ export function printOrderHeldEmail(info: { resumeUrl: string; orderName?: strin
     subject: "Add your photos to finish your print order",
     html: printEmailShell("Add your photos to finish your order", `
         <p style="${P}">We received your print order${info.orderName ? ` (${escHtml(info.orderName)})` : ""}, but there aren&rsquo;t any saved photos in your book yet, so there&rsquo;s nothing to print.</p>
-        <p style="${P}">Add your photos and they&rsquo;ll be ready to go.</p>
+        <p style="${P}">Add your photos, then reply to this email and we&rsquo;ll send your order to print.</p>
         <a href="${escHtml(info.resumeUrl)}" style="display:block;text-align:center;background-color:#FAB8A9;color:#FFFFFF;padding:14px 24px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;">
           Back to My Photo Book
         </a>`),

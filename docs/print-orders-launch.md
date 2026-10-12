@@ -29,6 +29,7 @@ New for print orders:
 | `PRINT_DESTINATION` | `demo` (default) or `live`. `live` also needs `TEST_MODE` off, and is blocked anyway while `LIVE_DELIVERY_ALLOWED` is false. **Do not set it.** | No |
 | `PRINT_ORDERS_ENABLED` | `true` shows the button to everyone and opens the checkout route. **Unset/anything else = off** (the launch switch). | No (default off) |
 | `PRINT_PREVIEW_SECRET` | 16+ characters. `/review?print_preview=<secret>` sets an httpOnly cookie in that browser; that cookie opens print ordering for that browser even with the flag off. | For the private preview |
+| `PRINT_REPLY_TO` | Reply-to on every customer print email (the support inbox). The held email tells the customer to reply, so **set it before launch**; unset = no Reply-To header (replies would go to the send-only `prints@` address). | Before launch |
 | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_ADMIN_DOMAIN` | Manual retry only (`print-order:retry`): Admin API token with `read_orders`, and the `*.myshopify.com` host. Not needed by the webhook. | Retry only |
 
 Database: 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) applied; 010 (`sent`/`error` statuses, `sent_at`, `destination`, `error_reason`, `error_at`) applied and verified 2026-10-10. **011** (`customer_email`, `received_email_sent_at`, `held_email_sent_at`, `shipped_email_sent_at`) is written in `supabase/migrations/011_print_orders_customer_email.sql`; it must be applied **before** the step-4 code is deployed, because the webhook's upsert writes `customer_email`.

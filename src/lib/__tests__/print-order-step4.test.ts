@@ -167,6 +167,7 @@ test("emails: received lists counts and ship-to and escapes customer-supplied te
   assert.ok(!/google\.com\/url/.test(r.html));
   const h = printOrderHeldEmail({ resumeUrl: "https://memories.lucydarling.com/resume/tok", orderName: "#1001" });
   assert.match(h.html, /href="https:\/\/memories\.lucydarling\.com\/resume\/tok"/);
+  assert.match(h.html, /reply to this email and we.{1,8}ll send your order to print/);
   const s = printOrderShippedEmail({ bookName: "Little Artist", carrier: "USPS", trackingNumber: "9400", trackingUrl: "https://track.test/9400" });
   assert.match(s.html, /9400/);
   for (const e of [r, h, s]) assert.ok(!/free|discount|guarantee|days/i.test(e.html.replace(/<[^>]+>/g, " ")), "no offers or promises");
