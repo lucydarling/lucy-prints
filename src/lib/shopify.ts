@@ -77,3 +77,12 @@ export function buildCheckoutUrl({
 
   return `https://${SHOPIFY_STORE_DOMAIN}/cart/${variantId}:1?${params.toString()}`;
 }
+
+/**
+ * Same cart as buildCheckoutUrl, but emptied first (/cart/clear), so anything
+ * already in the customer's cart can't ride along on a print order.
+ */
+export function buildFreshCartCheckoutUrl(args: Parameters<typeof buildCheckoutUrl>[0]): string {
+  const cartPath = buildCheckoutUrl(args).replace(/^https:\/\/[^/]+/, "");
+  return `https://${SHOPIFY_STORE_DOMAIN}/cart/clear?return_to=${encodeURIComponent(cartPath)}`;
+}

@@ -17,7 +17,10 @@ export interface ShopifyPaidOrder {
     province_code?: string | null; province?: string | null; zip?: string | null;
     country_code?: string | null; phone?: string | null;
   } | null;
-  customer?: { first_name?: string | null; last_name?: string | null } | null;
+  customer?: { first_name?: string | null; last_name?: string | null; email?: string | null } | null;
+  /** The customer's email on the order (either field may be set). */
+  email?: string | null;
+  contact_email?: string | null;
 }
 
 export interface VariantConfig {
@@ -44,6 +47,8 @@ export interface SnapshotOrderInfo {
   paidExtras: number;
   shipTo: ShipTo;
   customer: { fname?: string; lname?: string };
+  /** Where the customer emails go (the Shopify order's email). */
+  email?: string;
 }
 
 export interface PaidOrderResult {
@@ -54,6 +59,21 @@ export interface PaidOrderResult {
   printCount?: number;
   sessionId?: string;
   snapshot?: PrintSnapshot;
+  customerEmail?: string;
+}
+
+/** What a customer email needs. Only ever "received" (ready) or "held"; a refused order sends none. */
+export interface CustomerNotice {
+  kind: "received" | "held";
+  shopifyOrderId: string;
+  shopifyOrderName?: string;
+  to: string;
+  sessionToken: string;
+  bookTheme: string;
+  babyName?: string | null;
+  bookPrints: number;
+  extraPrints: number;
+  shipTo: ShipTo;
 }
 
 export interface AlertInfo {
@@ -67,7 +87,7 @@ export interface AlertInfo {
 export interface PaidOrderDeps {
   variants: VariantConfig;
   loadSession: (token: string) => Promise<{
-    session: { id: string; book_theme: string };
+    session: { id: string; book_theme: string; baby_name?: string | null };
     photoRows: SessionPhotoRow[];
     extraRows: SessionExtraRow[];
     fetchImage: (path: string) => Promise<Buffer>;
@@ -81,6 +101,11 @@ export interface PaidOrderDeps {
   freeze: (shopifyOrderId: string, photoRows: SessionPhotoRow[], extraRows: SessionExtraRow[]) => Promise<PrintSnapshot>;
   /** Email Kevin about a refused or held order. Failures here must never fail the order. */
   alert: (info: AlertInfo) => Promise<void>;
+  /**
+   * Email the customer "order received" (ready) or "we need photos" (held). Optional;
+   * the real one sends at most once per order and failures never fail the order.
+   */
+  notify?: (n: CustomerNotice) => Promise<void>;
   /** True when a DIFFERENT paid order already has a ready, sent or error print order for this session. */
   otherReadyOrderForSession: (sessionId: string, shopifyOrderId: string) => Promise<boolean>;
   record: (r: PaidOrderResult & { shopifyOrderId: string; shopifyOrderName?: string }) => Promise<void>;
@@ -136,8 +161,29 @@ export async function handlePaidOrder(
     throw new Error("order is already ready — refusing to re-freeze it");
   }
 
+  const seen: { babyName?: string | null } = {};
+  const customerEmail = (order.email || order.contact_email || order.customer?.email || "").trim() || undefined;
   const done = async (r: PaidOrderResult) => {
-    await deps.record({ ...r, shopifyOrderId: orderId, shopifyOrderName: order.name });
+    await deps.record({ ...r, customerEmail: r.customerEmail ?? customerEmail, shopifyOrderId: orderId, shopifyOrderName: order.name });
+    if ((r.status === "ready" || r.status === "held") && existing?.status !== r.status && deps.notify && customerEmail && r.snapshot?.order) {
+      try {
+        const snap = r.snapshot;
+        await deps.notify({
+          kind: r.status === "ready" ? "received" : "held",
+          shopifyOrderId: orderId,
+          shopifyOrderName: order.name,
+          to: customerEmail,
+          sessionToken: token,
+          bookTheme: snap.order!.bookTheme,
+          babyName: seen.babyName,
+          bookPrints: snap.photoRows.filter((x) => x.status !== "empty").length,
+          extraPrints: snap.extraRows.filter((x) => x.storage_path).reduce((n, x) => n + (x.quantity ?? 0), 0),
+          shipTo: snap.order!.shipTo,
+        });
+      } catch (err) {
+        console.error("print order customer email failed:", err);
+      }
+    }
     if ((r.status === "held" || r.status === "refused") && existing?.status !== r.status) {
       try {
         await deps.alert({ status: r.status, shopifyOrderId: orderId, shopifyOrderName: order.name, sessionToken: token, reasons: r.reasons });
@@ -166,6 +212,7 @@ export async function handlePaidOrder(
   } catch (err) {
     return refuse((err as Error).message);
   }
+  seen.babyName = loaded.session.baby_name;
   if (loaded.session.book_theme !== theme) {
     return refuse(`order says ${theme || "(no book_theme)"} but the session is ${loaded.session.book_theme}`);
   }
@@ -194,7 +241,7 @@ export async function handlePaidOrder(
       ? existing.snapshot
       : await deps.freeze(orderId, loaded.photoRows, loaded.extraRows);
   // The snapshot also records what the order was for, so building it later needs nothing live.
-  const snapshot: PrintSnapshot = { ...frozen, order: { bookTheme: theme, paidExtras: extraQty, shipTo, customer } };
+  const snapshot: PrintSnapshot = { ...frozen, order: { bookTheme: theme, paidExtras: extraQty, shipTo, customer, email: customerEmail } };
   const finish = (r: PaidOrderResult) => done({ ...r, sessionId: loaded.session.id, snapshot });
 
   const check = validatePrintRequest({

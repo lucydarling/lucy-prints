@@ -12,6 +12,7 @@ import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { DownloadReviewPrompt } from "@/components/ReviewPromptCard";
+import { PrintOrderSection } from "@/components/PrintOrderSection";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
@@ -413,15 +414,8 @@ export default function ReviewPage() {
           </div>
         )}
 
-        {/* Coming soon note */}
-        <div className="p-3 rounded-xl bg-rose-50 border border-rose-100 text-center">
-          <p className="text-xs text-rose-600 font-medium">
-            Direct print ordering coming soon
-          </p>
-          <p className="text-xs text-rose-600 mt-0.5">
-            We&apos;re working on connecting Lucy Darling prints directly — wanted to get this into your hands right away.
-          </p>
-        </div>
+        {/* Print my photos (once enabled for this browser) / coming-soon note */}
+        <PrintOrderSection />
       </div>
 
       {/* Modals */}

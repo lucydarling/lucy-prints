@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendMyBooksEmail, EmailSendError } from "@/lib/email";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 import { isThemeAllowed } from "@/lib/preview-gate";
+import { printButtonAllowed } from "@/lib/print-orders/print-gate";
+import { orderedSessionIds } from "@/lib/print-orders/ordered";
 import {
   checkRateLimits,
   RATE_LIMITS,
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const { data: allSessions, error: lookupError } = await supabaseAdmin
       .from("sessions")
-      .select("token, book_theme, baby_name, photo_count")
+      .select("id, token, book_theme, baby_name, photo_count")
       .eq("email", normalizedEmail)
       .eq("status", "active")
       .order("last_activity_at", { ascending: false, nullsFirst: false });
@@ -59,6 +61,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // "Ordered" labels only while print ordering is on for this browser.
+    const ordered = printButtonAllowed(cookie) ? await orderedSessionIds(sessions.map((s) => s.id as string)) : new Set<string>();
     const enriched = sessions.map((s) => {
       const theme = BOOK_THEMES.find((t) => t.id === s.book_theme);
       return {
@@ -66,6 +70,7 @@ export async function POST(req: NextRequest) {
         themeName: theme?.name ?? s.book_theme,
         babyName: s.baby_name as string | null,
         photoCount: s.photo_count || 0,
+        ordered: ordered.has(s.id as string),
       };
     });
 

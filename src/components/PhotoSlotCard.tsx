@@ -7,7 +7,7 @@ import { getPrintDimensions, getPrintSizeLabel, type PhotoSlot } from "@/lib/pho
 import { usePhotoStore } from "@/store/photo-store";
 import { prepareImageFile } from "@/lib/image-prep";
 import { SlotDetailsPanel } from "./SlotDetailsPanel";
-import { UploadErrorNote } from "./UploadErrorNote";
+import { UploadErrorNote, useHasUploadError } from "./UploadErrorNote";
 
 interface PhotoSlotCardProps {
   slot: PhotoSlot;
@@ -21,6 +21,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
   const setMilestoneDate = usePhotoStore((s) => s.setMilestoneDate);
   const removePhoto = usePhotoStore((s) => s.removePhoto);
   const detailsMode = usePhotoStore((s) => s.detailsMode);
+  const hasUploadError = useHasUploadError(slot.key);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditingLabel, setIsEditingLabel] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -118,7 +119,7 @@ export function PhotoSlotCard({ slot }: PhotoSlotCardProps) {
             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <span className="text-white text-[10px] font-semibold leading-tight text-center">Re-crop</span>
             </div>
-            {photo?.status === "cropped" && (
+            {photo?.status === "cropped" && !hasUploadError && (
               <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                 <svg
                   className="w-2.5 h-2.5 text-white"

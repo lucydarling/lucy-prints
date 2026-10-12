@@ -12,3 +12,8 @@ export function UploadErrorNote({ slotKey }: { slotKey: string }) {
     </p>
   );
 }
+
+/** True while this photo has an upload error — its green "done" check is hidden meanwhile. */
+export function useHasUploadError(slotKey: string): boolean {
+  return useSaveStore((s) => Boolean(s.uploadErrors[slotKey]));
+}

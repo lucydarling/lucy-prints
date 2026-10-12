@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { SHOPIFY_VARIANTS } from "@/lib/shopify";
-import { sendPrintOrderAlert } from "@/lib/email";
+import { sendPrintOrderAlert, sendPrintOrderHeld, sendPrintOrderReceived, resolveAppUrl } from "@/lib/email";
+import { BOOK_THEMES } from "@/lib/photo-slots";
 import { loadSessionForPrint } from "./load-session";
 import type { PaidOrderDeps, PrintSnapshot } from "./paid-order";
 
@@ -14,7 +15,7 @@ export function realPaidOrderDeps(): PaidOrderDeps {
     },
     loadSession: async (token) => {
       const l = await loadSessionForPrint(token);
-      return { session: { id: l.session.id, book_theme: l.session.book_theme }, photoRows: l.photoRows, extraRows: l.extraRows, fetchImage: l.fetchImage };
+      return { session: { id: l.session.id, book_theme: l.session.book_theme, baby_name: l.session.baby_name }, photoRows: l.photoRows, extraRows: l.extraRows, fetchImage: l.fetchImage };
     },
     loadExisting: async (shopifyOrderId) => {
       const { data, error } = await supabaseAdmin
@@ -45,6 +46,34 @@ export function realPaidOrderDeps(): PaidOrderDeps {
     alert: async (info) => {
       await sendPrintOrderAlert(info);
     },
+    // At most one email of each kind per order: the sent-at column is checked first and
+    // set after a successful send. If the column can't be read (migration 011 not applied)
+    // nothing is sent — better silent than a duplicate.
+    notify: async (n) => {
+      const col = n.kind === "received" ? "received_email_sent_at" : "held_email_sent_at";
+      const { data, error } = await supabaseAdmin
+        .from("print_orders")
+        .select(col)
+        .eq("shopify_order_id", n.shopifyOrderId)
+        .maybeSingle();
+      if (error) throw new Error(`could not check ${col}: ${error.message}`);
+      if ((data as Record<string, unknown> | null)?.[col]) return;
+      const bookName = BOOK_THEMES.find((t) => t.id === n.bookTheme)?.name ?? n.bookTheme;
+      const result =
+        n.kind === "received"
+          ? await sendPrintOrderReceived(n.to, {
+              bookName, babyName: n.babyName, bookPrints: n.bookPrints, extraPrints: n.extraPrints,
+              shipTo: n.shipTo, orderName: n.shopifyOrderName,
+            })
+          : await sendPrintOrderHeld(n.to, { resumeUrl: `${resolveAppUrl()}/resume/${n.sessionToken}`, orderName: n.shopifyOrderName });
+      // A TEST_MODE skip is not a send: leave the column empty.
+      if (result !== "sent") return;
+      const { error: markError } = await supabaseAdmin
+        .from("print_orders")
+        .update({ [col]: new Date().toISOString() })
+        .eq("shopify_order_id", n.shopifyOrderId);
+      if (markError) console.error(`sent ${n.kind} email but could not record ${col}:`, markError.message);
+    },
     otherReadyOrderForSession: async (sessionId, shopifyOrderId) => {
       const { data, error } = await supabaseAdmin
         .from("print_orders")
@@ -68,6 +97,7 @@ export function realPaidOrderDeps(): PaidOrderDeps {
           snapshot: r.snapshot ?? null,
           external_id: r.externalId ?? null,
           print_count: r.printCount ?? null,
+          ...(r.customerEmail ? { customer_email: r.customerEmail } : {}),
           test_mode: true,
           updated_at: new Date().toISOString(),
         },
