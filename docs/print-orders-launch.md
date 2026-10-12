@@ -1,12 +1,13 @@
 # Print orders — launch readiness
 
-Status: **test mode; manual delivery to a DEMO Dropbox hotfolder only.** Written 2026-10-09, step 3 added 2026-10-10, branch `print-orders-step1`.
+Status: **test mode; manual delivery to a DEMO Dropbox hotfolder only.** Written 2026-10-09, step 3 added 2026-10-10, **rewritten for print-in-rounds 2026-10-11 (step 5)**. For the live rehearsal see `docs/print-orders-rehearsal.md`.
 Nothing is sent to Photo Finale or Persnickety. `live/` is never written (`LIVE_DELIVERY_ALLOWED = false`).
 
 ## 1. What exists
 - Shopify `orders/paid` webhook → `POST /api/webhooks/shopify/orders-paid` (Node runtime, HMAC-verified).
 - For a print order it freezes the photos at payment, checks them, and records `ready` / `held` / `refused` in `print_orders`. Refused and held outcomes email Kevin.
-- Sessions lock after a `ready`, `refused`, `sent` or `error` order (409 on upload, delete, notes); a `held` session stays editable. A webhook or retry never re-checks or overwrites a `sent`/`error` order.
+- **Printing is in rounds (step 5).** Each order prints a *round* recorded when the customer clicks "Print my photos" (`print_rounds`): the book photos, extras and paid reprints not yet printed. The session never locks as a whole; a slot or extra locks only once an order containing it is `ready` (a `print_order_items` row; a unique key prevents printing anything twice). Upload/recrop/delete on a printed slot or extra answer 409; a printed slot can be replaced as a paid reprint (`print_reprints`, included in the next order, original never overwritten). Notes and baby details are always editable. A webhook or retry never re-checks or overwrites a `sent`/`error` order.
+- **Pricing is per print** (placeholder $20, `config.ts`) plus $6 S&H per order; the cart is one line per print variant with quantity = prints; the webhook requires the paid quantity per variant to equal the round, else it **holds** the order (alert, nothing locked). `MIN_PRINTS_PER_ORDER` (5, placeholder) is enforced at the button and the webhook; extras have no customer-facing cap, only a hidden limit of 100 per order.
 - Order folder builder (Photo Finale `apm_order` XML + JPEGs), `TEST-` ids, local-folder/ZIP output only, buildable from the frozen snapshot (`print-order:build`).
 - Builder refuses any file whose shape (after padding) is not its product's `aspect` (pfRouter would silently center-crop it). `aspect` is derived from the print method in `config.ts`.
 - **Delivery (manual):** `npm run print-order:deliver -- <order id>` uploads to Dropbox and marks the order `sent` (section 5).
@@ -32,10 +33,10 @@ New for print orders:
 | `PRINT_REPLY_TO` | Reply-to on every customer print email (the support inbox). The held email tells the customer to reply, so **set it before launch**; unset = no Reply-To header (replies would go to the send-only `prints@` address). | Before launch |
 | `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_ADMIN_DOMAIN` | Manual retry only (`print-order:retry`): Admin API token with `read_orders`, and the `*.myshopify.com` host. Not needed by the webhook. | Retry only |
 
-Database: 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) applied; 010 (`sent`/`error` statuses, `sent_at`, `destination`, `error_reason`, `error_at`) applied and verified 2026-10-10. **011** (`customer_email`, `received_email_sent_at`, `held_email_sent_at`, `shipped_email_sent_at`) is written in `supabase/migrations/011_print_orders_customer_email.sql`; it must be applied **before** the step-4 code is deployed, because the webhook's upsert writes `customer_email`.
+Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_reprints`, `print_orders.round_id`/`paid_quantity`) applied 2026-10-11 and verified by SQL; it must be applied before the step-5 code is deployed (the webhook's `record()` writes `round_id`).** 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) applied; 010 (`sent`/`error` statuses, `sent_at`, `destination`, `error_reason`, `error_at`) applied and verified 2026-10-10. **011** (`customer_email`, `received_email_sent_at`, `held_email_sent_at`, `shipped_email_sent_at`) is written in `supabase/migrations/011_print_orders_customer_email.sql`; it must be applied **before** the step-4 code is deployed, because the webhook's upsert writes `customer_email`.
 
 ## 3. Shopify setup
-1. **Product** "Custom Photo Prints for Memory Book" (currently **Draft**, both variants $0.00; Standard `48078680424673`, Luxury `48078680457441`): set the Standard and Luxury prices and set it to Active. Price is flat per book; `photo_count` never affects price.
+1. **Product** "Custom Photo Prints for Memory Book" (currently **Draft**, both variants $0.00; Standard `48078680424673`, Luxury `48078680457441`): set the Standard and Luxury prices and set it to Active. Price is per print (variant price × cart quantity). Single variant "Photo print" (`48078680424673`); the Luxury variant is gone. `config.ts` maps each print size/extras/reprints to a variant so sizes can be priced separately later.
 2. **Shipping & handling = $6 flat, US only, as a shipping-profile rate (not a line item).** Exact steps (done by Kevin in Shopify admin; the store's current settings were not visible when this was written, so verify each screen):
    1. Settings → **Shipping and delivery** → under *Shipping*, **Create custom shipping profile** (name: `Photo prints`).
    2. **Add products** → pick **Custom Photo Prints for Memory Book** (both variants). A product belongs to exactly one profile, so this moves it out of *General*.
@@ -90,10 +91,10 @@ Database: 008 (`print_orders`) applied 2026-10-09; 009 (`updated_at` trigger) ap
 **Never delete** `print-orders/<order id>/` files or `print_orders` rows by hand. Delivery deletes only its own staging copies in Dropbox.
 
 ## 6. Behaviour to know about
-- Payment = finished: whatever is filled prints. Only an order with zero photos is held.
-- Extras: free, max 12 per print order (enforced by `validatePrintRequest`; the extras UI is not capped).
+- Payment prints exactly the round recorded at the click; photos added afterwards wait for the next round. Anything that changed between click and payment (a photo or reprint removed, an extra's quantity edited, an expired round >24h, quantities that don't match) holds the order.
+- Extras: charged per print like any other print; hidden sanity limit of 100 per order.
 - Journal and Little Years books are refused for printing for now.
-- A customer can always start a new book after a ready/refused one (same email + theme creates a new session).
+- The same book continues after an order (same email + theme reuses the session); the customer prints the next round when ready.
 - Legacy rows saved at 4x4 for a 3x3 slot (118 `baby_bump`, 5 `my_first_10/11`) are scaled down to the slot size.
 
 ## 7. Photo Finale / Persnickety: answered and still open

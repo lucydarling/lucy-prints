@@ -14,7 +14,8 @@
     "print-order:deliver": "node --env-file=.env.local --import tsx scripts/print-order-deliver.ts",
     "print-order:email-test": "node --env-file=.env.local --import tsx scripts/print-order-email-test.ts",
     "print-order:check-errors": "node --env-file=.env.local --import tsx scripts/print-order-check-errors.ts",
-    "dropbox:connect": "node --env-file=.env.local --import tsx scripts/dropbox-connect.ts"
+    "dropbox:connect": "node --env-file=.env.local --import tsx scripts/dropbox-connect.ts",
+    "print-order:rounds-e2e": "node --env-file=.env.local --import tsx scripts/print-order-rounds-e2e.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",
