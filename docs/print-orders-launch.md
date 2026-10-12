@@ -145,3 +145,17 @@ No "prepaid prints" product exists in Shopify (checked 2026-10-11: only "Custom 
 `NEXT_PUBLIC_APP_URL` is `https://memories.lucydarling.com` (no trailing slash) in Production and Preview (it had been `https://lucy-prints.vercel.app`; the Development value in Vercel is still the old one and only matters for `vercel env pull`). It sets the logo and the resume links ("Continue My Photo Book", "Continue/View This Book", the held email's "Back to My Photo Book") in every email built in `src/lib/email.ts`. Checked on a real production magic-link email and a `[TEST]` held email: logo and links use `memories.lucydarling.com` and load.
 
 **Keep `lucy-prints.vercel.app` attached to the Vercel project.** Every email sent before 2026-10-12 links to `lucy-prints.vercel.app/resume/<token>` and loads its logo from there, so removing that domain would break "continue my book" for everyone who saved a book earlier. It currently serves both (200).
+
+## 11. Klaviyo round-reminder data (2026-10-11)
+Data only. No flows or emails were built; Kevin builds them in Klaviyo from these profile properties. Code: `src/lib/print-orders/round-reminders.ts`, `round-reminder-sync.ts`, thresholds in `ROUND_REMINDER` (`config.ts`).
+
+Properties describe the memory book **saved most recently** (Klaviyo profiles are one value per email, last write wins, same as `baby_birthdate` / `book_theme`):
+
+| Property | Meaning |
+|---|---|
+| `printed_count` | Book photos printed: distinct slots with a `print_order_items` row (the same number as the per-photo lock and the "X of Y photos printed" line; orders in ready/sent/error). |
+| `unprinted_count` | Prints the next order would hold from new photos: saved book photos not yet printed + extra prints not yet printed (by quantity). Pending reprints are not counted. |
+| `last_print_order_at` | ISO time of the latest ready/sent/error order for the book. Not written if none. |
+| `print_round_due` | `welcome_baby`: baby 3-12 months, no order yet, `unprinted_count >= 10`. `first_year`: baby 13+ months, `unprinted_count >= 10`, no order in the last 60 days. `growing_up`: child 5+ years, `unprinted_count >= MIN_PRINTS_PER_ORDER`. Otherwise `""`. Not written if the book has no birthdate. A child 5+ is checked for `growing_up` first. |
+
+When they are written: only if print ordering is on for the caller. From request routes (a save/notes sync `PATCH /api/sessions/[token]`, reopening an existing book `POST /api/sessions`) that means `PRINT_ORDERS_ENABLED=true` or a valid preview cookie; from the `orders/paid` webhook and the daily cron `GET /api/cron/print-round-reminders` (14:00 UTC, `CRON_SECRET`-gated) it means the flag only. With the flag off the cron answers `{"skipped": ...}` and no profile changes. Journal and Little Years books never write them. Limitation: if a birthdate is later removed, `print_round_due` keeps its last value (the property is left unset rather than cleared).
