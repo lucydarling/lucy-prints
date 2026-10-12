@@ -13,6 +13,7 @@ import { BabyInfoModal } from "@/components/BabyInfoModal";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { DownloadReviewPrompt } from "@/components/ReviewPromptCard";
 import { PrintOrderSection } from "@/components/PrintOrderSection";
+import { BirthdateCard } from "@/components/BirthdateCard";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
@@ -161,6 +162,8 @@ export default function ReviewPage() {
           <h1 className="text-lg font-bold text-gray-900">Your Photos</h1>
         </div>
       </div>
+
+      <BirthdateCard />
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Photo grid preview */}
