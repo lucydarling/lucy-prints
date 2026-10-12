@@ -295,6 +295,25 @@ test("deliver: refuses when the folder is already in the hotfolder or in _error 
   assert.deepEqual(fake2.uploads, []);
 });
 
+test("deliver: once pfRouter has moved the order to processed/, a re-run is refused", async () => {
+  const fake = new FakeDropbox();
+  const first = deliverDeps(fake, readyRow());
+  await deliverPrintOrder(ORDER_ID, {}, first.deps);
+  assert.deepEqual(first.marks, [[ORDER_ID, "ready"]]);
+  // pfRouter's postAction "move": demo/<order> -> demo/processed/<order>
+  const files = fake.children(`${ROOT}/demo/TEST-${ORDER_ID}`);
+  for (const f of files) fake.addFile(`${ROOT}/demo/processed/TEST-${ORDER_ID}/${f.name}`, Buffer.from("x"));
+  const gone = `${ROOT}/demo/TEST-${ORDER_ID}`.toLowerCase();
+  for (const k of [...fake.nodes.keys()]) if (k === gone || k.startsWith(`${gone}/`)) fake.nodes.delete(k);
+  assert.equal(fake.has(`${ROOT}/demo/TEST-${ORDER_ID}`), false);
+
+  // Even with the DB row wrongly back at "ready" (the "marking sent failed" case), the order is not sent twice.
+  const again = deliverDeps(fake, readyRow());
+  await assert.rejects(deliverPrintOrder(ORDER_ID, {}, again.deps), /already in processed/);
+  assert.deepEqual(again.marks, []);
+  assert.equal(fake.has(`${ROOT}/demo/TEST-${ORDER_ID}`), false);
+});
+
 test("deliver: refuses anything not ready; a sent order needs --force, and resend stays disabled", async () => {
   const fake = new FakeDropbox();
   for (const status of ["held", "refused", "error"]) {

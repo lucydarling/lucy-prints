@@ -1,6 +1,6 @@
-# Print orders: retention proposal (NOT IMPLEMENTED, decision needed)
+# Print orders: retention (DECIDED 2026-10-12, NOT IMPLEMENTED)
 
-Written 2026-10-11. Nothing here deletes anything; no cleanup code exists. This follows the standing rule: **retention is gated on use signals, never on age alone**, and customer photos are never deleted to save space.
+Proposal written 2026-10-11; **Kevin decided 2026-10-12** (see "Decisions" below). Nothing here deletes anything; no cleanup code exists. This follows the standing rule: **retention is gated on use signals, never on age alone**, and customer photos are never deleted to save space.
 
 ## What is kept, and how big it is
 | Where | What | Why it exists |
@@ -26,8 +26,9 @@ Size (measured 2026-10-11, read-only): the `photos` bucket holds 5,159 files, 1,
 - Dropbox `demo/` folders (test orders) can follow a shorter, separate rule once Photo Finale confirms what happens to a processed folder (open question 4 in the launch doc).
 - Customer notice: before the first real cleanup, add one line to the order-received email and the FAQ ("we keep a copy of what we printed for 12 months").
 
-## Decisions for you
-1. Grace window: 12 months, or longer/shorter?
-2. Is "printer confirmed shipped" (needs tracking from Photo Finale) the right gate, or is `sent` plus the window enough?
-3. Build the report-only script now, or wait until there are real orders?
-4. Do you want the customer-notice line added before launch regardless of cleanup?
+## Decisions (Kevin, 2026-10-12)
+1. **Keep frozen copies and delivered folders 12 months after the printer confirms shipping.** Until Photo Finale provides tracking (so there is no shipping confirmation yet), the 12 months are counted from `sent` (`print_orders.sent_at`).
+2. **No report script yet.** Not built.
+3. **No retention notice in customer emails.** Not added.
+4. **No deletion code.** Never-eligible items in the rule above still hold: order records, `print_order_items` rows, and live session photos.
+Revisit when real orders exist and tracking is available; the rule above is the starting point.

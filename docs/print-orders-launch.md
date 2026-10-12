@@ -71,7 +71,7 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
   - `staging/<id>-run-<n>/`: every image, then the XML; checked (names + sizes) before anything reaches the hotfolder.
   - one server-side move to `demo/<id>/` (the demo dealer's hotfolder). The move never overwrites.
   - only then `print_orders` → `sent`.
-- Refuses unless the order is `ready`. Refuses if `demo/<id>` or `demo/_error/<id>` already exists.
+- Refuses unless the order is `ready`. Refuses if `demo/<id>`, `demo/_error/<id>` or `demo/processed/<id>` already exists.
 - A failure before the move leaves the order `ready` and the hotfolder untouched; just run it again (it clears that order's old staging folders first).
 - If it prints "delivered … do not re-run", the folder is in the hotfolder but the database update failed: set the row to `sent` by hand.
 - `--force` on a `sent` order prints a warning and then refuses: *resend disabled until Photo Finale confirms how a repeated external_id is handled*. The resend path (folder `<id>-resend-<timestamp>`, same external_id) is built; switch it on with `RESEND_ENABLED` in `config.ts`.
@@ -106,12 +106,18 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
 - Testing goes to a separate **demo dealer account**: `resolveDestination()` in `config.ts` (demo by default; live only with `PRINT_DESTINATION=live` and `TEST_MODE` off).
 - pfRouter watches a shared cloud folder at Persnickety; we see its `_error` folder through the same share. Chosen provider: **Dropbox** (dedicated account, scoped Full-Dropbox app).
 
+**Answered (2026-10-12, Photo Finale):**
+- **pfRouter runs on OUR Windows machine.** It syncs the Dropbox `demo/` and `live/` folders and uses them as hotfolders. One `DealerCode` per pfRouter instance: demo first, then live at launch.
+- **`_error`** is `<hotfolder>/_error/<order folder>/reason.txt`. This is exactly where `checkErrorFolder` reads (`<root>/<hotfolder>/_error/<folder>/reason.txt`), so the cron matches.
+- **`postAction` will be "move"** to a `processed/` folder. We assume `<hotfolder>/processed/<order folder>/` (same level as `_error`) — **confirm the exact location**. Consequences handled in code: an accepted order leaves `demo/`, so the double-send guard also refuses if `<hotfolder>/processed/<folder>` exists (alongside the hotfolder and `_error` checks, and the database rule that only a `ready` order can be delivered). The `_error` check reads only `_error/`, so moved orders don't affect it; a sent order stays `sent` until it appears in `_error`.
+- **Repeated `external_id`s are allowed** (a new lab order is created), so the resend path (`<id>-resend-<timestamp>`) may be enabled later. **`RESEND_ENABLED` stays `false`** for now; resending prints a second set and bills a second lab order, so enable it deliberately.
+
 **Still open:**
 1. The real product codes for every size (3x3, 4x4, 4x6, 5x5), and the demo dealer details (Jason).
 2. Do they print 3x3, 3.5x3.5 and 4x3 natively, or should those stay on a 4x4 sheet? (Flipping one to native in `config.ts` changes its `aspect` automatically.)
 3. Padding placement on 4x4 sheets: image bottom-left, padding top/right, no trim guides. OK for their trimming?
-4. Is the dealer chosen by which hotfolder an order lands in (`demo/` vs `live/`)? Is `_error` inside each hotfolder? What happens to a processed order folder?
-5. How is a repeated `external_id` treated? (Gates `RESEND_ENABLED`.)
+4. ~~Dealer / `_error` / processed folder~~ Answered 2026-10-12 (above); only the exact `processed/` location needs confirming.
+5. ~~How is a repeated `external_id` treated?~~ Answered 2026-10-12 (above).
 6. Shipping speeds: the `delivery_type` values our dealer has active (Chari's team). Tracking (Jason, next week).
 
 ## 8. Customer-facing pieces (step 4) and how to turn them on
@@ -159,3 +165,10 @@ Properties describe the memory book **saved most recently** (Klaviyo profiles ar
 | `print_round_due` | `welcome_baby`: baby 3-12 months, no order yet, `unprinted_count >= 10`. `first_year`: baby 13+ months, `unprinted_count >= 10`, no order in the last 60 days. `growing_up`: child 5+ years, `unprinted_count >= MIN_PRINTS_PER_ORDER`. Otherwise `""`. Not written if the book has no birthdate. A child 5+ is checked for `growing_up` first. |
 
 When they are written: only if print ordering is on for the caller. From request routes (a save/notes sync `PATCH /api/sessions/[token]`, reopening an existing book `POST /api/sessions`) that means `PRINT_ORDERS_ENABLED=true` or a valid preview cookie; from the `orders/paid` webhook and the daily cron `GET /api/cron/print-round-reminders` (14:00 UTC, `CRON_SECRET`-gated) it means the flag only. With the flag off the cron answers `{"skipped": ...}` and no profile changes. Journal and Little Years books never write them. Limitation: if a birthdate is later removed, `print_round_due` keeps its last value (the property is left unset rather than cleared).
+
+## 12. Planned (NOT built): mark print lines fulfilled in Shopify
+When the printer confirms shipping, mark the print order's line items **fulfilled** in Shopify with the **tracking number** and `notifyCustomer: false` (our own "shipped" email, already built but unwired, would be the customer notice). Needs:
+- Tracking details from Photo Finale (carrier, tracking number, and how/when we receive them; still open).
+- The **fulfillment scope** on the Shopify admin app (`write_fulfillments`, plus the order read scope already used by retry), and the admin token in Vercel production (`SHOPIFY_ADMIN_*` is currently not set there).
+- The same trigger would start the 12-month retention clock (`docs/print-orders-retention.md`) and fire the "shipped" email (`shipped_email_sent_at`).
+Nothing in this item is implemented.
