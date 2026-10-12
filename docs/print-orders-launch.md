@@ -139,3 +139,8 @@ No "prepaid prints" product exists in Shopify (checked 2026-10-11: only "Custom 
 - Issue a one-time Shopify discount code (Admin GraphQL `discountCodeBasicCreate`): **100% off the print product for the matching tier only** (a Standard prepay can't be used on a Luxury book), shipping excluded (S&H is still charged), `usageLimit` 1, 5-year `endsAt`, non-refundable. 100% of the product rather than a fixed amount, so the credit survives a price change.
 - Store it in a `print_credits` table (code, discount id, source order, email, tier, status, expires_at, used_order); apply with `?discount=CODE` on the checkout URL when the buyer's email has an unused credit; mark it used when a later order's `discount_codes` contains it.
 - Needs `write_discounts` + `read_discounts` on the Admin API app and the token in Vercel production.
+
+## 10. App URL and the old hostname (2026-10-12)
+`NEXT_PUBLIC_APP_URL` is `https://memories.lucydarling.com` (no trailing slash) in Production and Preview (it had been `https://lucy-prints.vercel.app`; the Development value in Vercel is still the old one and only matters for `vercel env pull`). It sets the logo and the resume links ("Continue My Photo Book", "Continue/View This Book", the held email's "Back to My Photo Book") in every email built in `src/lib/email.ts`. Checked on a real production magic-link email and a `[TEST]` held email: logo and links use `memories.lucydarling.com` and load.
+
+**Keep `lucy-prints.vercel.app` attached to the Vercel project.** Every email sent before 2026-10-12 links to `lucy-prints.vercel.app/resume/<token>` and loads its logo from there, so removing that domain would break "continue my book" for everyone who saved a book earlier. It currently serves both (200).
