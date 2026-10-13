@@ -30,6 +30,9 @@ import { useNotesSync } from "@/hooks/useNotesSync";
 import { ReviewMilestoneBanner } from "@/components/ReviewMilestoneBanner";
 import { BirthdateCard } from "@/components/BirthdateCard";
 import { StorageFullBanner } from "@/components/StorageFullBanner";
+import { SaveReminder } from "@/components/SaveReminder";
+import { CropsLoading } from "@/components/CropsLoading";
+import { useStorageStatus } from "@/store/storage-status";
 
 export default function UploadPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
@@ -38,6 +41,7 @@ export default function UploadPage() {
   const extras = usePhotoStore((s) => s.extras);
   const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const router = useRouter();
+  const cropsLoading = useStorageStatus((s) => s.cropsLoading);
   // The Little Years: which ages have their "Extra pages" card open.
   const [openExtraPages, setOpenExtraPages] = useState<Set<string>>(new Set());
 
@@ -55,6 +59,8 @@ export default function UploadPage() {
   }, [bookTheme, initializeSlots, router]);
 
   if (!bookTheme) return null;
+  // Photos are read back from the browser just after the page loads.
+  if (cropsLoading) return <CropsLoading />;
 
   const sections = getSlotsBySection(bookTheme);
   // Headings that group sections, in order (The Little Years: "Age One"…).
@@ -84,6 +90,7 @@ export default function UploadPage() {
       <ProgressBar />
       <PrintProgressBanner />
       <StorageFullBanner />
+      <SaveReminder />
       <BirthdateCard />
 
       <ReviewMilestoneBanner themeId={bookTheme} />

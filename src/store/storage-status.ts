@@ -15,11 +15,14 @@ interface StorageStatus {
    * everything is on screen even though the browser can't keep it.
    */
   reloadedFromCloud: boolean;
+  /** Crops are being read back from IndexedDB after a page load. */
+  cropsLoading: boolean;
 }
 
 export const useStorageStatus = create<StorageStatus>(() => ({
   failedKeys: [],
   reloadedFromCloud: false,
+  cropsLoading: false,
 }));
 
 export const isStorageFull = (s: StorageStatus) => s.failedKeys.length > 0;
@@ -39,7 +42,7 @@ export function countMissingFromBrowser(
   return uploadedSlots.filter((k) => !(photos[k]?.croppedUrl || extraCrop.get(k))).length;
 }
 
-function noteWrite(name: string, ok: boolean) {
+export function noteWrite(name: string, ok: boolean) {
   const { failedKeys } = useStorageStatus.getState();
   const failed = failedKeys.includes(name);
   if (ok && failed) useStorageStatus.setState({ failedKeys: failedKeys.filter((k) => k !== name) });

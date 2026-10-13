@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { safeLocalStorage } from "@/store/storage-status";
+import { loadStoredCrops, photoStorage } from "@/store/photo-storage";
+import { cropProduct, mapCrops, type PersistedPhotos } from "@/lib/crop-persist";
 import {
   getBookProgress,
   getRegion,
@@ -483,8 +484,27 @@ export const usePhotoStore = create<PhotoStore>()(
           regionLayouts: state.regionLayouts,
         };
       },
+      // Crops in IndexedDB, the rest in localStorage (store/photo-storage.ts).
       // Never throws; a full browser is reported to the page (storage-status).
-      storage: safeLocalStorage(),
+      storage: photoStorage(),
+      // The crops load just after the rest; see loadStoredCrops.
+      onRehydrateStorage: () => () => {
+        void loadStoredCrops(({ urls, lost }) =>
+          usePhotoStore.setState((s) => {
+            const next = mapCrops(s as unknown as PersistedPhotos, (k, u) => urls.get(k) ?? u) as unknown as PhotoStore;
+            if (lost.size === 0) return next;
+            // A crop the browser no longer has: the slot reads as empty.
+            const product = cropProduct(next.bookTheme);
+            const photos = { ...next.photos };
+            for (const [key, p] of Object.entries(photos)) {
+              if (lost.has(`${product}/${key}`) && !p.croppedUrl) {
+                photos[key] = { ...p, previewUrl: null, croppedUrl: null, status: "empty" };
+              }
+            }
+            return { ...next, photos };
+          })
+        );
+      },
     }
   )
 );

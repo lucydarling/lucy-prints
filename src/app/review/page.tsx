@@ -15,6 +15,9 @@ import { DownloadReviewPrompt } from "@/components/ReviewPromptCard";
 import { PrintOrderSection } from "@/components/PrintOrderSection";
 import { BirthdateCard } from "@/components/BirthdateCard";
 import { StorageFullBanner } from "@/components/StorageFullBanner";
+import { SaveReminder } from "@/components/SaveReminder";
+import { CropsLoading } from "@/components/CropsLoading";
+import { useStorageStatus } from "@/store/storage-status";
 
 export default function ReviewPage() {
   const photos = usePhotoStore((s) => s.photos);
@@ -28,6 +31,7 @@ export default function ReviewPage() {
   const sessionToken = useSaveStore((s) => s.sessionToken);
   const setShowSaveModal = useSaveStore((s) => s.setShowSaveModal);
   const router = useRouter();
+  const cropsLoading = useStorageStatus((s) => s.cropsLoading);
 
   // Keep syncing crops to the cloud here too: the save modal queues them at download
   // time, and without this they wait until the customer next opens /upload.
@@ -73,6 +77,8 @@ export default function ReviewPage() {
   if (!bookTheme) {
     return null;
   }
+  // Photos are read back from the browser just after the page loads.
+  if (cropsLoading) return <CropsLoading />;
 
   // The slots being filled — for a book with regions, only the photos its
   // chosen layouts use, each at the size it will print.
@@ -165,6 +171,7 @@ export default function ReviewPage() {
       </div>
 
       <StorageFullBanner />
+      <SaveReminder />
       <BirthdateCard />
 
       <div className="max-w-2xl mx-auto px-4 py-6">
