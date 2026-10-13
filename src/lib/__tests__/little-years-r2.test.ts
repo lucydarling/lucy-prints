@@ -214,3 +214,11 @@ test("a Memory Book order over 100 extras is still refused", () => {
   assert.equal(over(100), false);
   assert.equal(over(101), true);
 });
+
+test("Book Details: header names the book; defaults to memory book", () => {
+  const extras = [{ label: "Age Two", prefixes: ["059-01"] }];
+  const ly = generateBookDetailsText({}, "Ollie", LY_SLOTS, LY_PROMPTS, extras, "Little Years book")!;
+  assert.ok(ly.includes("Reference sheet for your Lucy Darling Little Years book"));
+  const dflt = generateBookDetailsText({}, "Ollie", LY_SLOTS, LY_PROMPTS, extras)!;
+  assert.ok(dflt.includes("Reference sheet for your Lucy Darling memory book"));
+});
