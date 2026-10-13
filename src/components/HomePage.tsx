@@ -12,6 +12,7 @@ import {
   type ProductType,
 } from "@/lib/photo-slots";
 import { openBook } from "@/lib/open-book";
+import { resolveInitialProduct } from "@/lib/home-picker";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
 export function HomePage({
@@ -30,6 +31,12 @@ export function HomePage({
   const littleYearsVisible = unlockedBooks.includes("little_years");
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const router = useRouter();
+  // Multi-book mode: any hidden book this visitor can see. Otherwise the page
+  // is the single-book memory book page, exactly as before.
+  const multiBook = unlockedBooks.length > 0;
+  const [selectedProduct] = useState<ProductType>(() =>
+    resolveInitialProduct(preselect, unlockedBooks)
+  );
 
   const [showFindBooks, setShowFindBooks] = useState(false);
   const [lookupEmail, setLookupEmail] = useState("");
@@ -122,7 +129,7 @@ export function HomePage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <OnboardingModal bookWord={journalFirst ? "pregnancy journal" : "memory book"} />
+      <OnboardingModal bookWord={bookWordFor(multiBook ? selectedProduct : "memory_book")} />
 
       {/* Header */}
       <div className="bg-white border-b border-gray-100">
@@ -304,6 +311,12 @@ export function HomePage({
       </div>
     </div>
   );
+}
+
+function bookWordFor(product: ProductType): string {
+  if (product === "pregnancy_journal") return "pregnancy journal";
+  if (product === "little_years") return "Little Years book";
+  return "memory book";
 }
 
 function ThemeCard({
