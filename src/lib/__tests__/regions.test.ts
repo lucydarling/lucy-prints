@@ -210,3 +210,22 @@ test("resuming a saved journal: stored sizes resolve to the layout they were mad
   const shower = regionChoicesFromStoredPhotos(JOURNAL, { pj_shower_p16_4: { printSize: "3x3" } });
   assert.equal(shower.pj_shower_p16.layoutId, "4x3x3");
 });
+
+test("a saved layout pick keeps photos 3 and 4 hidden after switching 4 x 3x3 back to 2 x 3x3", () => {
+  const stored = {
+    pj_adjusting_1: { printSize: "3x3" },
+    pj_adjusting_2: { printSize: "3x3" },
+    pj_adjusting_3: { printSize: "3x3" },
+    pj_adjusting_4: { printSize: "3x3" },
+  };
+  assert.equal(regionChoicesFromStoredPhotos(JOURNAL, stored).pj_adjusting.layoutId, "4x3x3");
+  const down = regionChoicesFromStoredPhotos(JOURNAL, stored, { pj_adjusting: "2x3x3" });
+  assert.equal(down.pj_adjusting.layoutId, "2x3x3");
+  const keys = getBookSlots(JOURNAL, down).filter((s) => s.region === "pj_adjusting").map((s) => s.key);
+  assert.deepEqual(keys, ["pj_adjusting_1", "pj_adjusting_2"]);
+  // A saved pick for a different print size is ignored: the photos say otherwise.
+  assert.equal(
+    regionChoicesFromStoredPhotos(JOURNAL, stored, { pj_adjusting: "1x4x4" }).pj_adjusting.layoutId,
+    "4x3x3"
+  );
+});

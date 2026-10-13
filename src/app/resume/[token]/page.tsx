@@ -6,6 +6,7 @@ import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
 import {
   regionChoicesFromStoredPhotos,
+  SAVED_LAYOUTS_NOTE,
   getProductForTheme,
   type PrintSize,
 } from "@/lib/photo-slots";
@@ -201,7 +202,11 @@ export default function ResumePage({
       }
 
       // Restore each region's layout from how its photos were stored.
-      const choices = regionChoicesFromStoredPhotos(data.session.bookTheme, data.photos);
+      const choices = regionChoicesFromStoredPhotos(
+        data.session.bookTheme,
+        data.photos,
+        data.session.notes?.[SAVED_LAYOUTS_NOTE]
+      );
       if (Object.keys(choices).length > 0) {
         usePhotoStore.setState((s) => ({
           regionLayouts: { ...s.regionLayouts, ...choices },

@@ -7,6 +7,7 @@ import {
   getSlots,
   isSquarePrintSize,
   resolveRegionChoice,
+  SAVED_LAYOUTS_NOTE,
   type RegionChoice,
   type PrintOrientation,
   type PrintSize,
@@ -191,6 +192,15 @@ export const usePhotoStore = create<PhotoStore>()(
           regionLayouts: {
             ...state.regionLayouts,
             [regionKey]: { layoutId: after.layout.id, orientation: after.orientation },
+          },
+          // Saved with the session's notes so a resume knows which layout
+          // (2 × 3x3 or 4 × 3x3) the customer chose, not just the print size.
+          notes: {
+            ...state.notes,
+            [SAVED_LAYOUTS_NOTE]: {
+              ...state.notes[SAVED_LAYOUTS_NOTE],
+              [regionKey]: after.layout.id,
+            },
           },
         });
         return cleared;

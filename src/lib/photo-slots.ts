@@ -627,6 +627,9 @@ export function parsePrintLabel(
   return null;
 }
 
+/** Key in a session's `notes` holding the layout ids the customer picked, by region key. Not a slot key. */
+export const SAVED_LAYOUTS_NOTE = "_layouts";
+
 /**
  * The region choice a stored print size implies, if it matches one of the
  * region's layouts. A size can now have several layouts (2 × 3x3 and 4 × 3x3
@@ -663,7 +666,9 @@ export function choiceFromPrintLabel(
  */
 export function regionChoicesFromStoredPhotos(
   themeId: string | null | undefined,
-  stored: Record<string, { printSize: string | null | undefined }>
+  stored: Record<string, { printSize: string | null | undefined }>,
+  /** Layout ids the customer picked, by region key (`notes[SAVED_LAYOUTS_NOTE]`), when saved. */
+  savedLayouts?: Record<string, string> | null
 ): Record<string, RegionChoice> {
   const regionOf = new Map(
     getSlots(themeId)
@@ -682,9 +687,17 @@ export function regionChoicesFromStoredPhotos(
           .filter(([, q]) => q.printSize === p.printSize)
           .map(([key]) => regionOf.get(key)?.index ?? 0)
       );
-      const choice = choiceFromPrintLabel(region, p.printSize, used);
-      if (choice) {
-        choices[region.key] = choice;
+      const inferred = choiceFromPrintLabel(region, p.printSize, used);
+      if (inferred) {
+        // The saved pick wins when it's the same print size: it's what tells
+        // "2 × 3x3" from "4 × 3x3" after the customer switched down (photos
+        // 3 and 4 stay stored, just hidden).
+        const savedLayout = region.layouts.find((l) => l.id === savedLayouts?.[region.key]);
+        const inferredLayout = region.layouts.find((l) => l.id === inferred.layoutId);
+        choices[region.key] =
+          savedLayout && inferredLayout && savedLayout.size === inferredLayout.size
+            ? { ...inferred, layoutId: savedLayout.id }
+            : inferred;
         break;
       }
     }
