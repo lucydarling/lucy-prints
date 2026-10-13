@@ -14,6 +14,7 @@ import {
   isSquarePrintSize,
   parsePrintLabel,
 } from "@/lib/photo-slots";
+import { regionChoicesFromStoredPhotos } from "@/lib/photo-slots";
 import { JOURNAL_PAGE_AREAS } from "@/lib/journal-slots";
 
 const JOURNAL = "love_grows_desert_sand";
@@ -30,10 +31,30 @@ function fitsGrid(count: number, w: number, h: number, W: number, H: number): bo
   return false;
 }
 
-test("every journal layout fits its page's measured area, in every orientation it offers", () => {
+/** Does the layout fit inside ONE of the page's rectangles? */
+function fitsAnyRect(
+  page: number,
+  count: number,
+  w: number,
+  h: number
+): boolean {
+  return JOURNAL_PAGE_AREAS[page].some((r) => fitsGrid(count, w, h, r.width, r.height));
+}
+
+test("journal areas are at most two rectangles, inside the 8.5\" trim with a 0.375\" margin", () => {
   for (const region of getRegions(JOURNAL)) {
-    const area = JOURNAL_PAGE_AREAS[region.page];
-    assert.ok(area, `no measured area for page ${region.page}`);
+    const areas = JOURNAL_PAGE_AREAS[region.page];
+    assert.ok(areas && areas.length >= 1 && areas.length <= 2, `p${region.page} areas`);
+    for (const r of areas) {
+      assert.ok(r.x >= 0.375 - 1e-9 && r.y >= 0.375 - 1e-9, `p${region.page} starts inside the margin`);
+      assert.ok(r.x + r.width <= 8.125 + 1e-9 && r.y + r.height <= 8.125 + 1e-9, `p${region.page} ends inside the margin`);
+    }
+  }
+});
+
+test("every journal layout fits one of its page's rectangles, in every orientation it offers", () => {
+  for (const region of getRegions(JOURNAL)) {
+    assert.ok(JOURNAL_PAGE_AREAS[region.page], `no measured area for page ${region.page}`);
     for (const layout of region.layouts) {
       for (const o of layout.orientations) {
         const { width, height } = getPrintDimensions(
@@ -41,18 +62,58 @@ test("every journal layout fits its page's measured area, in every orientation i
           isSquarePrintSize(layout.size) ? undefined : o
         );
         assert.ok(
-          fitsGrid(layout.count, width / 300, height / 300, area.width, area.height),
-          `p${region.page} ${layout.id} ${o} does not fit ${area.width}x${area.height}`
+          fitsAnyRect(region.page, layout.count, width / 300, height / 300),
+          `p${region.page} ${layout.id} ${o} does not fit its page area`
         );
       }
     }
   }
 });
 
-test("each region offers every size at most once, so a stored size names one layout", () => {
+test("a layout bigger than the page area is caught by the fit check", () => {
+  // p3's area is 7.75 x 3.7: a 4x4 (4.0 tall) must not fit, 4 x 3x3 must not fit.
+  assert.equal(fitsAnyRect(3, 1, 4, 4), false);
+  assert.equal(fitsAnyRect(3, 4, 3, 3), false);
+  assert.equal(fitsAnyRect(3, 2, 3, 3), true);
+});
+
+// Illustrations may be covered (Kevin, 2026-10-13); layouts are only ever added.
+// Saved sessions reference these ids, so none may be removed or renamed.
+const SHIPPED_LAYOUT_IDS: Record<string, string[]> = {
+  pj_big_news: ["2x3x3", "1x4x3"],
+  pj_first_ultrasound: ["2x3x3", "1x4x3"],
+  pj_month_1_2: ["1x4x4", "1x4x3", "1x3x3", "1x4x6"],
+  pj_month_3: ["1x4x3", "2x3x3"],
+  pj_month_4: ["1x4x4", "1x4x3", "1x3x3"],
+  pj_month_5: ["1x4x4", "1x4x3", "1x3x3"],
+  pj_month_6: ["1x4x3", "1x3x3"],
+  pj_month_7: ["1x4x4", "1x4x3", "1x3x3"],
+  pj_month_8: ["1x4x4", "1x4x3", "1x3x3"],
+  pj_month_9: ["1x4x4", "1x4x3", "1x3x3", "1x4x6"],
+  pj_shower_p16: ["4x3x3", "2x4x3", "1x4x4", "1x4x6"],
+  pj_shower_p17: ["4x3x3", "2x4x3", "1x4x4", "1x4x6"],
+  pj_shower_p18: ["4x3x3", "2x4x3", "1x4x4", "1x4x6"],
+  pj_first_photos: ["2x3x3", "2x4x3", "1x4x4", "1x4x6"],
+  pj_born_photos: ["4x3x3", "2x4x3", "1x4x4", "1x4x6"],
+  pj_birth_announcement: ["1x4x6"],
+  pj_adjusting: ["2x3x3", "2x4x3", "1x4x4", "1x4x6"],
+  pj_sleepy: ["4x3x3", "2x4x3", "1x4x4", "1x4x6"],
+};
+
+test("every shipped layout id is still offered, and page 28 gains 4 x 3x3", () => {
   for (const region of getRegions(JOURNAL)) {
-    const sizes = region.layouts.map((l) => l.size);
-    assert.equal(new Set(sizes).size, sizes.length, region.key);
+    const ids = region.layouts.map((l) => l.id);
+    for (const id of SHIPPED_LAYOUT_IDS[region.key]) assert.ok(ids.includes(id), `${region.key} lost ${id}`);
+    assert.equal(ids[0], SHIPPED_LAYOUT_IDS[region.key][0], `${region.key} default layout changed`);
+  }
+  const p28 = getRegions(JOURNAL).find((r) => r.key === "pj_adjusting")!;
+  assert.ok(p28.layouts.some((l) => l.id === "4x3x3"));
+});
+
+test("each region offers each count + size at most once", () => {
+  for (const region of getRegions(JOURNAL)) {
+    const ids = region.layouts.map((l) => l.id);
+    assert.equal(new Set(ids).size, ids.length, region.key);
   }
 });
 
@@ -81,7 +142,12 @@ test("a stored print size maps back to the layout and orientation that made it",
     for (const layout of region.layouts) {
       for (const o of layout.orientations) {
         const label = getPrintSizeLabel(layout.size, isSquarePrintSize(layout.size) ? undefined : o);
-        assert.deepEqual(choiceFromPrintLabel(region, label), { layoutId: layout.id, orientation: o });
+        // With no photo count the first (original) layout of that size answers.
+        const first = region.layouts.find((l) => l.size === layout.size)!;
+        const got = choiceFromPrintLabel(region, label, layout.count);
+        assert.equal(got?.layoutId, layout.id, `${region.key} ${label} x${layout.count}`);
+        assert.ok(choiceFromPrintLabel(region, label), `${region.key} ${label}`);
+        void first;
       }
     }
   }
@@ -127,4 +193,22 @@ test("slot keys are unique across books and safe for a storage path", () => {
   assert.equal(new Set(all).size, all.length);
   for (const key of all) assert.match(key, /^[a-z0-9_]+$/);
   assert.equal(BOOK_THEMES.filter((t) => t.product === "pregnancy_journal").length, 2);
+});
+
+test("resuming a saved journal: stored sizes resolve to the layout they were made with", () => {
+  // A session saved before the re-measure: p28 with two 3x3 photos is still 2 x 3x3.
+  const old = regionChoicesFromStoredPhotos(JOURNAL, {
+    pj_adjusting_1: { printSize: "3x3" },
+    pj_adjusting_2: { printSize: "3x3" },
+  });
+  assert.equal(old.pj_adjusting.layoutId, "2x3x3");
+  // Three or four photos at 3x3 can only be the new 4 x 3x3.
+  const four = regionChoicesFromStoredPhotos(JOURNAL, {
+    pj_adjusting_1: { printSize: "3x3" },
+    pj_adjusting_3: { printSize: "3x3" },
+  });
+  assert.equal(four.pj_adjusting.layoutId, "4x3x3");
+  // Shower pages keep 4 x 3x3 (their original default).
+  const shower = regionChoicesFromStoredPhotos(JOURNAL, { pj_shower_p16_4: { printSize: "3x3" } });
+  assert.equal(shower.pj_shower_p16.layoutId, "4x3x3");
 });

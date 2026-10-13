@@ -139,7 +139,7 @@ export interface PhotoRegion {
   sortOrder: number;
   /** DRAFT guidance shown on the card — pending Haily's voice pass. */
   guidance?: string;
-  /** Layouts offered, the default first. Each size appears at most once. */
+  /** Layouts offered, the default first. Each (count, size) appears at most once. */
   layouts: RegionLayout[];
 }
 
@@ -627,15 +627,29 @@ export function parsePrintLabel(
   return null;
 }
 
-/** The region choice a stored print size implies, if it matches one of the region's layouts. */
+/**
+ * The region choice a stored print size implies, if it matches one of the
+ * region's layouts. A size can now have several layouts (2 × 3x3 and 4 × 3x3
+ * on one page), and the stored label doesn't say which: `photosUsed` is the
+ * highest photo position stored at that size, and the smallest layout that
+ * holds that many wins. With no count, the first layout of that size (the
+ * original one) wins, exactly as before.
+ */
 export function choiceFromPrintLabel(
   region: PhotoRegion,
-  label: string | null | undefined
+  label: string | null | undefined,
+  photosUsed = 0
 ): RegionChoice | null {
   const parsed = parsePrintLabel(label);
   if (!parsed) return null;
-  const layout = region.layouts.find((l) => l.size === parsed.size);
-  if (!layout) return null;
+  const sameSize = region.layouts.filter((l) => l.size === parsed.size);
+  if (sameSize.length === 0) return null;
+  const layout =
+    photosUsed > 0
+      ? [...sameSize]
+          .sort((a, b) => a.count - b.count)
+          .find((l) => l.count >= photosUsed) ?? sameSize[sameSize.length - 1]
+      : sameSize[0];
   const orientation = parsed.orientation ?? "portrait";
   if (!isSquarePrintSize(layout.size) && !layout.orientations.includes(orientation)) return null;
   return { layoutId: layout.id, orientation: isSquarePrintSize(layout.size) ? layout.orientations[0] : orientation };
@@ -662,7 +676,13 @@ export function regionChoicesFromStoredPhotos(
       .filter(([key]) => regionOf.get(key)?.region === region.key)
       .sort(([a], [b]) => (regionOf.get(a)?.index ?? 0) - (regionOf.get(b)?.index ?? 0));
     for (const [, p] of inRegion) {
-      const choice = choiceFromPrintLabel(region, p.printSize);
+      const used = Math.max(
+        0,
+        ...inRegion
+          .filter(([, q]) => q.printSize === p.printSize)
+          .map(([key]) => regionOf.get(key)?.index ?? 0)
+      );
+      const choice = choiceFromPrintLabel(region, p.printSize, used);
       if (choice) {
         choices[region.key] = choice;
         break;
