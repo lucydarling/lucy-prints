@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { loadSessionExtras } from "@/lib/session-extras";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import { getPrintedState } from "@/lib/print-orders/printed";
 import { ROUND_TTL_HOURS } from "@/lib/print-orders/config";
@@ -43,11 +44,12 @@ export async function POST(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  const [{ data: photoRows }, { data: extraRows }, { data: reprintRows }, printed] = await Promise.all([
+  const printed = await getPrintedState(session.id);
+  const [{ data: photoRows }, { data: extraRows }, { data: reprintRows }] = await Promise.all([
     supabaseAdmin.from("session_photos").select("slot_key, storage_path, print_size, status").eq("session_id", session.id),
-    supabaseAdmin.from("session_extras").select("extra_id, print_size, orientation, storage_path, quantity").eq("session_id", session.id),
+    // Each duplicate copy counted once (see lib/collapse-extras.ts).
+    loadSessionExtras(session.id, printed),
     supabaseAdmin.from("print_reprints").select("id, slot_key, storage_path, print_size, status").eq("session_id", session.id).eq("status", "pending"),
-    getPrintedState(session.id),
   ]);
 
   try {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { loadSessionExtras } from "@/lib/session-extras";
 import {
   syncProfileToKlaviyo,
   subscribeToEmailList,
@@ -185,11 +186,8 @@ export async function GET(
       .select("slot_key, storage_path, custom_label, milestone_date, print_size, status")
       .eq("session_id", session.id);
 
-    // Fetch extras
-    const { data: extraRows } = await supabaseAdmin
-      .from("session_extras")
-      .select("extra_id, print_size, orientation, storage_path, quantity")
-      .eq("session_id", session.id);
+    // Fetch extras, each duplicate copy shown once (see lib/collapse-extras.ts)
+    const { data: extraRows } = await loadSessionExtras(session.id);
 
     // Generate signed URLs for each photo (valid 1 hour)
     const photos: Record<string, {

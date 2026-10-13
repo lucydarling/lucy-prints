@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { loadSessionExtras } from "@/lib/session-extras";
 import { getProductForTheme } from "@/lib/photo-slots";
 import { ROUND_REMINDER } from "./config";
 import { getPrintedState, type PrintedState } from "./printed";
@@ -121,10 +122,11 @@ export async function loadPrintRoundProperties(
     .maybeSingle();
   if (!session || getProductForTheme(session.book_theme) !== "memory_book") return null;
 
-  const [printed, photos, extras, orders] = await Promise.all([
-    getPrintedState(session.id),
+  const printed = await getPrintedState(session.id);
+  const [photos, extras, orders] = await Promise.all([
     supabaseAdmin.from("session_photos").select("slot_key, storage_path, print_size, status").eq("session_id", session.id),
-    supabaseAdmin.from("session_extras").select("extra_id, print_size, orientation, storage_path, quantity").eq("session_id", session.id),
+    // Each duplicate copy counted once (see lib/collapse-extras.ts).
+    loadSessionExtras(session.id, printed),
     supabaseAdmin
       .from("print_orders")
       .select("created_at")

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { loadSessionExtras } from "@/lib/session-extras";
 import type { SessionExtraRow, SessionPhotoRow } from "./build-order";
 
 /** Server-side only. Read-only on production data. */
@@ -14,10 +15,8 @@ export async function loadSessionForPrint(token: string) {
     .from("session_photos")
     .select("slot_key, storage_path, print_size, status")
     .eq("session_id", session.id);
-  const { data: extraRows } = await supabaseAdmin
-    .from("session_extras")
-    .select("extra_id, print_size, orientation, storage_path, quantity")
-    .eq("session_id", session.id);
+  // Each duplicate copy once (see lib/collapse-extras.ts), as checkout counted them.
+  const { data: extraRows } = await loadSessionExtras(session.id);
 
   const fetchImage = async (storagePath: string): Promise<Buffer> => {
     const { data, error: dlError } = await supabaseAdmin.storage.from("photos").download(storagePath);

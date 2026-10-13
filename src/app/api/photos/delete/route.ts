@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { isThemeAllowed } from "@/lib/preview-gate";
 import { getPrintedState, lockDecision } from "@/lib/print-orders/printed";
+import { hiddenCopiesOf, removeExtraRows } from "@/lib/session-extras";
 import { checkRateLimit, RATE_LIMITS, tooManyRequestsResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -14,6 +15,8 @@ const EXTRA_KEY_SHAPE = /^extra_[a-z0-9_]+$/i;
  * Body: { sessionToken, slotKey } for a book slot, or { sessionToken, extraId } for an extra.
  *
  * The customer removed a photo or extra: delete its row and its stored file.
+ * An extra shown once for several identical copies (lib/collapse-extras.ts)
+ * takes its unprinted copies with it, so it can't come back on the next load.
  * A slot or extra that has been printed is locked (409); everything else can be removed. Only ever touches this session's own row, and the
  * file named by that row. Removing something that isn't there is a success.
  */
@@ -75,6 +78,7 @@ export async function DELETE(req: NextRequest) {
       .eq(keyColumn, keyValue)
       .maybeSingle();
     if (!row) return NextResponse.json({ success: true, deleted: false });
+    const copies = extraId ? await hiddenCopiesOf(session.id, extraId, printed) : [];
 
     // Row first: if the file removal then fails we have an orphaned file (harmless),
     // never a row pointing at a missing file (which would break the book).
@@ -90,6 +94,9 @@ export async function DELETE(req: NextRequest) {
     if (row.storage_path) {
       const { error: rmError } = await supabaseAdmin.storage.from("photos").remove([row.storage_path]);
       if (rmError) console.error("Photo delete (file) error — orphaned file:", row.storage_path, rmError);
+    }
+    if (!(await removeExtraRows(session.id, copies))) {
+      return NextResponse.json({ error: "Failed to remove the photo" }, { status: 500 });
     }
     return NextResponse.json({ success: true, deleted: true });
   } catch (err) {
