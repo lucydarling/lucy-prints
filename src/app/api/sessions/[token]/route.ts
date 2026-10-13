@@ -4,7 +4,7 @@ import { babyDetailsUpdate, isNewBirthdate } from "@/lib/baby-details";
 import { loadSessionExtras } from "@/lib/session-extras";
 import {
   syncProfileToKlaviyo,
-  subscribeToEmailList,
+  subscribeToMilestoneList,
   trackPhotoAppSignup,
   buildSyncStatus,
   isJournalTheme,
@@ -89,7 +89,7 @@ export async function PATCH(
     // Sync profile + real subscription outcomes to Klaviyo, then persist the
     // confirmed result so failures are visible without console access. This
     // also covers sessions that only get a birthdate/details added later via
-    // this PATCH — they still get an email-subscribe attempt.
+    // this PATCH — a memory book still gets a milestone-list subscribe attempt.
     if (updatedSession) {
       const klaviyoData = {
         email: updatedSession.email,
@@ -102,7 +102,7 @@ export async function PATCH(
 
       const [klaviyoResult, emailResult] = await Promise.all([
         syncProfileToKlaviyo(klaviyoData),
-        subscribeToEmailList(updatedSession.email),
+        subscribeToMilestoneList(updatedSession.email, updatedSession.book_theme),
       ]);
 
       const { error: syncStatusError } = await supabaseAdmin

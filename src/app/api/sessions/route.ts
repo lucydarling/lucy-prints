@@ -6,7 +6,7 @@ import { BOOK_THEMES } from "@/lib/photo-slots";
 import {
   syncProfileToKlaviyo,
   trackPhotoAppSignup,
-  subscribeToEmailList,
+  subscribeToMilestoneList,
   buildSyncStatus,
   isJournalTheme,
   isSideBookTheme,
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
               smsOptIn,
               bookTheme,
             }),
-            subscribeToEmailList(email),
+            subscribeToMilestoneList(email, bookTheme),
           ]);
 
           const { error: syncStatusError } = await supabaseAdmin
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
             smsOptIn,
             bookTheme,
           }),
-          subscribeToEmailList(email),
+          subscribeToMilestoneList(email, bookTheme),
         ]);
 
         const { error: syncStatusError } = await supabaseAdmin

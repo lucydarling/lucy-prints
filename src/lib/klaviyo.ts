@@ -591,6 +591,24 @@ async function subscribeToSms(
 // ─────────────────────────────────────────────
 
 /**
+ * Only a memory book joins "LD | Milestone Reminder Opt-in" (KLAVIYO_PHOTO_APP_LIST_ID),
+ * the list that starts the baby milestone emails ("Your baby is N months old").
+ * A pregnancy journal or Little Years save joins no list (Kevin, 2026-10-13).
+ */
+export function joinsMilestoneList(bookTheme: string | null | undefined): boolean {
+  return getProductForTheme(bookTheme) === "memory_book";
+}
+
+/** Subscribe to the milestone list when the book is one that joins it; otherwise nothing is sent. */
+export async function subscribeToMilestoneList(
+  email: string,
+  bookTheme: string | null | undefined
+): Promise<SubscribeResult> {
+  if (!joinsMilestoneList(bookTheme)) return { success: false, consentStatus: "NOT_ATTEMPTED" };
+  return subscribeToEmailList(email);
+}
+
+/**
  * Subscribes a profile to the photo app email list in Klaviyo, then
  * re-fetches the profile's real consent state to confirm the outcome
  * rather than trusting the enqueue response.
