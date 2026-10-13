@@ -141,3 +141,54 @@ test("Book Details: extra pages alone still produce the sheet; nothing at all pr
   assert.equal(generateBookDetailsText({}, "Baby", LY_SLOTS, LY_PROMPTS, []), null);
 });
 
+// ── Storage-full detection (the banner) ──
+
+import { countMissingFromBrowser, isStorageFull, safeLocalStorage, useStorageStatus } from "@/store/storage-status";
+
+test("a failed localStorage write is reported, not thrown; a later success clears it", () => {
+  const real = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  let room = true;
+  const data = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        if (!room) throw new DOMException("quota", "QuotaExceededError");
+        data.set(k, v);
+      },
+      removeItem: (k: string) => data.delete(k),
+    },
+  });
+  try {
+    useStorageStatus.setState({ failedKeys: [] });
+    const photos = safeLocalStorage<{ n: number }>();
+    const save = safeLocalStorage<{ t: string }>();
+    photos.setItem("lucy-prints-photos", { state: { n: 1 }, version: 0 });
+    assert.equal(isStorageFull(useStorageStatus.getState()), false);
+
+    room = false;
+    assert.doesNotThrow(() => photos.setItem("lucy-prints-photos", { state: { n: 2 }, version: 0 }));
+    assert.doesNotThrow(() => save.setItem("lucy-prints-save", { state: { t: "x" }, version: 0 }));
+    assert.deepEqual(useStorageStatus.getState().failedKeys, ["lucy-prints-photos", "lucy-prints-save"]);
+
+    // A small store writing fine again must not hide the photos key's failure.
+    room = true;
+    save.setItem("lucy-prints-save", { state: { t: "y" }, version: 0 });
+    assert.equal(isStorageFull(useStorageStatus.getState()), true);
+    photos.setItem("lucy-prints-photos", { state: { n: 3 }, version: 0 });
+    assert.equal(isStorageFull(useStorageStatus.getState()), false);
+  } finally {
+    if (real) Object.defineProperty(globalThis, "localStorage", real);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+    useStorageStatus.setState({ failedKeys: [] });
+  }
+});
+
+test("a saved book's cloud photos with no crop in this browser are counted as missing", () => {
+  const photos = { a: { croppedUrl: "data:a" }, b: { croppedUrl: null } };
+  const extras = [{ id: "extra_pg_a1_1_x", croppedUrl: "data:x" }, { id: "extra_2", croppedUrl: null }];
+  assert.equal(countMissingFromBrowser(["a", "extra_pg_a1_1_x"], photos, extras), 0);
+  assert.equal(countMissingFromBrowser(["a", "b", "c", "extra_pg_a1_1_x", "extra_2"], photos, extras), 3);
+  assert.equal(countMissingFromBrowser([], {}, []), 0);
+});

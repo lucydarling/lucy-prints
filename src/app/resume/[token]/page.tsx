@@ -11,6 +11,7 @@ import {
 } from "@/lib/photo-slots";
 import { clearShelvedBook, openBook, shelvedBookFor } from "@/lib/open-book";
 import type { PhotoEntry } from "@/store/photo-store";
+import { useStorageStatus } from "@/store/storage-status";
 
 interface SessionData {
   session: {
@@ -230,6 +231,10 @@ export default function ResumePage({
         uploadedSlots: uploadedKeys,
         saveStatus: "saved",
       });
+
+      // Everything from the cloud is on screen now, even if this browser
+      // can't keep it all (the "out of room" banner stands down).
+      useStorageStatus.setState({ reloadedFromCloud: true });
 
       setStatus("done");
 

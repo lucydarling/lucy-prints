@@ -29,6 +29,7 @@ import { useAutoUpload } from "@/hooks/useAutoUpload";
 import { useNotesSync } from "@/hooks/useNotesSync";
 import { ReviewMilestoneBanner } from "@/components/ReviewMilestoneBanner";
 import { BirthdateCard } from "@/components/BirthdateCard";
+import { StorageFullBanner } from "@/components/StorageFullBanner";
 
 export default function UploadPage() {
   const bookTheme = usePhotoStore((s) => s.bookTheme);
@@ -82,6 +83,7 @@ export default function UploadPage() {
 
       <ProgressBar />
       <PrintProgressBanner />
+      <StorageFullBanner />
       <BirthdateCard />
 
       <ReviewMilestoneBanner themeId={bookTheme} />

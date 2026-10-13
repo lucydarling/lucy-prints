@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { safeLocalStorage } from "@/store/storage-status";
 import {
   getBookProgress,
   getRegion,
@@ -455,32 +456,8 @@ export const usePhotoStore = create<PhotoStore>()(
           regionLayouts: state.regionLayouts,
         };
       },
-      storage: {
-        getItem: (name) => {
-          try {
-            const str = localStorage.getItem(name);
-            return str ? JSON.parse(str) : null;
-          } catch {
-            return null;
-          }
-        },
-        setItem: (name, value) => {
-          try {
-            localStorage.setItem(name, JSON.stringify(value));
-          } catch (e) {
-            // Quota exceeded — silently fail rather than crashing.
-            // Photos are safe if session was saved (they're in Supabase).
-            console.warn("localStorage quota exceeded:", e);
-          }
-        },
-        removeItem: (name) => {
-          try {
-            localStorage.removeItem(name);
-          } catch {
-            // ignore
-          }
-        },
-      },
+      // Never throws; a full browser is reported to the page (storage-status).
+      storage: safeLocalStorage(),
     }
   )
 );

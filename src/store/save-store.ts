@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { safeLocalStorage } from "@/store/storage-status";
 
 interface SaveStore {
   /** Session token from Supabase */
@@ -137,6 +138,8 @@ export const useSaveStore = create<SaveStore>()(
     }),
     {
       name: "lucy-prints-save",
+      // Never throws: when the browser is full, saving must still work.
+      storage: safeLocalStorage(),
       partialize: (state) => ({
         sessionToken: state.sessionToken,
         sessionId: state.sessionId,
