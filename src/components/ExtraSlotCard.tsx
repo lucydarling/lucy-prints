@@ -16,6 +16,8 @@ import { UploadErrorNote, useHasUploadError } from "./UploadErrorNote";
 
 interface ExtraSlotCardProps {
   extra: ExtraPrint;
+  /** Shown instead of "Extra 4x4" Print" (The Little Years' "Extra page 3"). */
+  label?: string;
 }
 
 /** Thumbnail box at 16px per inch, with the long edge capped at 80px. */
@@ -29,7 +31,7 @@ function thumbnailBox(width: number, height: number) {
   };
 }
 
-export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
+export function ExtraSlotCard({ extra, label }: ExtraSlotCardProps) {
   const setExtraPhoto = usePhotoStore((s) => s.setExtraPhoto);
   const setEditingSlot = usePhotoStore((s) => s.setEditingSlot);
   const setExtraOrientation = usePhotoStore((s) => s.setExtraOrientation);
@@ -193,7 +195,7 @@ export function ExtraSlotCard({ extra }: ExtraSlotCardProps) {
       {/* Label + size + orientation */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-800 truncate">
-          Extra {sizeLabel}&quot; Print
+          {label ?? <>Extra {sizeLabel}&quot; Print</>}
         </p>
         <p className="text-xs text-gray-400 mt-0.5">
           {sizeLabel}&quot; {shapeLabel} print

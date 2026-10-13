@@ -11,6 +11,12 @@ import {
   type PrintSize,
   type ProductType,
 } from "@/lib/photo-slots";
+import {
+  EXTRA_PAGES_PER_AGE,
+  EXTRA_PAGE_SIZE,
+  extraPagesFor,
+  newExtraPageId,
+} from "@/lib/extra-pages";
 
 export interface PhotoEntry {
   slotKey: string;
@@ -99,6 +105,23 @@ interface PhotoStore {
   /** Extra prints for blank pages */
   extras: ExtraPrint[];
   addExtra: (size: PrintSize, orientation?: PrintOrientation) => void;
+  /**
+   * Add an empty 4x4 extra page to an age of The Little Years ("a1"…).
+   * Returns its id, or null (and adds nothing) once the age has its 24.
+   */
+  addExtraPage: (age: string) => string | null;
+  /**
+   * Put back an extra saved in the cloud under its ORIGINAL id (a resume), so
+   * it isn't uploaded again as a new extra and keeps its printed lock and,
+   * for an extra page, its age.
+   */
+  restoreExtra: (extra: {
+    id: string;
+    size: PrintSize;
+    orientation: PrintOrientation;
+    url: string;
+    quantity: number;
+  }) => void;
   setExtraPhoto: (
     id: string,
     previewUrl: string,
@@ -259,6 +282,33 @@ export const usePhotoStore = create<PhotoStore>()(
               croppedUrl: null,
               quantity: 1,
             },
+          ],
+        })),
+
+      addExtraPage: (age) => {
+        if (extraPagesFor(get().extras, age).length >= EXTRA_PAGES_PER_AGE) return null;
+        const id = newExtraPageId(age);
+        set((state) => ({
+          extras: [
+            ...state.extras,
+            {
+              id,
+              size: EXTRA_PAGE_SIZE,
+              orientation: "portrait",
+              previewUrl: null,
+              croppedUrl: null,
+              quantity: 1,
+            },
+          ],
+        }));
+        return id;
+      },
+
+      restoreExtra: ({ id, size, orientation, url, quantity }) =>
+        set((state) => ({
+          extras: [
+            ...state.extras.filter((e) => e.id !== id),
+            { id, size, orientation, previewUrl: url, croppedUrl: url, quantity },
           ],
         })),
 

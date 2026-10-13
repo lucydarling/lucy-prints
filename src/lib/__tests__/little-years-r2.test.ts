@@ -54,3 +54,90 @@ test("Little Years review links carry photos_30 / photos_75", () => {
   assert.match(getReviewUrl("little_years_boy", "photos_30")!, /utm_content=photos_30#/);
   assert.match(getReviewUrl("little_years_girl", "photos_75")!, /utm_content=photos_75#/);
 });
+
+// ── Job 1: extra pages per age ──
+
+import {
+  EXTRA_PAGES_PER_AGE,
+  LITTLE_YEARS_AGES,
+  extraPageAge,
+  extraPagesFor,
+  isAgeFull,
+  newExtraPageId,
+} from "@/lib/extra-pages";
+import { usePhotoStore } from "@/store/photo-store";
+import { generateBookDetailsText } from "@/lib/download-zip";
+import { getBookPrompts } from "@/lib/book-prompts";
+import { getBookSlots, getBookProgress } from "@/lib/photo-slots";
+
+test("five ages of 29 slots, each ending on its last Snapshot", () => {
+  assert.deepEqual(LITTLE_YEARS_AGES.map((a) => a.label), ["Age One", "Age Two", "Age Three", "Age Four", "Age Five"]);
+  assert.deepEqual(LITTLE_YEARS_AGES.map((a) => a.slots.length), [29, 29, 29, 29, 29]);
+  assert.deepEqual(LITTLE_YEARS_AGES.map((a) => a.lastSortOrder), [30, 59, 88, 117, 146]);
+  for (const a of LITTLE_YEARS_AGES) assert.match(a.slots.at(-1)!.key, /snapshot/);
+});
+
+test("extra-page ids carry their age and pass the server's extra-id check", () => {
+  const id = newExtraPageId("a3");
+  assert.equal(extraPageAge(id), "a3");
+  assert.match(id, /^extra_[a-z0-9_]+$/i); // upload + delete routes
+  assert.equal(extraPageAge("extra_1710000000_ab12c"), null); // ordinary extras untouched
+});
+
+test("store: 24 extra pages per age, 4x4, and they never count toward 146", () => {
+  usePhotoStore.setState({ bookTheme: "little_years_boy", extras: [], photos: {} });
+  const s = () => usePhotoStore.getState();
+  for (let i = 0; i < 3; i++) assert.ok(s().addExtraPage("a1"));
+  for (let i = 0; i < EXTRA_PAGES_PER_AGE; i++) assert.ok(s().addExtraPage("a2"));
+  assert.equal(s().addExtraPage("a2"), null, "cap enforced");
+  assert.equal(extraPagesFor(s().extras, "a1").length, 3);
+  assert.equal(extraPagesFor(s().extras, "a2").length, 24);
+  assert.ok(s().extras.every((e) => e.size === "4x4"));
+  assert.equal(s().getProgress().total, 146);
+  assert.equal(getBookProgress("little_years_boy", {}, {}).total, 146);
+});
+
+test("store: restoreExtra keeps the saved id (no duplicate on a second restore)", () => {
+  usePhotoStore.setState({ extras: [] });
+  const r = { id: "extra_pg_a1_1_x", size: "4x4" as const, orientation: "portrait" as const, url: "data:x", quantity: 1 };
+  usePhotoStore.getState().restoreExtra(r);
+  usePhotoStore.getState().restoreExtra(r);
+  assert.deepEqual(usePhotoStore.getState().extras.map((e) => e.id), ["extra_pg_a1_1_x"]);
+  assert.equal(extraPageAge(usePhotoStore.getState().extras[0].id), "a1");
+});
+
+test("isAgeFull needs every one of the age's 29 crops", () => {
+  const a1 = LITTLE_YEARS_AGES[0];
+  const photos: Record<string, { croppedUrl: string | null }> = {};
+  for (const s of a1.slots.slice(0, 28)) photos[s.key] = { croppedUrl: "data:x" };
+  assert.equal(isAgeFull(photos, a1), false);
+  photos[a1.slots[28].key] = { croppedUrl: "data:x" };
+  assert.equal(isAgeFull(photos, a1), true);
+});
+
+const LY_SLOTS = getBookSlots("little_years_boy", {});
+const LY_PROMPTS = getBookPrompts("little_years_boy");
+
+test("Book Details: extra pages listed under their age, after its notes", () => {
+  const a1Birthday = LY_PROMPTS.find((p) => p.slotKey.startsWith("ly_a1_birthday"))!;
+  const notes = { [a1Birthday.slotKey]: { [a1Birthday.prompts[0].key]: "Grandma came" } };
+  const text = generateBookDetailsText(notes, "Ollie", LY_SLOTS, LY_PROMPTS, [
+    { label: "Age One", prefixes: ["030-01", "030-02", "030-03"] },
+    { label: "Age Three", prefixes: ["088-01"] },
+  ])!;
+  const lines = text.split("\n");
+  const i1 = lines.indexOf("═══ Age One ═══");
+  const i3 = lines.indexOf("═══ Age Three ═══");
+  const note = lines.findIndex((l) => l.includes("Grandma came"));
+  const ep1 = lines.indexOf('  3 photos (4x4"), files 030-01 to 030-03');
+  const ep3 = lines.indexOf('  1 photo (4x4"), file 088-01');
+  assert.ok(i1 >= 0 && note > i1 && ep1 > note, "Age One: heading, notes, then extra pages");
+  assert.ok(i3 > ep1 && ep3 > i3, "Age Three gets its own heading (it has no notes)");
+  assert.equal(lines.filter((l) => l === "── Extra pages ──").length, 2);
+});
+
+test("Book Details: extra pages alone still produce the sheet; nothing at all produces none", () => {
+  assert.ok(generateBookDetailsText({}, "Baby", LY_SLOTS, LY_PROMPTS, [{ label: "Age Two", prefixes: ["059-01"] }]));
+  assert.equal(generateBookDetailsText({}, "Baby", LY_SLOTS, LY_PROMPTS, []), null);
+});
+

@@ -172,6 +172,7 @@ export default function ResumePage({
       }
 
       // Restore extras
+      const restoredExtraIds: string[] = [];
       for (const extra of data.extras) {
         try {
           if (extra.signedUrl) {
@@ -179,18 +180,16 @@ export default function ResumePage({
             const blob = await response.blob();
             const dataUrl = await blobToDataUrl(blob);
 
-            usePhotoStore
-              .getState()
-              .addExtra(
-                (extra.printSize as PrintSize) || "4x4",
-                extra.orientation === "landscape" ? "landscape" : "portrait"
-              );
-            const extras = usePhotoStore.getState().extras;
-            const lastExtra = extras[extras.length - 1];
-            if (lastExtra) {
-              usePhotoStore.getState().setExtraPhoto(lastExtra.id, dataUrl);
-              usePhotoStore.getState().setExtraCropped(lastExtra.id, dataUrl);
-            }
+            // Under its saved id: a new id would upload it again as a new
+            // extra on every resume (and lose its printed lock and its age).
+            usePhotoStore.getState().restoreExtra({
+              id: extra.extraId,
+              size: (extra.printSize as PrintSize) || "4x4",
+              orientation: extra.orientation === "landscape" ? "landscape" : "portrait",
+              url: dataUrl,
+              quantity: extra.quantity || 1,
+            });
+            restoredExtraIds.push(extra.extraId);
           }
 
           restored++;
@@ -225,8 +224,8 @@ export default function ResumePage({
         data.session.babyBirthdate || undefined
       );
 
-      // Mark all restored photos as already uploaded (no need to re-upload)
-      const uploadedKeys = Object.keys(data.photos);
+      // Mark all restored photos and extras as already uploaded (no need to re-upload)
+      const uploadedKeys = [...Object.keys(data.photos), ...restoredExtraIds];
       useSaveStore.setState({
         uploadedSlots: uploadedKeys,
         saveStatus: "saved",

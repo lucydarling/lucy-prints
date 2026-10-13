@@ -17,6 +17,7 @@ import {
   type SlotPrompts,
 } from "@/lib/book-prompts";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
+import { LITTLE_YEARS_AGES, extraPagesFor, isExtraPage } from "@/lib/extra-pages";
 
 export interface DownloadOptions {
   /** When true, 3x3 images are placed on a 4x4 canvas with white padding
@@ -93,8 +94,31 @@ export async function downloadPhotosZip(
     addedImages++;
   }
 
+  // The Little Years' extra pages sit right after their age's photos:
+  //   030 Ollie Age One Snapshot 16 (4x4").jpg
+  //   030-01 Ollie Age One Extra Page 1 (4x4").jpg
+  //   031 Ollie Age Two Birthday 1 (4x4").jpg
+  const extraPageSummary: ExtraPageSummary[] = [];
+  if (isLittleYears) {
+    for (const age of LITTLE_YEARS_AGES) {
+      const pages = extraPagesFor(extras, age.age).filter((e) => e.croppedUrl);
+      const prefixes: string[] = [];
+      for (let i = 0; i < pages.length; i++) {
+        const { sizeLabel, blob } = await preparePrint(pages[i].croppedUrl!, pages[i].size, pages[i].orientation, options);
+        const prefix = `${String(age.lastSortOrder).padStart(3, "0")}-${String(i + 1).padStart(2, "0")}`;
+        const parts = [prefix, options.babyName?.trim() || "", age.label, `Extra Page ${i + 1}`];
+        root.file(`${parts.filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "-")} (${sizeLabel}).jpg`, blob);
+        prefixes.push(prefix);
+        addedImages++;
+      }
+      if (prefixes.length > 0) extraPageSummary.push({ label: age.label, prefixes });
+    }
+  }
+
   // Add extras — no number prefix, just "Extra" label
-  const croppedExtras = extras.filter((e) => e.croppedUrl);
+  const croppedExtras = extras.filter(
+    (e) => e.croppedUrl && !(isLittleYears && isExtraPage(e))
+  );
   if (croppedExtras.length > 0) {
     for (let i = 0; i < croppedExtras.length; i++) {
       const extra = croppedExtras[i];
@@ -118,9 +142,15 @@ export async function downloadPhotosZip(
     throw new Error("No cropped photos to download");
   }
 
-  // Add book details reference sheet if notes exist
-  if (options.notes) {
-    const detailsText = generateBookDetailsText(options.notes, name, slots, getBookPrompts(bookTheme));
+  // Add book details reference sheet if notes (or Little Years extra pages) exist
+  if (options.notes || extraPageSummary.length > 0) {
+    const detailsText = generateBookDetailsText(
+      options.notes ?? {},
+      name,
+      slots,
+      getBookPrompts(bookTheme),
+      extraPageSummary
+    );
     if (detailsText) {
       root.file("book-details.txt", detailsText);
     }
@@ -402,11 +432,20 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * Generate a formatted text reference sheet from book detail notes.
  * Returns null if no notes have been filled in.
  */
-function generateBookDetailsText(
+/** One age's extra pages in the ZIP, for the Book Details sheet. */
+interface ExtraPageSummary {
+  /** "Age One" — the same heading the age's notes print under. */
+  label: string;
+  /** File-name prefixes in order ("030-01", "030-02"…). */
+  prefixes: string[];
+}
+
+export function generateBookDetailsText(
   notes: Record<string, Record<string, string>>,
   babyName: string,
   slots: PhotoSlot[],
-  prompts: SlotPrompts[]
+  prompts: SlotPrompts[],
+  extraPages: ExtraPageSummary[] = []
 ): string | null {
   const lines: string[] = [];
   let hasAnyContent = false;
@@ -481,6 +520,11 @@ function generateBookDetailsText(
     lines.push("");
   }
 
+  if (extraPages.length > 0) {
+    addExtraPagesToDetails(lines, extraPages);
+    hasAnyContent = true;
+  }
+
   if (!hasAnyContent) return null;
 
   // Header
@@ -494,6 +538,37 @@ function generateBookDetailsText(
   ];
 
   return [...header, ...lines].join("\n");
+}
+
+/**
+ * List each age's extra pages at the end of that age's notes, adding the
+ * age's heading when it has no notes (ages stay in book order).
+ */
+function addExtraPagesToDetails(lines: string[], extraPages: ExtraPageSummary[]): void {
+  const isHeader = (l: string) => l.startsWith("═══ ");
+  const ageOrder = LITTLE_YEARS_AGES.map((a) => a.label);
+  for (const { label, prefixes } of extraPages) {
+    const n = prefixes.length;
+    const range = n === 1 ? `file ${prefixes[0]}` : `files ${prefixes[0]} to ${prefixes[n - 1]}`;
+    const entry = ["── Extra pages ──", `  ${n} ${n === 1 ? "photo" : "photos"} (4x4"), ${range}`, ""];
+    const at = lines.indexOf(`═══ ${label} ═══`);
+    if (at !== -1) {
+      const next = lines.findIndex((l, i) => i > at && isHeader(l));
+      // Before the blank line that separates this age from the next heading.
+      lines.splice(next === -1 ? lines.length : next - 1, 0, ...entry);
+      continue;
+    }
+    const block = [`═══ ${label} ═══`, "", ...entry];
+    const mine = ageOrder.indexOf(label);
+    // The intro's heading (not an age) always comes first, so only a later age can follow.
+    const nextHeader = lines.findIndex((l) => isHeader(l) && ageOrder.indexOf(l.slice(4, -4)) > mine);
+    if (nextHeader === -1) {
+      if (lines.length > 0) lines.push("");
+      lines.push(...block);
+    } else {
+      lines.splice(nextHeader, 0, ...block, "");
+    }
+  }
 }
 
 /** Get a friendly display name for a slot key */

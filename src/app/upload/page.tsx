@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
@@ -17,6 +17,8 @@ import { PrintProgressBanner } from "@/components/PrintProgressBanner";
 import { ReprintModal } from "@/components/ReprintModal";
 import { SectionGroup } from "@/components/SectionGroup";
 import { ExtraSlotCard } from "@/components/ExtraSlotCard";
+import { ExtraPagesCard } from "@/components/ExtraPagesCard";
+import { getAgeByLabel, isExtraPage } from "@/lib/extra-pages";
 import { CropModal } from "@/components/CropModal";
 import { SaveButton } from "@/components/SaveButton";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
@@ -35,6 +37,8 @@ export default function UploadPage() {
   const extras = usePhotoStore((s) => s.extras);
   const regionLayouts = usePhotoStore((s) => s.regionLayouts);
   const router = useRouter();
+  // The Little Years: which ages have their "Extra pages" card open.
+  const [openExtraPages, setOpenExtraPages] = useState<Set<string>>(new Set());
 
   // Background photo upload to cloud
   useAutoUpload();
@@ -55,6 +59,9 @@ export default function UploadPage() {
   // Headings that group sections, in order (The Little Years: "Age One"…).
   const groups = [...new Set(sections.map((s) => s.slots[0]?.group).filter((g): g is string => !!g))];
   const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
+  const isLittleYears = getProductForTheme(bookTheme) === "little_years";
+  // Extra pages live under their age; the Extra Prints list shows the rest.
+  const otherExtras = isLittleYears ? extras.filter((e) => !isExtraPage(e)) : extras;
   // Photos in use: memory book slots, or the region photos the chosen layouts use.
   const uploaded = getBookSlots(bookTheme, regionLayouts).filter((slot) => {
     const p = photos[slot.key];
@@ -136,6 +143,21 @@ export default function UploadPage() {
                 </h2>
               )}
               <SectionGroup section={section} label={label} slots={slots} />
+              {isLittleYears && endsAge(group, sections[i + 1]?.slots[0]?.group) && (
+                <ExtraPagesCard
+                  themeId={bookTheme}
+                  age={getAgeByLabel(group)!}
+                  expanded={openExtraPages.has(group!)}
+                  onExpandedChange={(open) =>
+                    setOpenExtraPages((prev) => {
+                      const next = new Set(prev);
+                      if (open) next.add(group!);
+                      else next.delete(group!);
+                      return next;
+                    })
+                  }
+                />
+              )}
             </div>
           );
         })}
@@ -150,9 +172,9 @@ export default function UploadPage() {
           </div>
 
           {/* Existing extras */}
-          {extras.length > 0 && (
+          {otherExtras.length > 0 && (
             <div className="space-y-2 mb-3">
-              {extras.map((extra) => (
+              {otherExtras.map((extra) => (
                 <ExtraSlotCard key={extra.id} extra={extra} />
               ))}
             </div>
@@ -160,7 +182,7 @@ export default function UploadPage() {
 
           <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-sm text-center">
             <p className="text-sm text-gray-500 mb-3">
-              {extras.length > 0
+              {otherExtras.length > 0
                 ? "Add another print?"
                 : "Need more prints for the blank pages at the back of your book?"}
             </p>
@@ -220,6 +242,11 @@ function ExtraButton({ size }: { size: PrintSize }) {
       + Add {label}&quot; print
     </button>
   );
+}
+
+/** True when a section is the last of a Little Years age (the next section starts another). */
+function endsAge(group: string | undefined, nextGroup: string | undefined): boolean {
+  return Boolean(group && group !== nextGroup && getAgeByLabel(group));
 }
 
 /** "Age One" → "age-one", for the jump links. */
