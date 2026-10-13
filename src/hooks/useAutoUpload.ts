@@ -124,6 +124,7 @@ export function useAutoUpload() {
     let printSize: string | undefined;
     let orientation: string | undefined;
     let extraId: string | undefined;
+    let hiddenCopies = 0;
 
     if (isExtra) {
       const extra = extras.find((e) => e.id === nextSlotKey);
@@ -136,6 +137,7 @@ export function useAutoUpload() {
       printSize = extra.size;
       orientation = extra.orientation;
       extraId = extra.id;
+      hiddenCopies = extra.hiddenCopies ?? 0;
     } else {
       const photo = photos[nextSlotKey];
       if (!photo?.croppedUrl) {
@@ -160,8 +162,13 @@ export function useAutoUpload() {
 
     setUploadingSlot(nextSlotKey);
 
+    // A re-crop of an extra that stands for several identical cloud copies
+    // (old resume bug): remove the whole set first, the same removal as the
+    // trash button, so the old copies can't come back; then upload as new.
+    const clearCopies = hiddenCopies > 0 ? removeExtraSet(sessionToken, nextSlotKey) : Promise.resolve();
+
     // Convert data URL to blob and upload
-    uploadPhoto({
+    clearCopies.then(() => uploadPhoto({
       sessionToken,
       slotKey: nextSlotKey,
       croppedUrl,
@@ -171,7 +178,7 @@ export function useAutoUpload() {
       orientation,
       isExtra,
       extraId,
-    })
+    }))
       .then(() => {
         markUploaded(nextSlotKey);
         if (staleWhileUploading.delete(nextSlotKey)) {
@@ -183,6 +190,25 @@ export function useAutoUpload() {
         markUploadError(nextSlotKey, uploadErrorMessage(err));
       });
   }, [sessionToken, uploadQueue, uploadingSlot, photos, extras, setUploadingSlot, markUploaded, markUploadError]);
+}
+
+/**
+ * Remove an extra and its hidden identical copies from the cloud (the delete
+ * route removes the whole set), then forget the copies locally.
+ */
+async function removeExtraSet(sessionToken: string, extraId: string): Promise<void> {
+  const res = await fetch("/api/photos/delete", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionToken, extraId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(data.error || "Couldn't replace that photo. Please try again."), {
+      customerFacing: res.status >= 400 && res.status < 500,
+    });
+  }
+  usePhotoStore.getState().clearHiddenCopies(extraId);
 }
 
 /** Shown under a photo whose upload failed for a reason other than the photo itself. */

@@ -187,7 +187,7 @@ export async function GET(
       .eq("session_id", session.id);
 
     // Fetch extras, each duplicate copy shown once (see lib/collapse-extras.ts)
-    const { data: extraRows } = await loadSessionExtras(session.id);
+    const { data: extraRows, hidden: hiddenCopies } = await loadSessionExtras(session.id);
 
     // Generate signed URLs for each photo (valid 1 hour)
     const photos: Record<string, {
@@ -238,6 +238,8 @@ export async function GET(
       orientation: "portrait" | "landscape";
       signedUrl: string | null;
       quantity: number;
+      /** Identical copies shown as this one extra (old resume bug); 0 for most. */
+      hiddenCopies: number;
     }> = [];
 
     if (extraRows && extraRows.length > 0) {
@@ -270,6 +272,7 @@ export async function GET(
             ? extraUrlByPath.get(row.storage_path) || null
             : null,
           quantity: row.quantity,
+          hiddenCopies: hiddenCopies.get(row.extra_id)?.length ?? 0,
         });
       }
     }

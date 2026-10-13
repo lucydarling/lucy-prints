@@ -41,6 +41,7 @@ interface SessionData {
     orientation?: "portrait" | "landscape";
     signedUrl: string | null;
     quantity: number;
+    hiddenCopies?: number;
   }>;
 }
 
@@ -190,6 +191,7 @@ export default function ResumePage({
               orientation: extra.orientation === "landscape" ? "landscape" : "portrait",
               url: dataUrl,
               quantity: extra.quantity || 1,
+              hiddenCopies: extra.hiddenCopies || 0,
             });
             restoredExtraIds.push(extra.extraId);
           }

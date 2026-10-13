@@ -50,6 +50,12 @@ export interface ExtraPrint {
   previewUrl: string | null;
   croppedUrl: string | null;
   quantity: number;
+  /**
+   * Identical copies in the cloud shown as this one extra (the old resume
+   * bug; lib/collapse-extras.ts). A re-crop removes them before it uploads,
+   * or they would come back as an extra of their own.
+   */
+  hiddenCopies?: number;
 }
 
 /** The parts of a saved session that belong to one book. */
@@ -123,7 +129,10 @@ interface PhotoStore {
     orientation: PrintOrientation;
     url: string;
     quantity: number;
+    hiddenCopies?: number;
   }) => void;
+  /** The extra's hidden copies were removed from the cloud. */
+  clearHiddenCopies: (id: string) => void;
   setExtraPhoto: (
     id: string,
     previewUrl: string,
@@ -315,12 +324,20 @@ export const usePhotoStore = create<PhotoStore>()(
         return id;
       },
 
-      restoreExtra: ({ id, size, orientation, url, quantity }) =>
+      restoreExtra: ({ id, size, orientation, url, quantity, hiddenCopies }) =>
         set((state) => ({
           extras: [
             ...state.extras.filter((e) => e.id !== id),
-            { id, size, orientation, previewUrl: url, croppedUrl: url, quantity },
+            {
+              id, size, orientation, previewUrl: url, croppedUrl: url, quantity,
+              ...(hiddenCopies ? { hiddenCopies } : {}),
+            },
           ],
+        })),
+
+      clearHiddenCopies: (id) =>
+        set((state) => ({
+          extras: state.extras.map((e) => (e.id === id ? { ...e, hiddenCopies: 0 } : e)),
         })),
 
       setExtraPhoto: (id, previewUrl, detectedOrientation) =>
