@@ -117,15 +117,13 @@ test("each region offers each count + size at most once", () => {
   }
 });
 
-test("month pages hold one photo, except Month 3 which also offers 2 × 3x3", () => {
+test("month pages hold one photo by default and offer at most 2 x 3x3 as the larger layout", () => {
   for (const region of getRegions(JOURNAL).filter((r) => r.key.startsWith("pj_month_"))) {
-    const max = Math.max(...region.layouts.map((l) => l.count));
-    if (region.key === "pj_month_3") {
-      assert.ok(region.layouts.some((l) => l.id === "2x3x3"));
-      assert.equal(max, 2);
-    } else {
-      assert.equal(max, 1, region.key);
+    assert.equal(region.layouts[0].count, 1, `${region.key} default`);
+    for (const l of region.layouts) {
+      assert.ok(l.count === 1 || l.id === "2x3x3" || region.key === "pj_month_3", `${region.key} ${l.id}`);
     }
+    assert.ok(region.layouts.some((l) => l.id === "2x3x3"), `${region.key} offers 2 x 3x3`);
   }
 });
 

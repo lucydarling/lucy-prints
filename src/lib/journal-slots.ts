@@ -85,6 +85,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3x3"),
     layout(1, "4x6", L),
     layout(1, "3.5x3.5"),
+    layout(2, "3x3"),
   ],
   5: [
     layout(1, "4x3", EITHER),
@@ -100,6 +101,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3x3"),
     layout(1, "3.5x3.5"),
     layout(1, "4x6", L),
+    layout(2, "3x3"),
   ],
   7: [
     layout(1, "4x4"),
@@ -107,6 +109,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3x3"),
     layout(1, "3.5x3.5"),
     layout(1, "4x6", L),
+    layout(2, "3x3"),
   ],
   8: [
     layout(1, "4x3", EITHER),
@@ -114,6 +117,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3.5x3.5"),
     layout(1, "4x4"),
     layout(1, "4x6", L),
+    layout(2, "3x3"),
   ],
   9: [
     layout(1, "4x4"),
@@ -121,6 +125,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3x3"),
     layout(1, "3.5x3.5"),
     layout(1, "4x6", L),
+    layout(2, "3x3"),
   ],
   10: [
     layout(1, "4x4"),
@@ -128,6 +133,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3x3"),
     layout(1, "3.5x3.5"),
     layout(1, "4x6", L),
+    layout(2, "3x3"),
   ],
   11: [
     layout(1, "4x4"),
@@ -135,6 +141,7 @@ const PAGE_LAYOUTS: Record<number, RegionLayout[]> = {
     layout(1, "3x3"),
     layout(1, "4x6", L),
     layout(1, "3.5x3.5"),
+    layout(2, "3x3"),
   ],
   16: [
     layout(4, "3x3"),
