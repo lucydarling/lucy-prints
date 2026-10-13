@@ -3,6 +3,7 @@ import {
   getBookSlots,
   getProductForTheme,
   type RegionChoice,
+  getBookWord,
   getPrintDimensions,
   getPrintSizeLabel,
   isAlwaysPaddedTo4x4,
@@ -149,7 +150,8 @@ export async function downloadPhotosZip(
       name,
       slots,
       getBookPrompts(bookTheme),
-      extraPageSummary
+      extraPageSummary,
+      getBookWord(bookTheme)
     );
     if (detailsText) {
       root.file("book-details.txt", detailsText);
@@ -445,7 +447,8 @@ export function generateBookDetailsText(
   babyName: string,
   slots: PhotoSlot[],
   prompts: SlotPrompts[],
-  extraPages: ExtraPageSummary[] = []
+  extraPages: ExtraPageSummary[] = [],
+  bookWord = "memory book"
 ): string | null {
   const lines: string[] = [];
   let hasAnyContent = false;
@@ -530,7 +533,7 @@ export function generateBookDetailsText(
   // Header
   const header = [
     `${babyName}'s Book Details`,
-    `Reference sheet for your Lucy Darling memory book`,
+    `Reference sheet for your Lucy Darling ${bookWord}`,
     `Generated ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`,
     "",
     "─".repeat(50),

@@ -511,6 +511,17 @@ export function getProductForTheme(
 }
 
 /**
+ * What a customer calls their book in running text ("your ___"). An unknown or
+ * missing theme gets "memory book", matching getSlots.
+ */
+export function getBookWord(themeId: string | null | undefined): string {
+  const product = getProductForTheme(themeId);
+  if (product === "pregnancy_journal") return "pregnancy journal";
+  if (product === "little_years") return "Little Years book";
+  return "memory book";
+}
+
+/**
  * The photo slots for a theme's book. An unknown or missing theme gets the
  * memory book's slots, which is what every session had before books other
  * than memory books existed.

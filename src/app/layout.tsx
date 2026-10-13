@@ -18,11 +18,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "Lucy Darling — Photo Lab",
   description:
-    "Get your photos print-ready for every page of your Lucy Darling memory book. Photo Lab guides you through each section — just upload, crop, and print.",
+    "Get your photos print-ready for every page of your Lucy Darling book. Photo Lab guides you through each section — just upload, crop, and print.",
   openGraph: {
     title: "Lucy Darling — Photo Lab",
     description:
-      "Get your photos print-ready for every page of your Lucy Darling memory book. Photo Lab guides you through each section — just upload, crop, and print.",
+      "Get your photos print-ready for every page of your Lucy Darling book. Photo Lab guides you through each section — just upload, crop, and print.",
     siteName: "Lucy Darling",
     type: "website",
     url: "https://memories.lucydarling.com",
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Lucy Darling — Photo Lab",
     description:
-      "Get your photos print-ready for every page of your Lucy Darling memory book.",
+      "Get your photos print-ready for every page of your Lucy Darling book.",
     images: ["https://memories.lucydarling.com/og-image.jpg"],
   },
   icons: {

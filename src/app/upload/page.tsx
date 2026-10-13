@@ -8,6 +8,7 @@ import {
   getExtraPrintSizes,
   getPrintSizeLabel,
   getBookSlots,
+  getBookWord,
   getProductForTheme,
   getSlotsBySection,
   type PrintSize,
@@ -104,7 +105,7 @@ export default function UploadPage() {
             <h1 className="text-xl font-bold text-gray-900">Your Photos</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               Upload photos for each section of your{" "}
-              {isJournal ? "pregnancy journal" : "memory book"}. We&apos;ll size
+              {getBookWord(bookTheme)}. We&apos;ll size
               them perfectly for printing.
             </p>
           </div>
