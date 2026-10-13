@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { babyDetailsUpdate, isNewBirthdate } from "@/lib/baby-details";
+import { babyDetailsUpdate, isNewBirthdate, milestoneOptOutUpdate } from "@/lib/baby-details";
 import { loadSessionExtras } from "@/lib/session-extras";
 import {
   syncProfileToKlaviyo,
@@ -47,6 +47,9 @@ export async function PATCH(
     const isSideBook = isSideBookTheme(session.book_theme);
     const babyName = isJournalTheme(session.book_theme) ? undefined : body.babyName;
     const babyBirthdate = isSideBook ? undefined : body.babyBirthdate;
+    // The edit form's "I don't want milestone reminders" (memory books only):
+    // true or false as sent; it never touches the birthdate.
+    const milestoneOptOut = isSideBook ? undefined : body.milestoneOptOut;
 
     // Build update object — only include fields that were sent
     const update: Record<string, unknown> = {};
@@ -55,13 +58,14 @@ export async function PATCH(
     // Blank never clears a stored name or birthdate (see baby-details.ts).
     const details = babyDetailsUpdate({ babyName, babyBirthdate });
     Object.assign(update, details);
+    Object.assign(update, milestoneOptOutUpdate(milestoneOptOut));
     update.last_activity_at = new Date().toISOString();
 
     const { data: updatedSession, error } = await supabaseAdmin
       .from("sessions")
       .update(update)
       .eq("id", session.id)
-      .select("email, baby_name, baby_birthdate, phone, sms_opt_in, book_theme")
+      .select("email, baby_name, baby_birthdate, phone, sms_opt_in, book_theme, milestone_opt_out")
       .single();
 
     if (error) {
@@ -98,11 +102,12 @@ export async function PATCH(
         phone: updatedSession.phone,
         smsOptIn: updatedSession.sms_opt_in,
         bookTheme: updatedSession.book_theme,
+        milestoneOptOut: isSideBook ? undefined : updatedSession.milestone_opt_out === true,
       };
 
       const [klaviyoResult, emailResult] = await Promise.all([
         syncProfileToKlaviyo(klaviyoData),
-        subscribeToMilestoneList(updatedSession.email, updatedSession.book_theme),
+        subscribeToMilestoneList(updatedSession.email, updatedSession.book_theme, updatedSession.milestone_opt_out === true),
       ]);
 
       const { error: syncStatusError } = await supabaseAdmin
@@ -289,6 +294,7 @@ export async function GET(
         photoCount: session.photo_count,
         notes: session.notes || {},
         detailsMode: session.details_mode || false,
+        milestoneOptOut: session.milestone_opt_out === true,
       },
       photos,
       extras,

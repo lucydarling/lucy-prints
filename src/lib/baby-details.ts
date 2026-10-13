@@ -38,9 +38,20 @@ export function isNewBirthdate(stored: string | null | undefined, sent: string |
 export function resumedBabyDetails(session: {
   babyName?: string | null;
   babyBirthdate?: string | null;
-}): { pendingBabyName: string; pendingBabyBirthdate: string } {
+  milestoneOptOut?: boolean | null;
+}): { pendingBabyName: string; pendingBabyBirthdate: string; birthdateOptOut: boolean } {
   return {
     pendingBabyName: session.babyName ?? "",
     pendingBabyBirthdate: session.babyBirthdate ?? "",
+    birthdateOptOut: session.milestoneOptOut === true,
   };
+}
+
+/**
+ * Session column for "I don't want milestone reminders". Only an explicit
+ * boolean is written. It never touches the birthdate.
+ */
+export function milestoneOptOutUpdate(sent: unknown): { milestone_opt_out?: boolean } {
+  if (sent === true || sent === false) return { milestone_opt_out: sent };
+  return {};
 }

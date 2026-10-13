@@ -84,6 +84,7 @@ function SaveProgressModalForm() {
             : {
                 babyName: babyName.trim() || undefined,
                 babyBirthdate: birthdateOptOut ? undefined : babyBirthdate || undefined,
+                milestoneOptOut: birthdateOptOut || undefined,
                 phone: phone.trim() || undefined,
                 smsOptIn,
               }),

@@ -21,6 +21,7 @@ interface SessionData {
     email: string;
     babyName: string | null;
     babyBirthdate: string | null;
+    milestoneOptOut?: boolean;
     bookTheme: string;
     photoCount: number;
     notes: Record<string, Record<string, string>>;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { babyDetailsUpdate } from "@/lib/baby-details";
+import { babyDetailsUpdate, milestoneOptOutUpdate } from "@/lib/baby-details";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 import {
@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
     const isSideBook = isSideBookTheme(bookTheme);
     const { babyBirthdate, phone, smsOptIn } = isSideBook ? {} : body;
     const babyName = isJournalTheme(bookTheme) ? undefined : body.babyName;
+    // "I don't want milestone reminders" (memory books only). A save only ever
+    // turns it ON: the form defaults to unticked on a new device, so a false
+    // here would quietly re-enable reminders. Turning it off is the edit form's job.
+    const milestoneOptOut = !isSideBook && body.milestoneOptOut === true;
 
     // Validate required fields
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -55,7 +59,7 @@ export async function POST(req: NextRequest) {
     // going after a print order (printing is in rounds), so it is reused.
     const { data: candidates } = await supabaseAdmin
       .from("sessions")
-      .select("id, token, photo_count")
+      .select("id, token, photo_count, milestone_opt_out")
       .eq("email", email.toLowerCase().trim())
       .eq("book_theme", bookTheme)
       .eq("status", "active")
@@ -67,6 +71,8 @@ export async function POST(req: NextRequest) {
       const updateData: Record<string, unknown> = {};
       // Blank never clears a stored name or birthdate (see baby-details.ts).
       Object.assign(updateData, babyDetailsUpdate({ babyName, babyBirthdate }));
+      if (milestoneOptOut && !existing.milestone_opt_out) Object.assign(updateData, milestoneOptOutUpdate(true));
+      const optedOut = milestoneOptOut || existing.milestone_opt_out === true;
       if (phone !== undefined) updateData.phone = phone || null;
       if (smsOptIn !== undefined) updateData.sms_opt_in = smsOptIn;
       if (notes !== undefined) updateData.notes = notes;
@@ -97,8 +103,9 @@ export async function POST(req: NextRequest) {
               phone,
               smsOptIn,
               bookTheme,
+              milestoneOptOut: optedOut || undefined,
             }),
-            subscribeToMilestoneList(email, bookTheme),
+            subscribeToMilestoneList(email, bookTheme, optedOut),
           ]);
 
           const { error: syncStatusError } = await supabaseAdmin
@@ -135,6 +142,7 @@ export async function POST(req: NextRequest) {
       phone: phone || null,
       sms_opt_in: smsOptIn || false,
       book_theme: bookTheme,
+      ...(milestoneOptOut ? milestoneOptOutUpdate(true) : {}),
       // last_activity_at omitted — DEFAULT NOW() in database handles it
     };
     // Only include notes/details_mode when non-default to keep the insert lean.
@@ -169,8 +177,9 @@ export async function POST(req: NextRequest) {
             phone,
             smsOptIn,
             bookTheme,
+            milestoneOptOut: milestoneOptOut || undefined,
           }),
-          subscribeToMilestoneList(email, bookTheme),
+          subscribeToMilestoneList(email, bookTheme, milestoneOptOut),
         ]);
 
         const { error: syncStatusError } = await supabaseAdmin

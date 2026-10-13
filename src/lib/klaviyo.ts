@@ -37,6 +37,8 @@ export interface KlaviyoSessionData {
   phone?: string | null;
   smsOptIn?: boolean;
   bookTheme?: string | null;
+  /** "I don't want milestone reminders": written as milestone_reminders_opt_out when a boolean. */
+  milestoneOptOut?: boolean;
 }
 
 /**
@@ -336,6 +338,7 @@ export function profileProperties(data: KlaviyoSessionData): Record<string, unkn
   if (name) properties.baby_name = name;
   if (birthdate) properties.baby_birthdate = birthdate;
   if (theme) properties.book_theme = theme;
+  if (typeof data.milestoneOptOut === "boolean") properties.milestone_reminders_opt_out = data.milestoneOptOut;
   return properties;
 }
 
@@ -593,18 +596,20 @@ async function subscribeToSms(
 /**
  * Only a memory book joins "LD | Milestone Reminder Opt-in" (KLAVIYO_PHOTO_APP_LIST_ID),
  * the list that starts the baby milestone emails ("Your baby is N months old").
- * A pregnancy journal or Little Years save joins no list (Kevin, 2026-10-13).
+ * A pregnancy journal or Little Years save joins no list, and neither does a
+ * parent who ticked "I don't want milestone reminders" (Kevin, 2026-10-13).
  */
-export function joinsMilestoneList(bookTheme: string | null | undefined): boolean {
-  return getProductForTheme(bookTheme) === "memory_book";
+export function joinsMilestoneList(bookTheme: string | null | undefined, optedOut = false): boolean {
+  return !optedOut && getProductForTheme(bookTheme) === "memory_book";
 }
 
 /** Subscribe to the milestone list when the book is one that joins it; otherwise nothing is sent. */
 export async function subscribeToMilestoneList(
   email: string,
-  bookTheme: string | null | undefined
+  bookTheme: string | null | undefined,
+  optedOut = false
 ): Promise<SubscribeResult> {
-  if (!joinsMilestoneList(bookTheme)) return { success: false, consentStatus: "NOT_ATTEMPTED" };
+  if (!joinsMilestoneList(bookTheme, optedOut)) return { success: false, consentStatus: "NOT_ATTEMPTED" };
   return subscribeToEmailList(email);
 }
 

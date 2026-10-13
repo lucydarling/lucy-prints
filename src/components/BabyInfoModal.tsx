@@ -44,6 +44,7 @@ function BabyInfoModalForm() {
         body: JSON.stringify({
           babyName: trimmedName || null,
           babyBirthdate: finalBirthdate || null,
+          milestoneOptOut: optOut,
         }),
       }).catch(() => {});
     }

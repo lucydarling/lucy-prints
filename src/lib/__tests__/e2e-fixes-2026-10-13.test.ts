@@ -23,11 +23,13 @@ test("resume puts the saved baby name + birthdate into the form state", () => {
   assert.deepEqual(resumedBabyDetails({ babyName: "Fred", babyBirthdate: "2026-08-01" }), {
     pendingBabyName: "Fred",
     pendingBabyBirthdate: "2026-08-01",
+    birthdateOptOut: false,
   });
   // A book saved without them clears what another book left in this browser.
   assert.deepEqual(resumedBabyDetails({ babyName: null, babyBirthdate: null }), {
     pendingBabyName: "",
     pendingBabyBirthdate: "",
+    birthdateOptOut: false,
   });
 });
 
