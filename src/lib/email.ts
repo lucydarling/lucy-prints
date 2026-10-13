@@ -143,18 +143,19 @@ export async function sendMyBooksEmail({
   });
 }
 
-export async function sendMagicLinkEmail({
-  to,
+/**
+ * The "book is saved" email. It quotes NO photo count: the browser asks for it
+ * right after the save, before its uploads land, so any count read here is 0.
+ */
+export function buildMagicLinkEmail({
   babyName,
   token,
-  photoCount,
+  appUrl = resolveAppUrl(),
 }: {
-  to: string;
   babyName?: string;
   token: string;
-  photoCount: number;
-}) {
-  const appUrl = resolveAppUrl();
+  appUrl?: string;
+}): { subject: string; html: string } {
   const resumeUrl = `${appUrl}/resume/${token}`;
   const subject = babyName
     ? `Your photo book for ${babyName} is saved`
@@ -162,8 +163,7 @@ export async function sendMagicLinkEmail({
 
   const greeting = babyName ? `${babyName}'s` : "Your";
 
-  await sendEmail({
-    to,
+  return {
     subject,
     html: `
 <!DOCTYPE html>
@@ -186,8 +186,8 @@ export async function sendMagicLinkEmail({
           ${greeting} photo book is saved!
         </h1>
         <p style="font-size:14px;color:#6B7280;line-height:1.6;margin:0 0 20px 0;">
-          You have ${photoCount} photo${photoCount !== 1 ? "s" : ""} saved so far.
-          Pick up right where you left off on any device.
+          <!-- DRAFT copy, pending Haily -->
+          Your photos are saved as you add them, and this link brings your book back on any device.
         </p>
         <a href="${resumeUrl}"
            style="display:block;text-align:center;background-color:#FAB8A9;color:#FFFFFF;padding:14px 24px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;">
@@ -209,7 +209,11 @@ export async function sendMagicLinkEmail({
 </body>
 </html>
     `.trim(),
-  });
+  };
+}
+
+export async function sendMagicLinkEmail({ to, babyName, token }: { to: string; babyName?: string; token: string }) {
+  await sendEmail({ to, ...buildMagicLinkEmail({ babyName, token }) });
 }
 
 /**

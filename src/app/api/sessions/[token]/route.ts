@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { babyDetailsUpdate, isNewBirthdate } from "@/lib/baby-details";
 import { loadSessionExtras } from "@/lib/session-extras";
 import {
   syncProfileToKlaviyo,
@@ -29,7 +30,7 @@ export async function PATCH(
     // Look up session
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id, book_theme")
+      .select("id, book_theme, baby_birthdate")
       .eq("token", token)
       .eq("status", "active")
       .maybeSingle();
@@ -51,8 +52,9 @@ export async function PATCH(
     const update: Record<string, unknown> = {};
     if (notes !== undefined) update.notes = notes;
     if (detailsMode !== undefined) update.details_mode = detailsMode;
-    if (babyName !== undefined) update.baby_name = babyName || null;
-    if (babyBirthdate !== undefined) update.baby_birthdate = babyBirthdate || null;
+    // Blank never clears a stored name or birthdate (see baby-details.ts).
+    const details = babyDetailsUpdate({ babyName, babyBirthdate });
+    Object.assign(update, details);
     update.last_activity_at = new Date().toISOString();
 
     const { data: updatedSession, error } = await supabaseAdmin
@@ -114,10 +116,10 @@ export async function PATCH(
       // Round-reminder properties: only when print ordering is on for this caller.
       if (!isSideBook) await syncPrintRoundReminders(session.id, { jar: req.cookies });
 
-      // If a birthdate was just added for the first time, fire the signup event
-      // so the milestone flow starts. We check `babyBirthdate` from the request
-      // body — if it was sent in this PATCH and is now set, fire the event.
-      if (babyBirthdate && updatedSession.baby_birthdate && !isSideBook) {
+      // Fire the signup event only when this PATCH set a birthdate the session
+      // didn't already have (first time or changed), so the milestone flow
+      // starts. Re-saving the edit form with the same birthdate fires nothing.
+      if (isNewBirthdate(session.baby_birthdate, details.baby_birthdate) && updatedSession.baby_birthdate && !isSideBook) {
         trackPhotoAppSignup({
           ...klaviyoData,
           sessionToken: token,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import { resumedBabyDetails } from "@/lib/baby-details";
 import { usePhotoStore } from "@/store/photo-store";
 import { useSaveStore } from "@/store/save-store";
 import {
@@ -231,6 +232,8 @@ export default function ResumePage({
         data.session.babyName || undefined,
         data.session.babyBirthdate || undefined
       );
+      // Fill the baby-details form and the progress bar's baby row.
+      useSaveStore.setState(resumedBabyDetails(data.session));
 
       // Mark all restored photos and extras as already uploaded (no need to re-upload)
       const uploadedKeys = [...Object.keys(data.photos), ...restoredExtraIds];

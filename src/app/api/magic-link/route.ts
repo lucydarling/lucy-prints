@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     // Look up session
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id, token, email, baby_name, photo_count, last_emailed_at")
+      .select("id, token, email, baby_name, last_emailed_at")
       .eq("token", sessionToken)
       .eq("status", "active")
       .maybeSingle();
@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
         to: session.email,
         babyName: session.baby_name || undefined,
         token: session.token,
-        photoCount: session.photo_count || 0,
       });
     } catch (sendErr) {
       const detail =

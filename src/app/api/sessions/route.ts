@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { babyDetailsUpdate } from "@/lib/baby-details";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
 import {
@@ -64,8 +65,8 @@ export async function POST(req: NextRequest) {
     if (existing) {
       // Update baby info + refresh the activity timestamp.
       const updateData: Record<string, unknown> = {};
-      if (babyName !== undefined) updateData.baby_name = babyName || null;
-      if (babyBirthdate !== undefined) updateData.baby_birthdate = babyBirthdate || null;
+      // Blank never clears a stored name or birthdate (see baby-details.ts).
+      Object.assign(updateData, babyDetailsUpdate({ babyName, babyBirthdate }));
       if (phone !== undefined) updateData.phone = phone || null;
       if (smsOptIn !== undefined) updateData.sms_opt_in = smsOptIn;
       if (notes !== undefined) updateData.notes = notes;

@@ -68,7 +68,6 @@ export async function downloadPhotosZip(
 
   // Only the photos the book is using, each at the size it will print.
   const slots = getBookSlots(bookTheme, options.regionLayouts);
-  const isJournal = getProductForTheme(bookTheme) === "pregnancy_journal";
   const isLittleYears = getProductForTheme(bookTheme) === "little_years";
 
   // Add regular slot photos — flat, numbered, personalized
@@ -86,12 +85,7 @@ export async function downloadPhotosZip(
       options
     );
 
-    const fileName = isJournal
-      ? journalFileName(slot, slots, sizeLabel)
-      : isLittleYears
-      ? littleYearsFileName(slot, options.babyName?.trim() || "", photo.customLabel, sizeLabel)
-      : `${String(slot.sortOrder).padStart(2, "0")} ${personalizeSlotName(slot, name, photo.customLabel)} (${sizeLabel}).jpg`;
-    root.file(fileName, blob);
+    root.file(slotFileName(bookTheme, slot, slots, options.babyName, photo.customLabel, sizeLabel), blob);
     addedImages++;
   }
 
@@ -108,7 +102,7 @@ export async function downloadPhotosZip(
         const { sizeLabel, blob } = await preparePrint(pages[i].croppedUrl!, pages[i].size, pages[i].orientation, options);
         const prefix = `${String(age.lastSortOrder).padStart(3, "0")}-${String(i + 1).padStart(2, "0")}`;
         const parts = [prefix, options.babyName?.trim() || "", age.label, `Extra Page ${i + 1}`];
-        root.file(`${parts.filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "-")} (${sizeLabel}).jpg`, blob);
+        root.file(`${safeZipName(parts.filter(Boolean).join(" "))} (${sizeLabel}).jpg`, blob);
         prefixes.push(prefix);
         addedImages++;
       }
@@ -170,6 +164,32 @@ export async function downloadPhotosZip(
   URL.revokeObjectURL(url);
 }
 
+/** The file name for one book photo (no folder), for any book. */
+export function slotFileName(
+  bookTheme: string,
+  slot: PhotoSlot,
+  slots: PhotoSlot[],
+  babyName: string | null | undefined,
+  customLabel: string | undefined,
+  sizeLabel: string
+): string {
+  const product = getProductForTheme(bookTheme);
+  if (product === "pregnancy_journal") return journalFileName(slot, slots, sizeLabel);
+  if (product === "little_years") return littleYearsFileName(slot, babyName?.trim() || "", customLabel, sizeLabel);
+  const name = babyName?.trim() || "Baby";
+  return `${String(slot.sortOrder).padStart(2, "0")} ${safeZipName(personalizeSlotName(slot, name, customLabel))} (${sizeLabel}).jpg`;
+}
+
+/**
+ * One path segment of a ZIP entry: a "/" or "\\" would make a folder (the
+ * memory book's "Birth / Arrival Photo" did), and the rest aren't allowed in
+ * Windows filenames. Every name built from a slot, section, baby name or
+ * customer label goes through this.
+ */
+export function safeZipName(segment: string): string {
+  return segment.replace(/[\\/:*?"<>|]/g, "-");
+}
+
 /**
  * Pregnancy journal filenames start with the page so the parent can find
  * where each print goes, and sort in book order:
@@ -184,7 +204,7 @@ function journalFileName(slot: PhotoSlot, slots: PhotoSlot[], sizeLabel: string)
     const inRegion = slots.filter((s) => s.region === slot.region).length;
     if (inRegion > 1) label = `${label} ${slot.regionIndex} of ${inRegion}`;
   }
-  return `${page} ${label.replace(/[\\/:*?"<>|]/g, "-")} (${sizeLabel}).jpg`;
+  return `${page} ${safeZipName(label)} (${sizeLabel}).jpg`;
 }
 
 /**
@@ -218,7 +238,7 @@ function littleYearsFileName(
       ? `Snapshot ${n}`
       : slot.prompt;
   const parts = [String(slot.sortOrder).padStart(3, "0"), childName, slot.group ?? "", label];
-  const name = parts.filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "-");
+  const name = safeZipName(parts.filter(Boolean).join(" "));
   return `${name} (${sizeLabel}).jpg`;
 }
 

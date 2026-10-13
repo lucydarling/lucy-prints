@@ -26,7 +26,14 @@ function BabyInfoModalForm() {
   function handleSave() {
     const trimmedName = name.trim();
     const finalBirthdate = optOut ? "" : birthdate;
-    updateBabyInfo(trimmedName, finalBirthdate, optOut);
+    // A saved book never loses its name or birthdate to a blank field: the
+    // server keeps them (baby-details.ts), so the browser keeps them too.
+    const { babyName: savedName, babyBirthdate: savedBirthdate } = useSaveStore.getState();
+    updateBabyInfo(
+      trimmedName || (sessionToken ? savedName ?? "" : ""),
+      finalBirthdate || (sessionToken ? savedBirthdate ?? "" : ""),
+      optOut
+    );
     setShowBabyInfoModal(false);
 
     // Sync to server if session exists (non-critical)
