@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePhotoStore } from "@/store/photo-store";
 import {
-  EXTRA_PRINT_SIZES,
+  getExtraPrintSizes,
   getPrintSizeLabel,
   getBookSlots,
   getProductForTheme,
@@ -165,7 +165,7 @@ export default function UploadPage() {
                 : "Need more prints for the blank pages at the back of your book?"}
             </p>
             <div className="flex gap-2 justify-center flex-wrap">
-              {EXTRA_PRINT_SIZES.map((size) => (
+              {getExtraPrintSizes(bookTheme).map((size) => (
                 <ExtraButton key={size} size={size} />
               ))}
             </div>

@@ -9,6 +9,9 @@ export type PrintOrientation = "portrait" | "landscape";
 /** Sizes offered in the Extra Prints section, in the order they're shown. */
 export const EXTRA_PRINT_SIZES = ["3x3", "4x3", "4x4", "4x6"] as const;
 
+/** The Little Years offers fewer extra sizes: its blank pages take 4x4 and 4x6. */
+export const LITTLE_YEARS_EXTRA_PRINT_SIZES = ["4x4", "4x6"] as const;
+
 /**
  * Pixel dimensions at 300 DPI, read as the size name does — width first.
  * "4x6" is 4" wide × 6" tall (1200×1800px); "4x3" is 4" wide × 3" tall.
@@ -481,6 +484,16 @@ export const PRODUCTS: Record<ProductType, { name: string; progressUnit: string 
   pregnancy_journal: { name: "Love Grows Pregnancy Journal", progressUnit: "photo spots" },
   little_years: { name: "The Little Years", progressUnit: "photos" },
 };
+
+/**
+ * The extra-print sizes offered for a theme's book. An extra already stored at
+ * a size outside this list still renders and prints; it just isn't offered.
+ */
+export function getExtraPrintSizes(themeId: string | null | undefined): readonly PrintSize[] {
+  return getProductForTheme(themeId) === "little_years"
+    ? LITTLE_YEARS_EXTRA_PRINT_SIZES
+    : EXTRA_PRINT_SIZES;
+}
 
 function isRegion(item: PhotoSlot | PhotoRegion): item is PhotoRegion {
   return "layouts" in item;
