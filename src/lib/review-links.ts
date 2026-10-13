@@ -29,7 +29,7 @@ export const REVIEW_PRODUCT_HANDLES: Record<BookThemeId, string> = {
 };
 
 /** Product page + Judge.me reviews section. Contains no personal data. */
-export type ReviewSource = "photos_10" | "photos_25" | "after_download";
+export type ReviewSource = "photos_10" | "photos_25" | "photos_30" | "photos_75" | "after_download";
 
 export function getReviewUrl(themeId: string, source: ReviewSource = "after_download"): string | null {
   const handle = (REVIEW_PRODUCT_HANDLES as Record<string, string | undefined>)[themeId];

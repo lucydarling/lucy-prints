@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { usePhotoStore } from "@/store/photo-store";
 import { getReviewUrl, type ReviewSource } from "@/lib/review-links";
-import { countCropped, milestoneFor, readReviewState, recordAsk } from "@/lib/review-prompt";
+import { countCropped, milestoneFor, readReviewState, recordAsk, reviewThresholdsFor } from "@/lib/review-prompt";
 import { getBookSlots } from "@/lib/photo-slots";
 import { ReviewPromptCard } from "@/components/ReviewPromptCard";
 
 /**
  * Inline (never modal) review ask shown on /upload when the cropped-photo count
- * RISES past 10 or 25. It subscribes to the store after mount, so counts that
+ * RISES past the book's thresholds (10 and 25; 30 and 75 for The Little Years). It subscribes to the store after mount, so counts that
  * arrive by rehydrate or resume never trigger it. With no usable localStorage
  * there are no milestone asks.
  */
@@ -22,7 +22,7 @@ export function ReviewMilestoneBanner({ themeId }: { themeId: string }) {
     let prev = countCropped(st.photos, st.extras, getBookSlots(st.bookTheme, st.regionLayouts));
     return usePhotoStore.subscribe((state) => {
       const next = countCropped(state.photos, state.extras, getBookSlots(state.bookTheme, state.regionLayouts));
-      const source = milestoneFor(prev, next, readReviewState(themeId));
+      const source = milestoneFor(prev, next, readReviewState(themeId), reviewThresholdsFor(themeId));
       prev = next;
       if (source && recordAsk(themeId)) setAsk({ source, id: Date.now() });
     });

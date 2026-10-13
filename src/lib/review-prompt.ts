@@ -1,4 +1,4 @@
-import type { PhotoSlot } from "@/lib/photo-slots";
+import { getProductForTheme, type PhotoSlot } from "@/lib/photo-slots";
 import type { PhotoEntry, ExtraPrint } from "@/store/photo-store";
 import type { ReviewSource } from "@/lib/review-links";
 
@@ -6,6 +6,28 @@ import type { ReviewSource } from "@/lib/review-links";
 export const REVIEW_THRESHOLD_1 = 10;
 export const REVIEW_THRESHOLD_2 = 25;
 export const MAX_REVIEW_ASKS = 2;
+
+/** A book's two ask thresholds and the utm_content each ask carries. */
+export interface ReviewThresholds {
+  first: { at: number; source: ReviewSource };
+  second: { at: number; source: ReviewSource };
+}
+
+const DEFAULT_THRESHOLDS: ReviewThresholds = {
+  first: { at: REVIEW_THRESHOLD_1, source: "photos_10" },
+  second: { at: REVIEW_THRESHOLD_2, source: "photos_25" },
+};
+
+/** The Little Years holds 146 photos, so its asks come later. */
+const LITTLE_YEARS_THRESHOLDS: ReviewThresholds = {
+  first: { at: 30, source: "photos_30" },
+  second: { at: 75, source: "photos_75" },
+};
+
+/** Thresholds for a theme's book: 30/75 for The Little Years, 10/25 for everything else. */
+export function reviewThresholdsFor(themeId: string | null | undefined): ReviewThresholds {
+  return getProductForTheme(themeId) === "little_years" ? LITTLE_YEARS_THRESHOLDS : DEFAULT_THRESHOLDS;
+}
 
 export interface ReviewState {
   asks: number;
@@ -77,9 +99,15 @@ export function countCropped(
  * earns. Ask #1 needs no prior asks, ask #2 needs exactly one; a jump past both
  * thresholds earns the earliest ask the state allows.
  */
-export function milestoneFor(prev: number, next: number, state: ReviewState | null): ReviewSource | null {
+export function milestoneFor(
+  prev: number,
+  next: number,
+  state: ReviewState | null,
+  thresholds: ReviewThresholds = DEFAULT_THRESHOLDS
+): ReviewSource | null {
   if (!canAsk(state) || next <= prev) return null;
-  if (state.asks === 0 && prev < REVIEW_THRESHOLD_1 && next >= REVIEW_THRESHOLD_1) return "photos_10";
-  if (state.asks <= 1 && prev < REVIEW_THRESHOLD_2 && next >= REVIEW_THRESHOLD_2) return "photos_25";
+  const { first, second } = thresholds;
+  if (state.asks === 0 && prev < first.at && next >= first.at) return first.source;
+  if (state.asks <= 1 && prev < second.at && next >= second.at) return second.source;
   return null;
 }
