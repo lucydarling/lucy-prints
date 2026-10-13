@@ -12,7 +12,7 @@ import {
   type ProductType,
 } from "@/lib/photo-slots";
 import { openBook } from "@/lib/open-book";
-import { resolveInitialProduct } from "@/lib/home-picker";
+import { resolveInitialProduct, visibleProducts } from "@/lib/home-picker";
 import { OnboardingModal } from "@/components/OnboardingModal";
 
 export function HomePage({
@@ -27,14 +27,12 @@ export function HomePage({
   /** ?book= — a product ("pregnancy_journal") or theme id to put first and highlight. */
   preselect: string | null;
 }) {
-  const journalVisible = unlockedBooks.includes("pregnancy_journal");
-  const littleYearsVisible = unlockedBooks.includes("little_years");
   const bookTheme = usePhotoStore((s) => s.bookTheme);
   const router = useRouter();
   // Multi-book mode: any hidden book this visitor can see. Otherwise the page
   // is the single-book memory book page, exactly as before.
   const multiBook = unlockedBooks.length > 0;
-  const [selectedProduct] = useState<ProductType>(() =>
+  const [selectedProduct, setSelectedProduct] = useState<ProductType>(() =>
     resolveInitialProduct(preselect, unlockedBooks)
   );
 
@@ -76,56 +74,61 @@ export function HomePage({
   };
 
   const hasExisting = bookTheme !== null;
-  const journalFirst =
-    journalVisible &&
-    (preselect === "pregnancy_journal" ||
-      getProductForTheme(preselect) === "pregnancy_journal");
+  // Tile click: swap Step 2 and keep ?book= in step so reload / share keeps the choice.
+  const selectProduct = (product: ProductType) => {
+    setSelectedProduct(product);
+    router.replace(`/?book=${product}`, { scroll: false });
+  };
 
-  const littleYearsFirst =
-    littleYearsVisible &&
-    (preselect === "little_years" || getProductForTheme(preselect) === "little_years");
+  const coverGrid = multiBook
+    ? "grid grid-cols-2 sm:grid-cols-3 gap-3"
+    : "grid grid-cols-1 sm:grid-cols-2 gap-3";
 
-  const littleYearsSection = littleYearsVisible ? (
-    <div className={littleYearsFirst ? "mb-8" : "mt-6"}>
-      {/* DRAFT copy — pending Haily. */}
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">
-        The Little Years Toddler Memory Book
-      </h3>
-      <p className="text-xs text-gray-400 mb-3">Ages one to five.</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {BOOK_THEMES.filter((t) => t.tier === "little_years").map((theme) => (
-          <ThemeCard
-            key={theme.id}
-            theme={theme}
-            onSelect={handleSelect}
-            highlighted={preselect === theme.id}
-          />
-        ))}
-      </div>
-    </div>
-  ) : null;
+  const coversFor = (tier: string) =>
+    BOOK_THEMES.filter((t) => t.tier === tier).map((theme) => (
+      <ThemeCard
+        key={theme.id}
+        theme={theme}
+        onSelect={handleSelect}
+        luxury={tier === "luxury"}
+        retiring={tier === "retiring"}
+        highlighted={preselect === theme.id}
+      />
+    ));
 
-  const journalSection = journalVisible ? (
-    <div className={journalFirst ? "mb-8" : "mt-6"}>
-      {/* DRAFT copy — pending Haily. */}
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">
-        Love Grows Pregnancy Journal
-      </h3>
+  // The memory book's three groups; the same in single- and multi-book mode.
+  const memoryBookCovers = (
+    <>
+      {/* Standard Memory Books */}
+      <div className={coverGrid}>{coversFor("standard")}</div>
+
+      {/* Luxury Memory Books */}
+      <h3 className="text-sm font-semibold text-gray-700 mt-6 mb-3">Luxury Collection</h3>
+      <div className={coverGrid}>{coversFor("luxury")}</div>
+
+      {/* Retiring titles */}
+      <h3 className="text-sm font-semibold text-gray-400 mt-6 mb-1">Limited Availability</h3>
       <p className="text-xs text-gray-400 mb-3">
-        Choose your journal&apos;s cover color.
+        These titles are being retired — available while supplies last.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {BOOK_THEMES.filter((t) => t.tier === "journal").map((theme) => (
-          <ThemeCard
-            key={theme.id}
-            theme={theme}
-            onSelect={handleSelect}
-            highlighted={preselect === theme.id}
-          />
-        ))}
-      </div>
+      <div className={coverGrid}>{coversFor("retiring")}</div>
+    </>
+  );
+
+  const howItWorks = (
+    <div className="mb-6 p-4 rounded-xl bg-white border border-gray-100">
+      <h3 className="text-sm font-semibold text-gray-800 mb-2">How it works</h3>
+      <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
+        {/* DRAFT multi-book copy — pending Haily. */}
+        <li>{multiBook ? "Pick your book, then its cover" : "Select your memory book theme below"}</li>
+        <li>Upload photos — we&apos;ll tell you exactly which ones you need</li>
+        <li>Crop each photo to the perfect size</li>
+        <li>Download your ready-to-print photos</li>
+        <li>Print at home or any photo lab, then add them to your book</li>
+      </ol>
+      <p className="text-xs text-rose-600 mt-3">Direct print ordering is on its way.</p>
     </div>
-  ) : null;
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -144,9 +147,10 @@ export function HomePage({
           />
           <p className="text-sm font-medium mt-2 text-rose-600">Photo Lab</p>
           <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
-            Get your photos perfectly sized for every page of your{" "}
-            {journalVisible ? "memory book or pregnancy journal" : "memory book"}{" "}
-            — then print at home or at any photo lab.
+            {/* DRAFT multi-book copy — pending Haily. */}
+            {multiBook
+              ? "Get your photos perfectly sized for every page of your Lucy Darling book — then print at home or at any photo lab."
+              : "Get your photos perfectly sized for every page of your memory book — then print at home or at any photo lab."}
           </p>
         </div>
       </div>
@@ -232,82 +236,146 @@ export function HomePage({
           )}
         </div>
 
-        {/* How it works */}
-        <div className="mb-6 p-4 rounded-xl bg-white border border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-800 mb-2">
-            How it works
-          </h3>
-          <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
-            <li>
-              {journalVisible || littleYearsVisible
-                ? "Select your book below"
-                : "Select your memory book theme below"}
-            </li>
-            <li>Upload photos — we&apos;ll tell you exactly which ones you need</li>
-            <li>Crop each photo to the perfect size</li>
-            <li>Download your ready-to-print photos</li>
-            <li>Print at home or any photo lab, then add them to your book</li>
-          </ol>
-          <p className="text-xs text-rose-600 mt-3">
-            Direct print ordering is on its way.
-          </p>
-        </div>
-
-        {/* Theme selection */}
-        <h2 className="text-base font-semibold text-gray-800 mb-3">
-          {hasExisting ? "Start a New Book" : "Choose Your Book"}
-        </h2>
-
-        {journalFirst && journalSection}
-        {littleYearsFirst && littleYearsSection}
-
-        {/* Standard Memory Books */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {BOOK_THEMES.filter((t) => t.tier === "standard").map((theme) => (
-            <ThemeCard
-              key={theme.id}
-              theme={theme}
-              onSelect={handleSelect}
-              highlighted={preselect === theme.id}
+        {multiBook ? (
+          <>
+            <BookTiles
+              products={visibleProducts(unlockedBooks)}
+              selected={selectedProduct}
+              onSelect={selectProduct}
             />
-          ))}
-        </div>
+            <div className="mt-8">
+              <Eyebrow>Step 2</Eyebrow>
+              {/* DRAFT copy — pending Haily. */}
+              <h2 className="text-base font-semibold text-gray-800">
+                {STEP2[selectedProduct].heading}
+              </h2>
+              <p className="text-xs text-gray-500 mt-1 mb-4">{STEP2[selectedProduct].helper}</p>
+              {selectedProduct === "memory_book" ? (
+                memoryBookCovers
+              ) : (
+                <div className={coverGrid}>
+                  {coversFor(selectedProduct === "pregnancy_journal" ? "journal" : "little_years")}
+                </div>
+              )}
+            </div>
+            <div className="mt-8">{howItWorks}</div>
+          </>
+        ) : (
+          <>
+            {howItWorks}
 
-        {/* Luxury Memory Books */}
-        <h3 className="text-sm font-semibold text-gray-700 mt-6 mb-3">
-          Luxury Collection
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {BOOK_THEMES.filter((t) => t.tier === "luxury").map((theme) => (
-            <ThemeCard
-              key={theme.id}
-              theme={theme}
-              onSelect={handleSelect}
-              luxury
-              highlighted={preselect === theme.id}
-            />
-          ))}
-        </div>
+            {/* Theme selection */}
+            <h2 className="text-base font-semibold text-gray-800 mb-3">
+              {hasExisting ? "Start a New Book" : "Choose Your Book"}
+            </h2>
+            {memoryBookCovers}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
-        {/* Retiring titles */}
-        <h3 className="text-sm font-semibold text-gray-400 mt-6 mb-1">
-          Limited Availability
-        </h3>
-        <p className="text-xs text-gray-400 mb-3">These titles are being retired — available while supplies last.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {BOOK_THEMES.filter((t) => t.tier === "retiring").map((theme) => (
-            <ThemeCard
-              key={theme.id}
-              theme={theme}
-              onSelect={handleSelect}
-              retiring
-              highlighted={preselect === theme.id}
-            />
-          ))}
-        </div>
+const STEP2: Record<ProductType, { heading: string; helper: string }> = {
+  memory_book: {
+    heading: "Find your cover",
+    helper: "Pick the design on the front of your memory book.",
+  },
+  pregnancy_journal: {
+    heading: "Pick your cover color",
+    helper: "Your Love Grows journal comes in two colors.",
+  },
+  little_years: {
+    heading: "Pick your edition",
+    helper: "The Little Years comes in a Boy and a Girl edition.",
+  },
+};
 
-        {!journalFirst && journalSection}
-        {!littleYearsFirst && littleYearsSection}
+// DRAFT copy — pending Haily.
+const TILES: Record<ProductType, { name: string; descriptor: string; image: string }> = {
+  pregnancy_journal: {
+    name: "Pregnancy Journal",
+    descriptor: "Love Grows · for the 9 months",
+    image: "love_grows_desert_sand",
+  },
+  memory_book: {
+    name: "Baby Memory Book",
+    descriptor: "Baby\u2019s first year",
+    image: "little_camper",
+  },
+  little_years: {
+    name: "The Little Years",
+    descriptor: "Toddler book · ages 1\u20135",
+    image: "little_years_boy",
+  },
+};
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-wide text-rose-600 mb-1">{children}</p>
+  );
+}
+
+/** Step 1: which book are you filling? One tile per book this visitor can see. */
+function BookTiles({
+  products,
+  selected,
+  onSelect,
+}: {
+  products: ProductType[];
+  selected: ProductType;
+  onSelect: (product: ProductType) => void;
+}) {
+  return (
+    <div>
+      <Eyebrow>Step 1</Eyebrow>
+      {/* DRAFT copy — pending Haily. */}
+      <h2 className="text-base font-semibold text-gray-800 mb-3">Which book are you filling?</h2>
+      <div className="grid grid-cols-3 gap-2.5">
+        {products.map((product) => {
+          const tile = TILES[product];
+          const isSelected = product === selected;
+          // Any theme of the product has the same slot total.
+          const firstTheme = BOOK_THEMES.find((t) => t.product === product);
+          const count = firstTheme ? getBookProgress(firstTheme.id, {}).total : 0;
+          return (
+            <button
+              key={product}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => onSelect(product)}
+              className={`relative flex flex-col rounded-xl overflow-hidden border text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 ${
+                isSelected
+                  ? "border-rose-500 ring-1 ring-rose-500 bg-rose-50"
+                  : "border-gray-200 hover:border-rose-200 bg-white"
+              }`}
+            >
+              <div className="relative aspect-square w-full bg-gray-50">
+                <Image
+                  src={`/covers/${tile.image}.jpg`}
+                  alt=""
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 672px) 33vw, 220px"
+                />
+                {isSelected && (
+                  <span className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-white">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+              <div className="p-2">
+                <p className="text-sm font-semibold leading-snug text-gray-800">{tile.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{tile.descriptor}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {count} {PRODUCTS[product].progressUnit}
+                </p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
