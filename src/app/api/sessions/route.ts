@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { generateSessionToken } from "@/lib/tokens";
 import { BOOK_THEMES } from "@/lib/photo-slots";
@@ -81,30 +81,39 @@ export async function POST(req: NextRequest) {
         console.error("Session update error (existing):", updateError);
       }
 
-      // Sync profile + real subscription outcomes to Klaviyo, then persist
-      // the confirmed result so failures are visible without console access.
-      const [klaviyoResult, emailResult] = await Promise.all([
-        syncProfileToKlaviyo({
-          email,
-          babyName,
-          babyBirthdate,
-          phone,
-          smsOptIn,
-          bookTheme,
-        }),
-        subscribeToEmailList(email),
-      ]);
+      // After the response (the consent check alone can take ~10 s): sync
+      // profile + real subscription outcomes to Klaviyo, then persist the
+      // confirmed result so failures are visible without console access.
+      // Same calls in the same order as before; only the timing changed.
+      const jar = req.cookies;
+      after(async () => {
+        try {
+          const [klaviyoResult, emailResult] = await Promise.all([
+            syncProfileToKlaviyo({
+              email,
+              babyName,
+              babyBirthdate,
+              phone,
+              smsOptIn,
+              bookTheme,
+            }),
+            subscribeToEmailList(email),
+          ]);
 
-      const { error: syncStatusError } = await supabaseAdmin
-        .from("sessions")
-        .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
-        .eq("id", existing.id);
-      if (syncStatusError) {
-        console.error("Klaviyo sync status persist error (existing):", syncStatusError);
-      }
+          const { error: syncStatusError } = await supabaseAdmin
+            .from("sessions")
+            .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
+            .eq("id", existing.id);
+          if (syncStatusError) {
+            console.error("Klaviyo sync status persist error (existing):", syncStatusError);
+          }
 
-      // Round-reminder properties: only when print ordering is on for this caller.
-      if (!isSideBook) await syncPrintRoundReminders(existing.id, { jar: req.cookies });
+          // Round-reminder properties: only when print ordering is on for this caller.
+          if (!isSideBook) await syncPrintRoundReminders(existing.id, { jar });
+        } catch (err) {
+          console.error("Klaviyo sync after response failed (existing):", err);
+        }
+      });
 
       return NextResponse.json({
         token: existing.token,
@@ -145,42 +154,50 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Sync new profile + real subscription outcomes to Klaviyo, then persist
-    // the confirmed result so failures are visible without console access.
-    const [klaviyoResult, emailResult] = await Promise.all([
-      syncProfileToKlaviyo({
-        email,
-        babyName,
-        babyBirthdate,
-        phone,
-        smsOptIn,
-        bookTheme,
-      }),
-      subscribeToEmailList(email),
-    ]);
+    // After the response (the consent check alone can take ~10 s): sync the
+    // new profile + real subscription outcomes to Klaviyo, then persist the
+    // confirmed result so failures are visible without console access.
+    // Same calls in the same order as before; only the timing changed.
+    after(async () => {
+      try {
+        const [klaviyoResult, emailResult] = await Promise.all([
+          syncProfileToKlaviyo({
+            email,
+            babyName,
+            babyBirthdate,
+            phone,
+            smsOptIn,
+            bookTheme,
+          }),
+          subscribeToEmailList(email),
+        ]);
 
-    const { error: syncStatusError } = await supabaseAdmin
-      .from("sessions")
-      .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
-      .eq("id", session.id);
-    if (syncStatusError) {
-      console.error("Klaviyo sync status persist error (new):", syncStatusError);
-    }
+        const { error: syncStatusError } = await supabaseAdmin
+          .from("sessions")
+          .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
+          .eq("id", session.id);
+        if (syncStatusError) {
+          console.error("Klaviyo sync status persist error (new):", syncStatusError);
+        }
 
-    // Fire the "Photo App Signup" event only when we have a birthdate —
-    // this is what triggers the monthly milestone reminder flow in Klaviyo.
-    // Never for a pregnancy journal.
-    if (babyBirthdate && !isSideBook) {
-      trackPhotoAppSignup({
-        email,
-        babyName,
-        babyBirthdate,
-        phone,
-        smsOptIn,
-        bookTheme,
-        sessionToken: session.token,
-      }).catch(() => {});
-    }
+        // Fire the "Photo App Signup" event only when we have a birthdate —
+        // this is what triggers the monthly milestone reminder flow in Klaviyo.
+        // Never for a pregnancy journal.
+        if (babyBirthdate && !isSideBook) {
+          await trackPhotoAppSignup({
+            email,
+            babyName,
+            babyBirthdate,
+            phone,
+            smsOptIn,
+            bookTheme,
+            sessionToken: session.token,
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.error("Klaviyo sync after response failed (new):", err);
+      }
+    });
 
     return NextResponse.json({
       token: session.token,
