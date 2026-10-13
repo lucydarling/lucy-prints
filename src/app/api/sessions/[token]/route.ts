@@ -5,6 +5,7 @@ import { loadSessionExtras } from "@/lib/session-extras";
 import {
   syncProfileToKlaviyo,
   subscribeToMilestoneList,
+  removeFromMilestoneList,
   trackPhotoAppSignup,
   buildSyncStatus,
   isJournalTheme,
@@ -30,7 +31,7 @@ export async function PATCH(
     // Look up session
     const { data: session } = await supabaseAdmin
       .from("sessions")
-      .select("id, book_theme, baby_birthdate")
+      .select("id, book_theme, baby_birthdate, milestone_opt_out")
       .eq("token", token)
       .eq("status", "active")
       .maybeSingle();
@@ -109,6 +110,13 @@ export async function PATCH(
         syncProfileToKlaviyo(klaviyoData),
         subscribeToMilestoneList(updatedSession.email, updatedSession.book_theme, updatedSession.milestone_opt_out === true),
       ]);
+
+      // Opt-out just turned on: off the milestone list (membership only).
+      // Turning it off re-subscribes through subscribeToMilestoneList above.
+      if (milestoneOptOut === true && session.milestone_opt_out !== true) {
+        const removed = await removeFromMilestoneList(updatedSession.email);
+        if (!removed.success) console.error("Milestone list removal failed (patch):", removed.error);
+      }
 
       const { error: syncStatusError } = await supabaseAdmin
         .from("sessions")

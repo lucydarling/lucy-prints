@@ -7,6 +7,7 @@ import {
   syncProfileToKlaviyo,
   trackPhotoAppSignup,
   subscribeToMilestoneList,
+  removeFromMilestoneList,
   buildSyncStatus,
   isJournalTheme,
   isSideBookTheme,
@@ -108,6 +109,12 @@ export async function POST(req: NextRequest) {
             subscribeToMilestoneList(email, bookTheme, optedOut),
           ]);
 
+          // Opt-out just turned on: off the milestone list (membership only).
+          if (milestoneOptOut && !existing.milestone_opt_out) {
+            const removed = await removeFromMilestoneList(email);
+            if (!removed.success) console.error("Milestone list removal failed (existing):", removed.error);
+          }
+
           const { error: syncStatusError } = await supabaseAdmin
             .from("sessions")
             .update({ klaviyo_sync_status: buildSyncStatus(klaviyoResult, emailResult) })
@@ -181,6 +188,13 @@ export async function POST(req: NextRequest) {
           }),
           subscribeToMilestoneList(email, bookTheme, milestoneOptOut),
         ]);
+
+        // A new book saved opted out: off the milestone list in case another
+        // book already put this email on it (membership only).
+        if (milestoneOptOut) {
+          const removed = await removeFromMilestoneList(email);
+          if (!removed.success) console.error("Milestone list removal failed (new):", removed.error);
+        }
 
         const { error: syncStatusError } = await supabaseAdmin
           .from("sessions")

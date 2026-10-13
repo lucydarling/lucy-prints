@@ -74,3 +74,28 @@ test("Klaviyo property milestone_reminders_opt_out follows the session; absent w
 test("resume restores the opt-out into the form", () => {
   assert.equal(resumedBabyDetails({ babyName: "F", babyBirthdate: "2026-08-01", milestoneOptOut: true }).birthdateOptOut, true);
 });
+
+test("removeFromMilestoneList removes list membership only (no unsubscribe, no suppression)", async () => {
+  const realFetch = globalThis.fetch;
+  const prevList = process.env.KLAVIYO_PHOTO_APP_LIST_ID;
+  process.env.KLAVIYO_PHOTO_APP_LIST_ID = "LIST1";
+  const calls: { url: string; method: string; body?: string }[] = [];
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", body: init?.body as string | undefined });
+    if (String(url).includes("/profiles/?filter=")) return new Response(JSON.stringify({ data: [{ id: "P1" }] }), { status: 200 });
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  try {
+    const { removeFromMilestoneList } = await import("../klaviyo");
+    assert.deepEqual(await removeFromMilestoneList("Kevin+Test@lucydarling.com"), { success: true });
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /profiles\/\?filter=.*kevin%2Btest%40lucydarling\.com/);
+    assert.equal(calls[1].method, "DELETE");
+    assert.match(calls[1].url, /\/lists\/LIST1\/relationships\/profiles\/$/);
+    assert.deepEqual(JSON.parse(calls[1].body!), { data: [{ type: "profile", id: "P1" }] });
+    assert.ok(calls.every((c) => !/subscription|suppression/.test(c.url)));
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env.KLAVIYO_PHOTO_APP_LIST_ID = prevList;
+  }
+});

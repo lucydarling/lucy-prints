@@ -614,6 +614,38 @@ export async function subscribeToMilestoneList(
 }
 
 /**
+ * "I don't want milestone reminders" turned on: take the profile off
+ * "LD | Milestone Reminder Opt-in". The milestone flow's filter is membership
+ * of that list, so someone mid-flow drops out at their next step. This removes
+ * list membership ONLY: it never unsubscribes them from email marketing and
+ * never suppresses them. Never throws.
+ */
+export async function removeFromMilestoneList(email: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const listId = process.env.KLAVIYO_PHOTO_APP_LIST_ID;
+    if (!listId) return { success: false, error: "KLAVIYO_PHOTO_APP_LIST_ID not set" };
+
+    const filter = `equals(email,"${email.toLowerCase().trim()}")`;
+    const found = await fetch(`${KLAVIYO_BASE}/profiles/?filter=${encodeURIComponent(filter)}`, {
+      headers: klaviyoHeaders(),
+    });
+    if (!found.ok) return { success: false, error: `profile lookup ${found.status}` };
+    const profileId: string | undefined = (await found.json())?.data?.[0]?.id;
+    if (!profileId) return { success: true }; // no profile, so not on the list
+
+    const res = await fetch(`${KLAVIYO_BASE}/lists/${listId}/relationships/profiles/`, {
+      method: "DELETE",
+      headers: klaviyoHeaders(),
+      body: JSON.stringify({ data: [{ type: "profile", id: profileId }] }),
+    });
+    if (!res.ok) return { success: false, error: `list removal ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
  * Subscribes a profile to the photo app email list in Klaviyo, then
  * re-fetches the profile's real consent state to confirm the outcome
  * rather than trusting the enqueue response.
