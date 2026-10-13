@@ -192,3 +192,25 @@ test("a saved book's cloud photos with no crop in this browser are counted as mi
   assert.equal(countMissingFromBrowser(["a", "b", "c", "extra_pg_a1_1_x", "extra_2"], photos, extras), 3);
   assert.equal(countMissingFromBrowser([], {}, []), 0);
 });
+
+// ── Print-order extras cap per product ──
+
+import { MAX_EXTRAS_PER_ORDER, maxExtrasPerOrder } from "@/lib/print-orders/config";
+import { validatePrintRequest } from "@/lib/print-orders/print-request";
+
+const EXTRAS_PER_BOOK_OF_PAGES = LITTLE_YEARS_AGES.length * EXTRA_PAGES_PER_AGE;
+
+test("extras cap: Little Years 120, every other book 100", () => {
+  assert.equal(maxExtrasPerOrder("little_years_boy"), 120);
+  assert.equal(maxExtrasPerOrder("little_years_girl"), 120);
+  assert.equal(EXTRAS_PER_BOOK_OF_PAGES, 120);
+  for (const t of ["little_camper", "love_grows_moss_green", null, "retired_theme"]) assert.equal(maxExtrasPerOrder(t), 100);
+  assert.equal(MAX_EXTRAS_PER_ORDER, 100);
+});
+
+
+test("a Memory Book order over 100 extras is still refused", () => {
+  const over = (n: number) => validatePrintRequest({ bookTheme: "little_camper", newPhotos: 10, extraPrints: n, reprints: 0 }).errors.some((e) => e.includes("extra prints in one order"));
+  assert.equal(over(100), false);
+  assert.equal(over(101), true);
+});

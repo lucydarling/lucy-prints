@@ -1,4 +1,4 @@
-import { getPrintDimensions, isAlwaysPaddedTo4x4, type PrintSize } from "@/lib/photo-slots";
+import { getPrintDimensions, getProductForTheme, isAlwaysPaddedTo4x4, type PrintSize } from "@/lib/photo-slots";
 
 /**
  * Everything about print orders that is not yet known. Each value marked
@@ -162,6 +162,14 @@ export const ROUND_REMINDER = {
  * by quantity, per order.
  */
 export const MAX_EXTRAS_PER_ORDER = 100;
+
+/**
+ * The same limit per book: The Little Years allows 120, enough for a full book
+ * of extra pages (5 ages × 24); every other book keeps 100.
+ */
+export function maxExtrasPerOrder(bookTheme: string | null | undefined): number {
+  return getProductForTheme(bookTheme) === "little_years" ? 120 : MAX_EXTRAS_PER_ORDER;
+}
 
 /** An unpaid round (recorded when the customer clicks "Print my photos") stops being payable after this long. */
 export const ROUND_TTL_HOURS = 24;

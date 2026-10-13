@@ -1,5 +1,5 @@
 import { BOOK_THEMES, getProductForTheme, getSlots } from "@/lib/photo-slots";
-import { MAX_EXTRAS_PER_ORDER, MIN_PRINTS_PER_ORDER } from "./config";
+import { MIN_PRINTS_PER_ORDER, maxExtrasPerOrder } from "./config";
 
 /** The counts for one round — what the next order would print. */
 export interface PrintRequest {
@@ -49,7 +49,7 @@ export function validatePrintRequest(r: PrintRequest): PrintRequestCheck {
   } else if (total < MIN_PRINTS_PER_ORDER) {
     errors.push(`an order needs at least ${MIN_PRINTS_PER_ORDER} prints — you have ${total} so far. Add ${MIN_PRINTS_PER_ORDER - total} more and try again.`);
   }
-  if (r.extraPrints > MAX_EXTRAS_PER_ORDER) {
+  if (r.extraPrints > maxExtrasPerOrder(r.bookTheme)) {
     errors.push(`${r.extraPrints} extra prints in one order looks like a mistake — please check your extras`);
   }
   return {

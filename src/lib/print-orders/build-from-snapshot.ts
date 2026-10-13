@@ -1,4 +1,4 @@
-import { MAX_EXTRAS_PER_ORDER } from "./config";
+import { maxExtrasPerOrder } from "./config";
 import { buildOrder, type BuiltOrder } from "./build-order";
 import type { PrintSnapshot } from "./paid-order";
 import { getSlots } from "@/lib/photo-slots";
@@ -33,7 +33,7 @@ export async function buildFromSnapshot(
     expectedPrintCount,
     paid: {
       bookSlotKeys: getSlots(info.bookTheme).map((s) => s.key),
-      maxExtras: MAX_EXTRAS_PER_ORDER,
+      maxExtras: maxExtrasPerOrder(info.bookTheme),
     },
   });
 }

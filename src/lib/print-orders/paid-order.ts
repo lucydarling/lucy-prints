@@ -1,4 +1,4 @@
-import { MAX_EXTRAS_PER_ORDER, MIN_PRINTS_PER_ORDER } from "./config";
+import { MIN_PRINTS_PER_ORDER, maxExtrasPerOrder } from "./config";
 import { validatePrintRequest } from "./print-request";
 import { buildFromSnapshot } from "./build-from-snapshot";
 import { PrintOrderHeld, type SessionExtraRow, type SessionPhotoRow } from "./build-order";
@@ -359,8 +359,9 @@ export async function handlePaidOrder(
   const finish = (r: PaidOrderResult) => done({ ...r, sessionId, snapshot, roundId });
 
   const extraCount = snapshot.extraRows.filter((r) => r.storage_path).reduce((n, r) => n + (r.quantity ?? 0), 0);
-  if (extraCount > MAX_EXTRAS_PER_ORDER) {
-    return finish({ status: "refused", reasons: [`${extraCount} extra prints in one order is over the sanity limit of ${MAX_EXTRAS_PER_ORDER}`], warnings: [] });
+  const maxExtras = maxExtrasPerOrder(theme);
+  if (extraCount > maxExtras) {
+    return finish({ status: "refused", reasons: [`${extraCount} extra prints in one order is over the sanity limit of ${maxExtras}`], warnings: [] });
   }
 
   let built;
