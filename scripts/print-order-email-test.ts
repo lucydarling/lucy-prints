@@ -6,6 +6,7 @@
  *   npm run print-order:email-test -- [address@lucydarling.com] [received|held|shipped]   (default: all three)
  */
 import { printOrderHeldEmail, printOrderReceivedEmail, printOrderShippedEmail, sendCustomerEmail } from "../src/lib/email";
+import type { EmailRoute } from "../src/lib/email-sends";
 
 const to = (process.argv[2] ?? "kevin@lucydarling.com").trim();
 if (!/@lucydarling\.com$/i.test(to)) {
@@ -28,11 +29,13 @@ const all = [
   printOrderHeldEmail({ resumeUrl: "https://memories.lucydarling.com/resume/sample-token", orderName: "#TEST-1001" }),
   printOrderShippedEmail({ bookName: "Little Artist", babyName: "Ada", carrier: "USPS", trackingNumber: "9400 0000 0000 0000 0000 00", trackingUrl: "https://tools.usps.com/", orderName: "#TEST-1001" }),
 ];
-const sample = only ? [all[kinds.indexOf(only)]] : all;
+const routes: EmailRoute[] = ["print-order-received", "print-order-held", "print-order-shipped"];
+const picked = only ? [kinds.indexOf(only)] : [0, 1, 2];
 
 async function main() {
-  for (const m of sample) {
-    const r = await sendCustomerEmail({ to, subject: `[TEST] ${m.subject}`, html: m.html });
+  for (const i of picked) {
+    const m = all[i];
+    const r = await sendCustomerEmail({ to, subject: `[TEST] ${m.subject}`, html: m.html }, { route: routes[i] });
     console.log(`${r}: [TEST] ${m.subject}`);
   }
 }

@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { TEST_MODE } from "@/lib/print-orders/config";
+import { recordEmailSend, type EmailRoute, type EmailSendInput } from "@/lib/email-sends";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -35,48 +36,100 @@ export class EmailSendError extends Error {
   }
 }
 
+/** Which email this is, for the `email_sends` record. */
+export interface EmailMeta {
+  route: EmailRoute;
+  sessionId?: string | null;
+}
+
+export interface EmailParams {
+  to: string;
+  subject: string;
+  html: string;
+  replyTo?: string;
+}
+
+type ResendPayload = EmailParams & { from: string };
+type ResendResult = {
+  data: { id: string } | null;
+  error: { name?: string; message?: string; statusCode?: number } | null;
+};
+
+export interface SendEmailDeps {
+  /** null when RESEND_API_KEY is not set. */
+  send: ((payload: ResendPayload) => Promise<ResendResult>) | null;
+  record: (input: EmailSendInput) => Promise<boolean>;
+}
+
+const realSendDeps: SendEmailDeps = {
+  send: resend
+    ? (p) =>
+        resend.emails.send({
+          from: p.from,
+          to: p.to,
+          subject: p.subject,
+          html: p.html,
+          ...(p.replyTo ? { replyTo: p.replyTo } : {}),
+        }) as Promise<ResendResult>
+    : null,
+  record: (input) => recordEmailSend(input),
+};
+
 /**
- * Send via Resend and surface failures.
+ * Send via Resend, surface failures, and record the outcome in `email_sends`.
  *
  * The Resend SDK does NOT throw on API errors — it resolves with
  * `{ data: null, error }`. Awaiting it without inspecting the result makes a
  * rejected send indistinguishable from a delivered one, which is exactly how
  * the 403 "domain is not verified" failure stayed invisible: the route kept
  * returning 200 while zero mail left the building. Always check `error`.
+ *
+ * The record is written AFTER the send and never throws, so a failed insert
+ * can't stop an email; a failed send is recorded before it is re-thrown.
  */
-async function sendEmail(params: { to: string; subject: string; html: string; replyTo?: string }) {
-  if (!resend) {
-    throw new EmailSendError(
-      "missing_api_key",
-      "RESEND_API_KEY is not set in this environment"
-    );
+export async function sendEmailWith(deps: SendEmailDeps, params: EmailParams, meta: EmailMeta): Promise<{ id: string } | null> {
+  let data: { id: string } | null;
+  try {
+    if (!deps.send) {
+      throw new EmailSendError(
+        "missing_api_key",
+        "RESEND_API_KEY is not set in this environment"
+      );
+    }
+
+    const result = await deps.send({ from: FROM_ADDRESS, ...params });
+
+    if (result.error) {
+      throw new EmailSendError(
+        result.error.name ?? "unknown_error",
+        result.error.message ?? "no message returned",
+        result.error.statusCode
+      );
+    }
+    data = result.data;
+  } catch (err) {
+    const errorCode = err instanceof EmailSendError ? err.providerName : err instanceof Error ? err.name || "exception" : "exception";
+    await deps.record({ route: meta.route, outcome: "send-failed", sessionId: meta.sessionId, errorCode, to: params.to });
+    throw err;
   }
 
-  const { data, error } = await resend.emails.send({
-    from: FROM_ADDRESS,
-    to: params.to,
-    subject: params.subject,
-    html: params.html,
-    ...(params.replyTo ? { replyTo: params.replyTo } : {}),
-  });
-
-  if (error) {
-    throw new EmailSendError(
-      error.name ?? "unknown_error",
-      error.message ?? "no message returned",
-      (error as { statusCode?: number }).statusCode
-    );
-  }
-
+  await deps.record({ route: meta.route, outcome: "sent", sessionId: meta.sessionId, resendId: data?.id ?? null, to: params.to });
   return data;
+}
+
+function sendEmail(params: EmailParams, meta: EmailMeta) {
+  return sendEmailWith(realSendDeps, params, meta);
 }
 
 export async function sendMyBooksEmail({
   to,
   sessions,
+  sessionId = null,
 }: {
   to: string;
   sessions: Array<{ token: string; themeName: string; babyName?: string | null; photoCount: number; printedSoFar?: number; bookSlots?: number }>;
+  /** For the email_sends record: the book's session when there is exactly one, else null. */
+  sessionId?: string | null;
 }) {
   const subject =
     sessions.length === 1
@@ -140,7 +193,7 @@ export async function sendMyBooksEmail({
   </table>
 </body>
 </html>`.trim(),
-  });
+  }, { route: "my-books-email", sessionId });
 }
 
 /**
@@ -212,8 +265,8 @@ export function buildMagicLinkEmail({
   };
 }
 
-export async function sendMagicLinkEmail({ to, babyName, token }: { to: string; babyName?: string; token: string }) {
-  await sendEmail({ to, ...buildMagicLinkEmail({ babyName, token }) });
+export async function sendMagicLinkEmail({ to, babyName, token, sessionId }: { to: string; babyName?: string; token: string; sessionId: string }) {
+  await sendEmail({ to, ...buildMagicLinkEmail({ babyName, token }) }, { route: "magic-link", sessionId });
 }
 
 /**
@@ -239,7 +292,7 @@ export async function sendPrintOrderAlert(info: {
       subject: "[Photo Lab] Upload size check is DOWN — uploads accepted unchecked",
       html: `<p>The photo upload size/damage check could not run (the image library failed), so uploads are being <strong>accepted without it</strong>. Customers are not affected; only the check is off.</p>
 <ul>${info.reasons.map((r) => `<li style="white-space:pre-wrap">${esc(r)}</li>`).join("")}</ul>`,
-    });
+    }, { route: "alert" });
   }
   return sendEmail({
     to,
@@ -256,7 +309,7 @@ ${isError ? "" : `<li>Session token: ${esc(info.sessionToken || "(none on the or
 <p>${isError ? "pfRouter's reason" : "Reason"}:</p>
 <ul>${info.reasons.map((r) => `<li style="white-space:pre-wrap">${esc(r)}</li>`).join("")}</ul>
 <p>${isError ? "Nothing is retried automatically. This alert is sent once." : "Nothing was sent to the print partner."}</p>${info.status === "held" ? `<p>A held order stays editable by the customer. Once photos are added, retry with <code>npm run print-order:retry -- ${esc(info.shopifyOrderId)}</code> — it takes a fresh snapshot.</p>` : ""}`,
-  });
+  }, { route: "alert" });
 }
 
 
@@ -274,13 +327,16 @@ export function customerEmailAllowed(to: string, testMode: boolean = TEST_MODE):
   return !testMode || /@lucydarling\.com$/i.test(to.trim());
 }
 
-export async function sendCustomerEmail(params: { to: string; subject: string; html: string }): Promise<"sent" | "skipped"> {
+export async function sendCustomerEmail(
+  params: { to: string; subject: string; html: string },
+  meta: EmailMeta
+): Promise<"sent" | "skipped"> {
   if (!customerEmailAllowed(params.to)) {
     console.warn(`[print-order-email] TEST_MODE: not sending "${params.subject}" to a non-lucydarling.com address`);
     return "skipped";
   }
   // Replies go to the support inbox (PRINT_REPLY_TO), not the send-only prints@ address.
-  await sendEmail({ ...params, replyTo: process.env.PRINT_REPLY_TO?.trim() || undefined });
+  await sendEmail({ ...params, replyTo: process.env.PRINT_REPLY_TO?.trim() || undefined }, meta);
   return "sent";
 }
 
@@ -414,12 +470,12 @@ export function printOrderShippedEmail(info: {
 }
 
 export async function sendPrintOrderReceived(to: string, info: Parameters<typeof printOrderReceivedEmail>[0]) {
-  return sendCustomerEmail({ to, ...printOrderReceivedEmail(info) });
+  return sendCustomerEmail({ to, ...printOrderReceivedEmail(info) }, { route: "print-order-received" });
 }
 export async function sendPrintOrderHeld(to: string, info: Parameters<typeof printOrderHeldEmail>[0]) {
-  return sendCustomerEmail({ to, ...printOrderHeldEmail(info) });
+  return sendCustomerEmail({ to, ...printOrderHeldEmail(info) }, { route: "print-order-held" });
 }
 /** Not called from anywhere yet — waiting on tracking details from Photo Finale. */
 export async function sendPrintOrderShipped(to: string, info: Parameters<typeof printOrderShippedEmail>[0]) {
-  return sendCustomerEmail({ to, ...printOrderShippedEmail(info) });
+  return sendCustomerEmail({ to, ...printOrderShippedEmail(info) }, { route: "print-order-shipped" });
 }
