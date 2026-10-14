@@ -113,7 +113,7 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
 - **Repeated `external_id`s are allowed** (a new lab order is created), so the resend path (`<id>-resend-<timestamp>`) may be enabled later. **`RESEND_ENABLED` stays `false`** for now; resending prints a second set and bills a second lab order, so enable it deliberately.
 
 **Still open:**
-1. The real product codes for every size (3x3, 4x4, 4x6, 5x5), and the demo dealer details (Jason).
+1. The real product codes for every size (3x3, 4x4, 4x6, 5x5). (Demo/live DealerCodes answered 2026-10-14, see section 13.)
 2. Do they print 3x3, 3.5x3.5 and 4x3 natively, or should those stay on a 4x4 sheet? (Flipping one to native in `config.ts` changes its `aspect` automatically.)
 3. Padding placement on 4x4 sheets: image bottom-left, padding top/right, no trim guides. OK for their trimming?
 4. ~~Dealer / `_error` / processed folder~~ Answered 2026-10-12 (above); the `processed/` location is ours to configure (decided, see above).
@@ -172,3 +172,25 @@ When the printer confirms shipping, mark the print order's line items **fulfille
 - The **fulfillment scope** on the Shopify admin app (`write_fulfillments`, plus the order read scope already used by retry), and the admin token in Vercel production (`SHOPIFY_ADMIN_*` is currently not set there).
 - The same trigger would start the 12-month retention clock (`docs/print-orders-retention.md`) and fire the "shipped" email (`shipped_email_sent_at`).
 Nothing in this item is implemented.
+
+## 13. Windows machine: pfRouter setup (2026-10-14)
+Photo Finale (Jason) sent the DealerCodes on 2026-10-14. They are account IDs, not secrets.
+- **Demo: 3404** (provisioned, ready for test orders)
+- **Live: 4013**
+
+Both are set in **pfRouter's config on our Windows machine, not in the XML**. One dealer per running pfRouter instance.
+
+Steps:
+1. **Install pfRouter** (installer due from Jason this week).
+2. **Configure the demo instance:**
+   - `DealerCode` = `3404`
+   - hotfolder = Dropbox `/LucyDarling-PrintOrders/demo/`
+   - `postAction` = move, to `/LucyDarling-PrintOrders/processed/demo/`
+   - Create `processed/demo` and `processed/live` first. They must sit **outside** the hotfolders (see section 7: pfRouter treats every subfolder of a hotfolder as an order).
+3. **Run one `TEST-` order end to end:** `print-order:deliver` -> pfRouter picks it up -> the order appears in Photo Finale under dealer 3404 -> the order folder is moved to `processed/demo/`.
+
+## 14. Go-live switch (2026-10-14)
+Do this **only at launch**, after the ~10/21 shipped-email shutoff is confirmed and `LIVE_DELIVERY_ALLOWED` is flipped:
+- pfRouter `DealerCode` 3404 -> **4013**
+- hotfolder `demo/` -> **`live/`** (`/LucyDarling-PrintOrders/live/`)
+- `postAction` move destination -> **`/LucyDarling-PrintOrders/processed/live/`**
