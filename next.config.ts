@@ -24,6 +24,8 @@ import type { NextConfig } from "next";
 //     upload throws before reaching the API (zero rows in session_photos) and
 //     the ZIP assembles with no bytes.
 // blob: pair restored 2026-07-12; data: restored 2026-08-06.
+// Facebook sources (script-src + connect-src connect.facebook.net, connect-src
+// www.facebook.com) added 2026-10-15 for the Meta pixel (186501195088070).
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -32,11 +34,11 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
-      "connect-src 'self' data: blob: https://*.supabase.co https://a.klaviyo.com https://*.klaviyo.com",
+      "connect-src 'self' data: blob: https://*.supabase.co https://a.klaviyo.com https://*.klaviyo.com https://connect.facebook.net https://www.facebook.com",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
