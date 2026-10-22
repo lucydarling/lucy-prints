@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ALL_PRINT_SIZES, getPrintDimensions, isAlwaysPaddedTo4x4 } from "@/lib/photo-slots";
-import { PRINT_PRODUCTS, productEntry, resolveDestination } from "@/lib/print-orders/config";
+import { PRINT_PRODUCTS, PRODUCT_CODES, productEntry, resolveDestination } from "@/lib/print-orders/config";
 import { buildOrderXml, escapeXmlAttr, validateOrder, type PrintOrderInput } from "@/lib/print-orders/order-xml";
 
 const valid = (): PrintOrderInput => ({
@@ -14,13 +14,29 @@ const valid = (): PrintOrderInput => ({
 });
 const FILES = ["0001_a.jpg"];
 
-test("every PrintSize has a product mapping, and sheets exist only for always-padded sizes", () => {
-  for (const size of ALL_PRINT_SIZES) {
-    const cfg = PRINT_PRODUCTS[size];
-    assert.ok(cfg && cfg.productCode, `${size} has no mapping`);
-    assert.equal(cfg.printedAs === "sheet", isAlwaysPaddedTo4x4(size), size);
-    if (cfg.printedAs === "sheet") assert.deepEqual([cfg.sheetWidth, cfg.sheetHeight], [1200, 1200]);
+test("every PrintSize has a product mapping for both dealers, and sheets exist only for always-padded sizes", () => {
+  for (const kind of ["demo", "live"] as const) {
+    for (const size of ALL_PRINT_SIZES) {
+      const cfg = PRINT_PRODUCTS[kind][size];
+      assert.ok(cfg && cfg.productCode, `${kind} ${size} has no mapping`);
+      assert.equal(cfg.printedAs === "sheet", isAlwaysPaddedTo4x4(size), size);
+      if (cfg.printedAs === "sheet") assert.deepEqual([cfg.sheetWidth, cfg.sheetHeight], [1200, 1200]);
+    }
   }
+});
+
+test("demo dealer 3404 product codes (Photo Finale, 2026-10-22); live stays a placeholder", () => {
+  const code = (size: keyof typeof PRINT_PRODUCTS.demo) => PRINT_PRODUCTS.demo[size].productCode;
+  assert.equal(code("3x3"), "7364");
+  assert.equal(code("4x4"), "7963");
+  assert.equal(code("4x6"), "7965");
+  assert.equal(code("5x5"), "7969");
+  // Both padded sizes are ordered as the 4x4 sheet they print on.
+  assert.equal(code("3.5x3.5"), "7963");
+  assert.equal(code("4x3"), "7963");
+  // 4x3 switched to native would be ordered as 3x4 Matte.
+  assert.equal(productEntry("4x3", { printedAs: "native" }, PRODUCT_CODES.demo).productCode, "7960");
+  for (const size of ALL_PRINT_SIZES) assert.match(PRINT_PRODUCTS.live[size].productCode, /^TBD-/, size);
 });
 
 test("a valid mail order passes and matches the spec's mail shape", () => {
@@ -76,20 +92,22 @@ test("special characters are escaped", () => {
 
 test("each product's aspect matches the shape of the file it receives (sheet if padded, else the print)", () => {
   for (const size of ALL_PRINT_SIZES) {
-    const cfg = PRINT_PRODUCTS[size];
+    const cfg = PRINT_PRODUCTS.demo[size];
     const d = cfg.printedAs === "sheet" ? { width: cfg.sheetWidth!, height: cfg.sheetHeight! } : getPrintDimensions(size);
     assert.equal(cfg.aspect, Math.max(d.width, d.height) / Math.min(d.width, d.height), size);
   }
 });
 
 test("a padded size's aspect follows its print method: sheet → the sheet's shape, native → the print's own", () => {
-  assert.equal(PRINT_PRODUCTS["4x3"].printedAs, "sheet");
-  assert.equal(PRINT_PRODUCTS["4x3"].aspect, 1);
-  assert.equal(PRINT_PRODUCTS["3.5x3.5"].aspect, 1);
+  assert.equal(PRINT_PRODUCTS.demo["4x3"].printedAs, "sheet");
+  assert.equal(PRINT_PRODUCTS.demo["4x3"].aspect, 1);
+  assert.equal(PRINT_PRODUCTS.demo["3.5x3.5"].aspect, 1);
   // Flip 4x3 to native and it becomes a 4:3 product.
-  assert.equal(productEntry("4x3", { productCode: "X", printedAs: "native" }).aspect, 4 / 3);
-  assert.equal(productEntry("4x6", { productCode: "X", printedAs: "native" }).aspect, 1.5);
-  assert.throws(() => productEntry("4x3", { productCode: "X", printedAs: "sheet" }), /needs sheetWidth/);
+  assert.equal(productEntry("4x3", { printedAs: "native" }, PRODUCT_CODES.demo).aspect, 4 / 3);
+  assert.equal(productEntry("4x6", { printedAs: "native" }, PRODUCT_CODES.demo).aspect, 1.5);
+  assert.throws(() => productEntry("4x3", { printedAs: "sheet" }, PRODUCT_CODES.demo), /needs sheetWidth/);
+  // No dealer sells 3.5x3.5 paper, so it cannot be flipped to native without a code.
+  assert.throws(() => productEntry("3.5x3.5", { printedAs: "native" }, PRODUCT_CODES.demo), /no 3\.5x3\.5 paper/);
 });
 
 test("destination: demo by default with test mode on; live only with the env var and test mode off", () => {
