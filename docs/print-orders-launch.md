@@ -180,7 +180,7 @@ Photo Finale (Jason) sent the DealerCodes on 2026-10-14 and the demo setup on 20
 
 Both DealerCodes are set in **pfRouter's config on our Windows machine, not in the XML** (`config.ts` only uses them as a log label). One dealer per running pfRouter instance.
 
-**How the hotfolder is configured (Photo Finale, 2026-10-22):** pfRouter's hotfolder is set **per license** in **myLab → Advanced Configuration**, as `{ path, postAction: "move", moveTo }`. Ours, for the demo license 21277:
+**How the hotfolder is configured (Photo Finale, 2026-10-22):** pfRouter's hotfolder is set **per license** in **myLab → Store Management → Kiosk → Advanced Configuration**, as `{ path, postAction: "move", moveTo }` (`postAction` can also be delete or none). `path` and `moveTo` are Windows paths with the backslashes escaped; save, then relaunch pfRouter. Ours, for the demo license 21277:
 - `path` = the Dropbox-synced `demo/` folder on the Windows machine (`/LucyDarling-PrintOrders/demo/`)
 - `postAction` = `"move"`
 - `moveTo` = the synced `processed/demo` folder (`/LucyDarling-PrintOrders/processed/demo/`), outside the hotfolder
@@ -192,21 +192,21 @@ No logins, passwords or tokens for myLab, pfRouter or Dropbox go in this repo.
 | Our size | Printed as | Demo code |
 |---|---|---|
 | 3x3 | native (3x3 Press Print) | 7364 |
-| 4x4 | native | 7963 |
-| 4x6 (and 6x4) | native | 7965 |
-| 5x5 | native | 7969 |
-| 3.5x3.5 | on the 4x4 sheet | 7963 |
-| 4x3 (and 3x4) | on the 4x4 sheet, for now | 7963 |
+| 4x4 | native (4x4 Matte) | 7963 |
+| 4x6 (and 6x4) | native (4x6 Matte) | 7965 |
+| 5x5 | native (5x5 Matte) | 7969 |
+| 3.5x3.5 | on the 4x4 sheet (4x4 Matte; there is no 3.5x3.5 code) | 7963 |
+| 4x3 (and 3x4) | on the 4x4 sheet (4x4 Matte), for now | 7963 |
 | 4x3, if switched to native | 3x4 Matte | 7960 (not used today) |
 
 Steps:
 1. **Install pfRouter** (installer due from Jason this week).
-2. **Configure the demo instance** (myLab → Advanced Configuration, license 21277):
+2. **Configure the demo instance** (myLab → Store Management → Kiosk → Advanced Configuration, license 21277; relaunch pfRouter after saving):
    - `DealerCode` = `3404`
    - `path` = the synced Dropbox `/LucyDarling-PrintOrders/demo/`
    - `postAction` = `"move"`, `moveTo` = the synced `/LucyDarling-PrintOrders/processed/demo/`
    - Create `processed/demo` and `processed/live` first. They must sit **outside** the hotfolders (see section 7: pfRouter treats every subfolder of a hotfolder as an order).
-3. **Run one `TEST-` order end to end:** `print-order:deliver` -> pfRouter picks it up -> the order appears in Photo Finale under dealer 3404 -> the order folder is moved to `processed/demo/`.
+3. **Run one `TEST-` order end to end:** `print-order:deliver` -> pfRouter picks it up -> the order appears in Photo Finale under dealer 3404 (myLab → Orders → Search) -> the order folder is moved to `processed/demo/`.
 
 ## 14. Go-live switch (2026-10-14)
 Do this **only at launch**, after the ~10/21 shipped-email shutoff is confirmed and `LIVE_DELIVERY_ALLOWED` is flipped:
