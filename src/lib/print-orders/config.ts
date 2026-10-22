@@ -3,7 +3,7 @@ import { getPrintDimensions, getProductForTheme, isAlwaysPaddedTo4x4, type Print
 /**
  * Everything about print orders that is not yet known. Each value marked
  * PLACEHOLDER must be confirmed with Photo Finale / Persnickety before any
- * order is delivered. Nothing here is a real product code.
+ * order is delivered. Only the demo dealer's product codes are real.
  */
 
 /** PLACEHOLDER — confirm with Photo Finale/Persnickety: name of this system in `apm_order/@vendor`. */
@@ -23,7 +23,6 @@ export const TEST_ID_PREFIX = "TEST-";
  *   - "live": only when the env var PRINT_DESTINATION=live is set AND TEST_MODE is off.
  * Anything else throws. LIVE_DELIVERY_ALLOWED additionally blocks every write to
  * the live hotfolder until delivery has been proven on the demo dealer.
- * PLACEHOLDER — confirm the dealer names with Photo Finale.
  */
 export type DestinationKind = "demo" | "live";
 export interface Destination {
@@ -32,9 +31,13 @@ export interface Destination {
   /** Hotfolder name under DROPBOX_ROOT_PATH. */
   hotfolder: DestinationKind;
 }
+/**
+ * Photo Finale DealerCodes (2026-10-14). A label for logs only: the code itself
+ * is set in pfRouter's config on the Windows machine, never in the XML.
+ */
 const DEALERS: Record<DestinationKind, string> = {
-  demo: "PLACEHOLDER-DEMO-DEALER",
-  live: "PLACEHOLDER-LIVE-DEALER",
+  demo: "dealer 3404",
+  live: "dealer 4013",
 };
 export const LIVE_DELIVERY_ALLOWED = false;
 
@@ -64,7 +67,7 @@ export const RESEND_ENABLED = false;
 export const MIN_VALID_IMAGE_BYTES = 5_000;
 
 export interface PrintProductConfig {
-  /** PLACEHOLDER — confirm with Photo Finale/Persnickety: the dealer's product code (fulfillment_id or ProductID). */
+  /** The dealer's product code (from PRODUCT_CODES). Derived by productEntry — never set by hand. */
   productCode: string;
   /**
    * The product's paper shape: long side ÷ short side (1 = square, 1.5 = 4x6).
@@ -83,42 +86,81 @@ export interface PrintProductConfig {
   /** Only for printedAs "sheet". */
   sheetWidth?: number;
   sheetHeight?: number;
+  /** Only for printedAs "sheet": the paper the sheet is ordered as (whose product code it takes). */
+  sheetPaper?: Paper;
 }
 
-/** One product as configured by hand; `aspect` is derived, never typed in. */
-export type ProductSpec = Omit<PrintProductConfig, "aspect">;
+/** One product as configured by hand; `aspect` and `productCode` are derived, never typed in. */
+export type ProductSpec = Omit<PrintProductConfig, "aspect" | "productCode">;
+
+/**
+ * The papers a dealer sells. 3.5x3.5 has none: it is always ordered on the 4x4 sheet.
+ * Each dealer has its own product codes; one code covers both orientations.
+ */
+export type Paper = Exclude<PrintSize, "3.5x3.5">;
+export type ProductCodes = Record<Paper, string>;
+export const PRODUCT_CODES: Record<DestinationKind, ProductCodes> = {
+  // Demo dealer 3404 (Photo Finale, 2026-10-22).
+  demo: {
+    "3x3": "7364", // 3x3 Press Print
+    "4x3": "7960", // 3x4 Matte; only used if 4x3 is switched to native (today it prints on the 4x4 sheet)
+    "4x4": "7963",
+    "4x6": "7965",
+    "5x5": "7969",
+  },
+  // PLACEHOLDER — live dealer 4013's codes, waiting on Chari.
+  live: {
+    "3x3": "TBD-3X3",
+    "4x3": "TBD-4X3",
+    "4x4": "TBD-4X4",
+    "4x6": "TBD-4X6",
+    "5x5": "TBD-5X5",
+  },
+};
 
 /** Long side ÷ short side. */
 const shapeOf = (d: { width: number; height: number }) => Math.max(d.width, d.height) / Math.min(d.width, d.height);
 
 /**
- * Complete a product entry: its aspect follows from how it is printed — a
- * sheet's shape when padded onto a sheet, otherwise the print's own shape.
+ * Complete a product entry for one dealer. Its aspect and code follow from how
+ * it is printed: on a sheet, the sheet's shape and the sheet paper's code;
+ * otherwise the print's own shape and its own paper's code.
  */
-export function productEntry(size: PrintSize, spec: ProductSpec): PrintProductConfig {
+export function productEntry(size: PrintSize, spec: ProductSpec, codes: ProductCodes): PrintProductConfig {
   if (spec.printedAs === "sheet") {
-    if (!spec.sheetWidth || !spec.sheetHeight) throw new Error(`${size}: printedAs "sheet" needs sheetWidth and sheetHeight`);
-    return { ...spec, aspect: shapeOf({ width: spec.sheetWidth, height: spec.sheetHeight }) };
+    if (!spec.sheetWidth || !spec.sheetHeight || !spec.sheetPaper) {
+      throw new Error(`${size}: printedAs "sheet" needs sheetWidth, sheetHeight and sheetPaper`);
+    }
+    return { ...spec, productCode: codes[spec.sheetPaper], aspect: shapeOf({ width: spec.sheetWidth, height: spec.sheetHeight }) };
   }
-  return { ...spec, aspect: shapeOf(getPrintDimensions(size)) };
+  const productCode = (codes as Partial<Record<PrintSize, string>>)[size];
+  if (!productCode) throw new Error(`${size}: no ${size} paper to print it on natively`);
+  return { ...spec, productCode, aspect: shapeOf(getPrintDimensions(size)) };
 }
 
-const SHEET_4X4 = { sheetWidth: 1200, sheetHeight: 1200 };
+const SHEET_4X4 = { sheetWidth: 1200, sheetHeight: 1200, sheetPaper: "4x4" as const };
 
-// PLACEHOLDER — confirm with Photo Finale/Persnickety for every entry below.
+// How each size is printed. 4x3 could print natively (3x4 Matte) but stays on the 4x4 sheet for now (2026-10-22).
 // Typed Record<PrintSize, …> so a new PrintSize cannot silently drop out.
 const PRODUCT_SPECS: Record<PrintSize, ProductSpec> = {
-  "3x3": { productCode: "TBD-3X3", printedAs: "native" },
-  "3.5x3.5": { productCode: "TBD-4X4", printedAs: isAlwaysPaddedTo4x4("3.5x3.5") ? "sheet" : "native", ...SHEET_4X4 },
-  "4x3": { productCode: "TBD-4X4", printedAs: isAlwaysPaddedTo4x4("4x3") ? "sheet" : "native", ...SHEET_4X4 },
-  "4x4": { productCode: "TBD-4X4", printedAs: "native" },
-  "4x6": { productCode: "TBD-4X6", printedAs: "native" },
-  "5x5": { productCode: "TBD-5X5", printedAs: "native" },
+  "3x3": { printedAs: "native" },
+  "3.5x3.5": { printedAs: isAlwaysPaddedTo4x4("3.5x3.5") ? "sheet" : "native", ...SHEET_4X4 },
+  "4x3": { printedAs: isAlwaysPaddedTo4x4("4x3") ? "sheet" : "native", ...SHEET_4X4 },
+  "4x4": { printedAs: "native" },
+  "4x6": { printedAs: "native" },
+  "5x5": { printedAs: "native" },
 };
 
-export const PRINT_PRODUCTS = Object.fromEntries(
-  Object.entries(PRODUCT_SPECS).map(([size, spec]) => [size, productEntry(size as PrintSize, spec)])
-) as Record<PrintSize, PrintProductConfig>;
+const productsFor = (codes: ProductCodes) =>
+  Object.fromEntries(
+    Object.entries(PRODUCT_SPECS).map(([size, spec]) => [size, productEntry(size as PrintSize, spec, codes)])
+  ) as Record<PrintSize, PrintProductConfig>;
+
+/** Every size's product, per dealer. Shapes are the same for both; only the codes differ. */
+export const PRINT_PRODUCTS: Record<DestinationKind, Record<PrintSize, PrintProductConfig>> = {
+  demo: productsFor(PRODUCT_CODES.demo),
+  live: productsFor(PRODUCT_CODES.live),
+};
 
 /** Print resolution. Images under it are flagged (warning); under HARD_MIN_FRACTION of it they are refused. */
 export const TARGET_DPI = 300;

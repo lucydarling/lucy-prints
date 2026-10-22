@@ -56,7 +56,7 @@ It rebuilds from the frozen snapshot, uploads to `staging/`, moves the finished 
 - The `.xml` and one JPEG per print; the number of `<item>` quantities adds up to the **prints Justin paid for** (also `print_orders.print_count` and `paid_quantity`, which must be equal).
 - Ship-to in the XML matches his address.
 - Round 2 contains **only** the photos added since round 1 (no repeats); a reprint round contains the new crop (same slot name) and not the old one.
-- Product codes are `TBD-…` placeholders. That is expected until Photo Finale confirms real codes.
+- Product codes are demo dealer 3404's (since 2026-10-22): 3x3 → 7364, 4x4 and every size on the 4x4 sheet (4x3, 3.5x3.5) → 7963, 4x6/6x4 → 7965, 5x5 → 7969. A `TBD-…` code in a `TEST-` order means something is wrong.
 - No `WARNING:` lines about off-size images (or understand them).
 - In the database: `print_order_items` has one row per printed slot/extra (reprints at `generation` 2) and `print_rounds.status = 'paid'`.
 

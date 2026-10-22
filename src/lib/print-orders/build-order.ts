@@ -99,6 +99,9 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const testMode = p.testMode ?? TEST_MODE;
+  // Each dealer has its own product codes. Test orders go only to the demo dealer and
+  // real ones only to live (resolveDestination refuses any other pairing).
+  const products = PRINT_PRODUCTS[testMode ? "demo" : "live"];
 
   type Job = {
     base: string;
@@ -187,7 +190,7 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
   let printCount = 0;
 
   for (const [i, job] of jobs.entries()) {
-    const product = PRINT_PRODUCTS[job.size];
+    const product = products[job.size];
     const dims = getPrintDimensions(job.size, job.orientation);
     const label = `${job.base} (${getPrintSizeLabel(job.size, job.orientation)})`;
     let prepared;

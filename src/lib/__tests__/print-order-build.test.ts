@@ -9,6 +9,7 @@ import { getRegions, choiceFromPrintLabel, getPrintSizeLabel, regionChoicesFromS
 import { bookPrintItems, summarizePrints } from "@/lib/print-summary";
 import { getBookSlots } from "@/lib/photo-slots";
 import { buildOrder, type BuildOrderParams, type SessionExtraRow, type SessionPhotoRow } from "@/lib/print-orders/build-order";
+import { PRODUCT_CODES } from "@/lib/print-orders/config";
 import { LocalFolderDestination, orderToZip, writeOrderFolder } from "@/lib/print-orders/destination";
 import type { ExtraPrint, PhotoEntry } from "@/store/photo-store";
 
@@ -166,7 +167,13 @@ test("test mode prefixes external_id; an id too long after the prefix refuses", 
   const a = await fixture({ externalId: "x".repeat(28) });
   await assert.rejects(buildOrder(a.params), /external_id must be 1-32/);
   const b = await fixture({ testMode: false, externalId: "REAL1" });
-  assert.equal((await buildOrder(b.params)).folderName, "REAL1");
+  const real = await buildOrder(b.params);
+  assert.equal(real.folderName, "REAL1");
+  // Test orders carry the demo dealer's product codes, real ones the live dealer's.
+  const demoCodes = new Set(Object.values(PRODUCT_CODES.demo));
+  const test = await buildOrder((await fixture()).params);
+  assert.ok(test.input.items.length > 0 && test.input.items.every((i) => demoCodes.has(i.product)));
+  assert.ok(real.input.items.every((i) => i.product.startsWith("TBD-")));
 });
 
 test("local destination writes images first and the XML last; ZIP holds the same files", async () => {
@@ -212,11 +219,11 @@ test("a stored size that differs from the slot refuses when either is non-square
 test("a file whose shape is not its product's is refused (pfRouter would silently crop it)", async () => {
   // A 4x6 extra whose stored file is square: shape 1:1 against a 1.5:1 product.
   const bad = await fixture({}, { "s/e1.jpg": await img(1200, 1200) });
-  await assert.rejects(buildOrder(bad.params), /extra_1 \(4x6\): file is 1200x1200px \(shape 1\.000:1\) but TBD-4X6 is 1\.5:1 — Photo Finale would crop it/);
+  await assert.rejects(buildOrder(bad.params), /extra_1 \(4x6\): file is 1200x1200px \(shape 1\.000:1\) but 7965 is 1\.5:1 — Photo Finale would crop it/);
 
   // A 4x4 slot given a 4:3 file is refused.
   const wide = await fixture({}, { "s/baby_photo.jpg": await img(1200, 900) });
-  await assert.rejects(buildOrder(wide.params), /baby_photo \(4x4\): file is 1200x900px \(shape 1\.333:1\) but TBD-4X4 is 1:1/);
+  await assert.rejects(buildOrder(wide.params), /baby_photo \(4x4\): file is 1200x900px \(shape 1\.333:1\) but 7963 is 1:1/);
 
 });
 

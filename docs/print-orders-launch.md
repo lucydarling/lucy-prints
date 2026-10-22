@@ -83,7 +83,7 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
    - It refuses unless the order is `ready`, and refuses if the rebuilt id or print count differs from what was recorded.
    - It uses the same code as the webhook (`buildFromSnapshot`), so the XML and validation are identical. The ship-to and customer name come from the Shopify order, saved in the snapshot at payment.
    - Output: `print-orders-out/TEST-<order id>/` (images, then the XML) and `TEST-<order id>.zip`. Read any `WARNING:` lines (images off-size or scaled down).
-2. Open the XML and spot-check: ship-to address, item count = `print_count` in `print_orders`, product codes (still `TBD-…` placeholders until Photo Finale answers — replace them only once confirmed).
+2. Open the XML and spot-check: ship-to address, item count = `print_count` in `print_orders`, product codes (a `TEST-` order carries demo dealer 3404's real codes, see section 13; the live dealer's codes are still `TBD-…` placeholders until Chari sends them).
 3. Never hand-copy a folder into a hotfolder; use `print-order:deliver` so the order is recorded as sent. Do not create `.pfrouter-partner.json`.
 
 `npm run print-order:sample -- <session token>` is **testing only**: it reads the customer's LIVE session and uses placeholder ship-to details. Never use it for a real order.
@@ -113,8 +113,8 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
 - **Repeated `external_id`s are allowed** (a new lab order is created), so the resend path (`<id>-resend-<timestamp>`) may be enabled later. **`RESEND_ENABLED` stays `false`** for now; resending prints a second set and bills a second lab order, so enable it deliberately.
 
 **Still open:**
-1. The real product codes for every size (3x3, 4x4, 4x6, 5x5). (Demo/live DealerCodes answered 2026-10-14, see section 13.)
-2. Do they print 3x3, 3.5x3.5 and 4x3 natively, or should those stay on a 4x4 sheet? (Flipping one to native in `config.ts` changes its `aspect` automatically.)
+1. **The live dealer's (4013) product codes** (Chari). The demo dealer's codes were answered 2026-10-22 and are in `config.ts` (section 13). DealerCodes answered 2026-10-14.
+2. ~~Native 3x3 / 3.5x3.5 / 4x3?~~ Partly answered 2026-10-22: 3x3 prints natively (3x3 Press Print). A native 3x4 Matte exists (demo code 7960), but **4x3 stays on the 4x4 sheet for now** (Kevin, 2026-10-22), and so does 3.5x3.5. Flipping 4x3 to native in `config.ts` changes its `aspect` and its code (to the 4x3 paper's) automatically.
 3. Padding placement on 4x4 sheets: image bottom-left, padding top/right, no trim guides. OK for their trimming?
 4. ~~Dealer / `_error` / processed folder~~ Answered 2026-10-12 (above); the `processed/` location is ours to configure (decided, see above).
 5. ~~How is a repeated `external_id` treated?~~ Answered 2026-10-12 (above).
@@ -173,19 +173,38 @@ When the printer confirms shipping, mark the print order's line items **fulfille
 - The same trigger would start the 12-month retention clock (`docs/print-orders-retention.md`) and fire the "shipped" email (`shipped_email_sent_at`).
 Nothing in this item is implemented.
 
-## 13. Windows machine: pfRouter setup (2026-10-14)
-Photo Finale (Jason) sent the DealerCodes on 2026-10-14. They are account IDs, not secrets.
-- **Demo: 3404** (provisioned, ready for test orders)
-- **Live: 4013**
+## 13. Windows machine: pfRouter setup (2026-10-14; demo setup received 2026-10-22)
+Photo Finale (Jason) sent the DealerCodes on 2026-10-14 and the demo setup on 2026-10-22. They are account IDs, not secrets.
+- **Demo: DealerCode 3404, license 21277** (provisioned, ready for test orders)
+- **Live: DealerCode 4013** (its product codes are still TBD until Chari sends them)
 
-Both are set in **pfRouter's config on our Windows machine, not in the XML**. One dealer per running pfRouter instance.
+Both DealerCodes are set in **pfRouter's config on our Windows machine, not in the XML** (`config.ts` only uses them as a log label). One dealer per running pfRouter instance.
+
+**How the hotfolder is configured (Photo Finale, 2026-10-22):** pfRouter's hotfolder is set **per license** in **myLab → Advanced Configuration**, as `{ path, postAction: "move", moveTo }`. Ours, for the demo license 21277:
+- `path` = the Dropbox-synced `demo/` folder on the Windows machine (`/LucyDarling-PrintOrders/demo/`)
+- `postAction` = `"move"`
+- `moveTo` = the synced `processed/demo` folder (`/LucyDarling-PrintOrders/processed/demo/`), outside the hotfolder
+
+No logins, passwords or tokens for myLab, pfRouter or Dropbox go in this repo.
+
+**Demo dealer 3404 product codes (Photo Finale, 2026-10-22)**, in `PRODUCT_CODES.demo` in `config.ts`. A `TEST-` order carries these; a real order carries `PRODUCT_CODES.live` (still `TBD-…`). A size printed on the 4x4 sheet is ordered as a 4x4 and takes its code automatically.
+
+| Our size | Printed as | Demo code |
+|---|---|---|
+| 3x3 | native (3x3 Press Print) | 7364 |
+| 4x4 | native | 7963 |
+| 4x6 (and 6x4) | native | 7965 |
+| 5x5 | native | 7969 |
+| 3.5x3.5 | on the 4x4 sheet | 7963 |
+| 4x3 (and 3x4) | on the 4x4 sheet, for now | 7963 |
+| 4x3, if switched to native | 3x4 Matte | 7960 (not used today) |
 
 Steps:
 1. **Install pfRouter** (installer due from Jason this week).
-2. **Configure the demo instance:**
+2. **Configure the demo instance** (myLab → Advanced Configuration, license 21277):
    - `DealerCode` = `3404`
-   - hotfolder = Dropbox `/LucyDarling-PrintOrders/demo/`
-   - `postAction` = move, to `/LucyDarling-PrintOrders/processed/demo/`
+   - `path` = the synced Dropbox `/LucyDarling-PrintOrders/demo/`
+   - `postAction` = `"move"`, `moveTo` = the synced `/LucyDarling-PrintOrders/processed/demo/`
    - Create `processed/demo` and `processed/live` first. They must sit **outside** the hotfolders (see section 7: pfRouter treats every subfolder of a hotfolder as an order).
 3. **Run one `TEST-` order end to end:** `print-order:deliver` -> pfRouter picks it up -> the order appears in Photo Finale under dealer 3404 -> the order folder is moved to `processed/demo/`.
 
@@ -194,3 +213,4 @@ Do this **only at launch**, after the ~10/21 shipped-email shutoff is confirmed 
 - pfRouter `DealerCode` 3404 -> **4013**
 - hotfolder `demo/` -> **`live/`** (`/LucyDarling-PrintOrders/live/`)
 - `postAction` move destination -> **`/LucyDarling-PrintOrders/processed/live/`**
+- `config.ts`: replace the `TBD-…` values in `PRODUCT_CODES.live` with dealer 4013's codes (from Chari) before the first real order.
