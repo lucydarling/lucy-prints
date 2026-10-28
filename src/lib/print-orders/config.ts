@@ -213,6 +213,15 @@ export function maxExtrasPerOrder(bookTheme: string | null | undefined): number 
   return getProductForTheme(bookTheme) === "little_years" ? 120 : MAX_EXTRAS_PER_ORDER;
 }
 
+/**
+ * A "sent" order still sitting in the hotfolder this long after `sent_at` raises a "not picked up by
+ * pfRouter" alert (pfRouter normally moves it to processed/ or _error/ within minutes).
+ */
+export const STALLED_AFTER_MINUTES = 30;
+
+/** The stalled check ignores sent orders older than this: they were picked up long ago (or alerted). Bounds Dropbox lookups. */
+export const STALLED_LOOKBACK_HOURS = 72;
+
 /** An unpaid round (recorded when the customer clicks "Print my photos") stops being payable after this long. */
 export const ROUND_TTL_HOURS = 24;
 

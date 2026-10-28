@@ -313,6 +313,41 @@ ${isError ? "" : `<li>Session token: ${esc(info.sessionToken || "(none on the or
 }
 
 
+/**
+ * Tell Kevin that "sent" print orders are still sitting in the hotfolder (pfRouter has not
+ * picked them up). One order → its own alert; 2+ → a single "pfRouter may be down" alert.
+ */
+export async function sendPrintOrderStalledAlert(orders: Array<{
+  shopifyOrderId: string;
+  shopifyOrderName?: string;
+  externalId: string;
+  sentAt: string;
+  minutesWaiting: number;
+  pfRouterSawIt: boolean;
+}>) {
+  if (orders.length === 0) return;
+  const to = process.env.PRINT_ORDER_ALERT_TO || "kevin@lucydarling.com";
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const line = (o: (typeof orders)[number]) =>
+    `<li>${esc(o.shopifyOrderName || o.shopifyOrderId)} (${esc(o.externalId)}): sent ${esc(o.sentAt)}, waiting ${o.minutesWaiting} min. ${
+      o.pfRouterSawIt
+        ? "pfRouter has seen the folder (.pfrouter-partner.json exists) but has not finished with it."
+        : "pfRouter has NOT seen the folder (no .pfrouter-partner.json): likely not running or not syncing."
+    }</li>`;
+  const many = orders.length > 1;
+  return sendEmail({
+    to,
+    subject: many
+      ? `[Photo Lab] pfRouter may be down: ${orders.length} print orders not picked up`
+      : `[Photo Lab] Print order NOT picked up by pfRouter: ${orders[0].shopifyOrderName || orders[0].shopifyOrderId}`,
+    html: `<p>${many
+      ? `<strong>${orders.length} sent print orders</strong> are still in the hotfolder. pfRouter (the Windows PC) may be stopped or not syncing Dropbox.`
+      : "A sent print order is <strong>still in the hotfolder</strong>; pfRouter has not moved it to processed or _error."}</p>
+<ul>${orders.map(line).join("")}</ul>
+<p>The orders are still <strong>sent</strong> in print_orders. Nothing was moved or changed in Dropbox. This alert is sent once per order.</p>`,
+  }, { route: "alert" });
+}
+
 // ---------------------------------------------------------------------------
 // Customer print-order emails. Sent from prints@lucydarling.com via Resend.
 // While TEST_MODE is on, nothing is sent to an address outside @lucydarling.com

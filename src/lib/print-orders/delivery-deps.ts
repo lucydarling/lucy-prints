@@ -1,8 +1,9 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { sendPrintOrderAlert } from "@/lib/email";
+import { sendPrintOrderAlert, sendPrintOrderStalledAlert } from "@/lib/email";
 import type { RecordedOrderRow } from "./build-from-snapshot";
 import type { Destination } from "./config";
 import type { SentOrderRef } from "./error-monitor";
+import type { StalledCandidate, StalledOrderInfo } from "./stalled-monitor";
 
 /** print_orders reads and guarded status changes for delivery and the _error check. Server-side only. */
 
@@ -62,4 +63,40 @@ export async function alertPrinterError(info: { shopifyOrderId: string; shopifyO
     shopifyOrderName: info.shopifyOrderName,
     reasons: [`Folder: _error/${info.folder}`, info.reason],
   });
+}
+
+/** "sent" orders for a destination, sent in [since, before), not yet alerted as stalled. */
+export async function findStalledCandidates(destination: string, before: string, since: string): Promise<StalledCandidate[]> {
+  const { data, error } = await supabaseAdmin
+    .from("print_orders")
+    .select("shopify_order_id, shopify_order_name, external_id, sent_at")
+    .eq("status", "sent")
+    .eq("destination", destination)
+    .is("stalled_alerted_at", null)
+    .lt("sent_at", before)
+    .gte("sent_at", since);
+  if (error) throw new Error(`print_orders lookup failed: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    shopifyOrderId: r.shopify_order_id as string,
+    shopifyOrderName: r.shopify_order_name as string | null,
+    externalId: r.external_id as string,
+    sentAt: r.sent_at as string,
+  }));
+}
+
+/** Stamp stalled_alerted_at only while the row is still "sent" and unalerted. True when this call did it (so only one caller alerts). */
+export async function claimStalledAlert(shopifyOrderId: string, at: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("print_orders")
+    .update({ stalled_alerted_at: at })
+    .eq("shopify_order_id", shopifyOrderId)
+    .eq("status", "sent")
+    .is("stalled_alerted_at", null)
+    .select("id");
+  if (error) throw new Error(`print_orders update failed: ${error.message}`);
+  return (data ?? []).length === 1;
+}
+
+export async function alertPrinterStalled(orders: StalledOrderInfo[]) {
+  await sendPrintOrderStalledAlert(orders);
 }
