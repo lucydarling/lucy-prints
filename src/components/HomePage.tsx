@@ -120,7 +120,7 @@ export function HomePage({
       <h3 className="text-sm font-semibold text-gray-800 mb-2">How it works</h3>
       <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
         {/* DRAFT multi-book copy — pending Haily. */}
-        <li>{multiBook ? "Pick your book, then its cover" : "Select your memory book theme below"}</li>
+        <li>{multiBook ? "Pick your book, then which style" : "Select your memory book theme below"}</li>
         <li>Upload photos — we&apos;ll tell you exactly which ones you need</li>
         <li>Crop each photo to the perfect size</li>
         <li>Download your ready-to-print photos</li>
@@ -295,7 +295,7 @@ const STEP2: Record<ProductType, { heading: string; helper: string }> = {
 const TILES: Record<ProductType, { name: string; descriptor: string; image: string }> = {
   pregnancy_journal: {
     name: "Pregnancy Journal",
-    descriptor: "Love Grows · for the 9 months",
+    descriptor: "Love Grows · Pregnancy Journal",
     image: "love_grows_desert_sand",
   },
   memory_book: {
