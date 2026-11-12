@@ -117,6 +117,8 @@ test("prepareImage: a sheet print that came in small is scaled to its true size 
   const out = await prepareImage(small, getPrintDimensions("3x3"), product, "small");
   assert.deepEqual([out.width, out.height], [S, S]);
   assert.ok(out.warnings.some((w) => /scaled from 800x800px to 900x900px/.test(w)), out.warnings.join("; "));
+  // Scaling up does not hide the resolution problem: the under-300-DPI warning is still in the report.
+  assert.ok(out.warnings.some((w) => /800x800px is under the 900x900px needed at 300 DPI/.test(w)), out.warnings.join("; "));
   // The photo now ends exactly at the 3" cut line: column 899 is photo, the marks start at 900.
   const { data } = await sharp(out.jpeg).raw().toBuffer({ resolveWithObject: true });
   const px = (x: number, y: number) => [0, 1, 2].map((c) => data[(y * S + x) * 3 + c]);
