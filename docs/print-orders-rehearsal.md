@@ -2,7 +2,7 @@
 
 Written 2026-10-11 for print-in-rounds (step 5). **Nothing in this rehearsal goes to Photo Finale or Persnickety.** Delivery is manual, to the Dropbox `demo/` hotfolder only, in TEST_MODE (`TEST-` ids; customer emails only reach @lucydarling.com addresses). `PRINT_ORDERS_ENABLED` stays unset; Justin sees the feature only through the private preview link.
 
-Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE_CENTS_BY_VARIANT_KEY` in `src/lib/print-orders/config.ts`), **$6.00 S&H per order**, **5-print minimum** (`MIN_PRINTS_PER_ORDER`). The price Shopify charges is the variant's price; the number in the confirm step comes from `config.ts`, so **change both together** or the confirm step and checkout will disagree.
+Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE_CENTS_BY_VARIANT_KEY` in `src/lib/print-orders/config.ts`), **$6.00 S&H per order**, **8-print minimum** (`MIN_PRINTS_PER_ORDER`, Persnickety's, confirmed by Chari 2026-10-30). The price Shopify charges is the variant's price; the number in the confirm step comes from `config.ts`, so **change both together** or the confirm step and checkout will disagree.
 
 ## 1. Setup checklist (Kevin)
 
@@ -34,12 +34,12 @@ Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE
 ## 2. Justin's rehearsal
 
 1. Justin opens the **preview link** you give him (`https://memories.lucydarling.com/review?print_preview=<PRINT_PREVIEW_SECRET>`) in the browser he'll use. It sets a 30-day cookie; only that browser sees print ordering.
-2. He starts a book with an **@lucydarling.com email** (so test-mode emails reach him) and saves at least **5 photos** (extras count too). Use real-size photos.
+2. He starts a book with an **@lucydarling.com email** (so test-mode emails reach him) and saves at least **8 photos** (extras count too). Use real-size photos.
 3. On the review page: **Print my photos** → the confirm step must read *"You're printing N new photos… 0 of 49 printed so far."* with the price lines (N × $20.00, S&H $6.00, total). → *Continue to checkout* → he pays with his own card.
 4. Checkout must show exactly the confirm step's quantity and `Shipping & handling $6.00`. His cart should contain only the print product (the link empties the cart first).
-5. **Round 2:** he adds more photos (and, if he likes, an extra) and orders again → the confirm step counts only photos added since round 1, and *"X of 49 printed so far"* includes round 1. Printed photos are labelled **Printed** and can't be changed.
+5. **Round 2:** he adds more photos (at least 8 new prints per round; extras count) and orders again → the confirm step counts only photos added since round 1, and *"X of 49 printed so far"* includes round 1. Printed photos are labelled **Printed** and can't be changed.
 6. **Reprint:** on a printed photo he taps **Replace photo**, crops a new one, and the card says *replacement added to your next order*. Round 3 includes it (confirm step: "…and 1 reprint").
-7. **Under-minimum / nothing-new:** with fewer than 5 new prints, or nothing new, the button explains why and nothing is charged.
+7. **Under-minimum / nothing-new:** with fewer than 8 new prints, or nothing new, the button explains why and nothing is charged.
 
 ## 3. What Kevin/Claude do after each order
 
@@ -56,8 +56,9 @@ It rebuilds from the frozen snapshot, uploads to `staging/`, moves the finished 
 - The `.xml` and one JPEG per print; the number of `<item>` quantities adds up to the **prints Justin paid for** (also `print_orders.print_count` and `paid_quantity`, which must be equal).
 - Ship-to in the XML matches his address.
 - Round 2 contains **only** the photos added since round 1 (no repeats); a reprint round contains the new crop (same slot name) and not the old one.
-- Product codes are demo dealer 3404's (since 2026-10-22): 3x3 → 7364, 4x4 and every size on the 4x4 sheet (4x3, 3.5x3.5) → 7963, 4x6/6x4 → 7965, 5x5 → 7969. A `TBD-…` code in a `TEST-` order means something is wrong.
+- Product codes are demo dealer 3404's (since 2026-10-22): 4x4 and every size on the 4x4 sheet (3x3, 3.5x3.5, 4x3/3x4, since 2026-11-12) → 7963, 4x6/6x4 → 7965, 5x5 → 7969. A `TBD-…` code in a `TEST-` order means something is wrong.
 - No `WARNING:` lines about off-size images (or understand them).
+- Every 3x3, 3.5x3.5, 4x3 and 3x4 file is a 1200x1200 sheet with the photo bottom-left and short gray trim marks in the white area, none on the photo. A 7364 code anywhere means an old build.
 - In the database: `print_order_items` has one row per printed slot/extra (reprints at `generation` 2) and `print_rounds.status = 'paid'`.
 
 ## 4. Refunds

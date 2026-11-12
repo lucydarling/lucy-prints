@@ -158,20 +158,20 @@ async function pay(w: World, id: number, over: Partial<ShopifyPaidOrder> = {}) {
 
 test("round 1 prints only the photos filled; round 2 prints only what was added since; earlier slots stay printed", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const r1 = await pay(w, 1001);
   assert.equal(r1.result.status, "ready", r1.result.reasons.join(";"));
-  assert.equal(r1.result.printCount, 6);
-  assert.equal(r1.result.printedSoFar, 6);
+  assert.equal(r1.result.printCount, 8);
+  assert.equal(r1.result.printedSoFar, 8);
   assert.equal(r1.result.externalId, "TEST-1001");
 
-  w.fill(SLOTS.slice(6, 13)); // 7 more over the following months
+  w.fill(SLOTS.slice(8, 17)); // 9 more over the following months
   const r2 = await pay(w, 1002);
   assert.equal(r2.result.status, "ready", r2.result.reasons.join(";"));
-  assert.equal(r2.result.printCount, 7, "only the 7 new photos, not the first 6 again");
-  assert.deepEqual(r2.result.snapshot!.photoRows.map((r) => r.slot_key), SLOTS.slice(6, 13));
-  assert.equal(r2.result.printedSoFar, 13);
-  assert.equal(w.printed().slots.size, 13);
+  assert.equal(r2.result.printCount, 9, "only the 9 new photos, not the first 8 again");
+  assert.deepEqual(r2.result.snapshot!.photoRows.map((r) => r.slot_key), SLOTS.slice(8, 17));
+  assert.equal(r2.result.printedSoFar, 17);
+  assert.equal(w.printed().slots.size, 17);
   assert.equal(w.orders.size, 2, "any number of paid orders per session");
 });
 
@@ -201,7 +201,7 @@ test("extras added after an order are printed in the next round; a printed extra
 
 test("the snapshot is fixed at payment: later edits and a webhook retry change nothing and do not re-freeze or re-email", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const r1 = await pay(w, 3001);
   assert.equal(w.freezes, 1);
   assert.equal(w.notices.length, 1);
@@ -209,31 +209,31 @@ test("the snapshot is fixed at payment: later edits and a webhook retry change n
 
   w.fill(SLOTS.slice(0, 3)); // the customer re-uploads over live rows afterwards
   w.fill(SLOTS.slice(20, 25));
-  const retry = await handlePaidOrder(orderFor(3001, r1.roundId, 6), w.deps());
+  const retry = await handlePaidOrder(orderFor(3001, r1.roundId, 8), w.deps());
   assert.equal(retry.status, "ready");
-  assert.equal(retry.printCount, 6);
+  assert.equal(retry.printCount, 8);
   assert.equal(JSON.stringify(w.orders.get("3001")!.snapshot), before, "snapshot unchanged");
   assert.equal(w.freezes, 1, "no second freeze");
   assert.equal(w.notices.length, 1, "no second 'received' email");
-  assert.equal(w.items.filter((i) => i.order === "3001").length, 6, "items not duplicated");
+  assert.equal(w.items.filter((i) => i.order === "3001").length, 8, "items not duplicated");
 });
 
 test("photos added after the click are not in the round; they wait for the next one", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const { id, round } = w.click();
-  w.fill(SLOTS.slice(6, 10)); // added between click and payment
+  w.fill(SLOTS.slice(8, 12)); // added between click and payment
   const r = await handlePaidOrder(orderFor(4001, id, round.total), w.deps());
   assert.equal(r.status, "ready", r.reasons.join(";"));
-  assert.equal(r.printCount, 6);
-  assert.deepEqual(w.printed().slots.size, 6);
+  assert.equal(r.printCount, 8);
+  assert.deepEqual(w.printed().slots.size, 8);
   const next = w.click();
   assert.equal(next.round.total, 4, "the 4 late photos are the next round");
 });
 
 test("quantity mismatches hold the order with an alert and lock nothing", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const { id, round } = w.click();
   const r = await handlePaidOrder(orderFor(5001, id, round.total - 1), w.deps());
   assert.equal(r.status, "held");
@@ -249,7 +249,7 @@ test("quantity mismatches hold the order with an alert and lock nothing", async 
 
 test("an item deleted between click and payment holds the order; an edited extra quantity too", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   w.addExtra("extra_a", 2);
   const { id, round } = w.click();
   w.photoRows = w.photoRows.filter((r) => r.slot_key !== SLOTS[2]);
@@ -264,7 +264,7 @@ test("an item deleted between click and payment holds the order; an edited extra
 
 test("an expired round (24h) holds the order", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const { id, round } = w.click(-1000);
   const r = await handlePaidOrder(orderFor(7001, id, round.total), w.deps());
   assert.equal(r.status, "held");
@@ -273,25 +273,25 @@ test("an expired round (24h) holds the order", async () => {
 
 test("a round naming an already-printed slot without a pending reprint is refused", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   await pay(w, 8001);
   // A stale round recorded before order 8001 was paid, naming slot 0 again:
   const stale: RoundRecord = {
     id: "stale", session_id: "sess-1", status: "open", expires_at: new Date(Date.now() + 1e6).toISOString(),
-    items: { slots: [{ slot_key: SLOTS[0] }, ...SLOTS.slice(6, 11).map((k) => ({ slot_key: k }))], extras: [], reprints: [] },
-    quantities: { [V]: 6 }, total_prints: 6,
+    items: { slots: [{ slot_key: SLOTS[0] }, ...SLOTS.slice(8, 15).map((k) => ({ slot_key: k }))], extras: [], reprints: [] },
+    quantities: { [V]: 8 }, total_prints: 8,
   };
   w.rounds.set("stale", stale);
-  w.fill(SLOTS.slice(6, 11));
-  const r = await handlePaidOrder(orderFor(8002, "stale", 6), w.deps());
+  w.fill(SLOTS.slice(8, 15));
+  const r = await handlePaidOrder(orderFor(8002, "stale", 8), w.deps());
   assert.equal(r.status, "refused");
   assert.match(r.reasons[0], /already printed .*no paid reprint.*/);
-  assert.equal(w.printed().slots.size, 6, "nothing new locked");
+  assert.equal(w.printed().slots.size, 8, "nothing new locked");
 });
 
 test("a round cannot be paid twice by different orders; a double print collision at commit holds the order", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const { id, round } = w.click();
   assert.equal((await handlePaidOrder(orderFor(9001, id, round.total), w.deps())).status, "ready");
   const dup = await handlePaidOrder(orderFor(9002, id, round.total), w.deps());
@@ -300,18 +300,18 @@ test("a round cannot be paid twice by different orders; a double print collision
 
   // Two rounds recorded with the same slots, paid close together: the second collides at commit.
   const w2 = new World();
-  w2.fill(SLOTS.slice(0, 6));
+  w2.fill(SLOTS.slice(0, 8));
   const a = w2.click();
   const b = w2.click();
   assert.equal((await handlePaidOrder(orderFor(9101, a.id, a.round.total), w2.deps())).status, "ready");
   // The second sees the slots as printed already and is refused before commit; if it raced past that check, commit would hold it.
   const second = await handlePaidOrder(orderFor(9102, b.id, b.round.total), w2.deps());
   assert.ok(["refused", "held"].includes(second.status));
-  assert.equal(w2.printed().slots.size, 6, "never printed twice");
+  assert.equal(w2.printed().slots.size, 8, "never printed twice");
   assert.equal(w2.items.filter((i) => i.order === "9102").length, 0);
 
   const racing = new World();
-  racing.fill(SLOTS.slice(0, 6));
+  racing.fill(SLOTS.slice(0, 8));
   const c = racing.click();
   racing.items.push({ order: "other", kind: "slot", key: SLOTS[0], gen: 1 }); // another order committed in between
   const deps = racing.deps();
@@ -325,18 +325,18 @@ const emptyState = (): PrintedState => ({ slots: new Map(), extras: new Set() })
 
 test("a reprint: pending replacement of a printed slot is included in the next order, charged, and moves the live pointer; the original is never overwritten", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const first = await pay(w, 10001);
   const printedCopy = first.result.snapshot!.photoRows.find((r) => r.slot_key === SLOTS[0])!.storage_path;
 
   w.reprints.push({ id: "rp1", slot_key: SLOTS[0], storage_path: `s/reprints/${SLOTS[0]}-1.jpg`, print_size: "4x4", status: "pending" });
-  w.fill(SLOTS.slice(6, 10)); // 4 new photos + 1 reprint = 5 = minimum
+  w.fill(SLOTS.slice(8, 15)); // 7 new photos + 1 reprint = 8 = minimum
   const { id, round } = w.click();
   assert.deepEqual(round.items.reprints, [{ reprint_id: "rp1", slot_key: SLOTS[0] }]);
-  assert.equal(round.total, 5);
+  assert.equal(round.total, 8);
   const r = await handlePaidOrder(orderFor(10002, id, round.total), w.deps());
   assert.equal(r.status, "ready", r.reasons.join(";"));
-  assert.equal(r.printCount, 5);
+  assert.equal(r.printCount, 8);
   assert.equal(r.snapshot!.reprints!.length, 1);
   assert.deepEqual(w.items.filter((i) => i.key === SLOTS[0]).map((i) => i.gen).sort(), [1, 2], "generation 2 for the reprint");
   assert.equal(w.reprints[0].status, "included");
@@ -350,10 +350,10 @@ test("a reprint: pending replacement of a printed slot is included in the next o
 
 test("a reprint removed before payment holds the order", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   await pay(w, 11001);
   w.reprints.push({ id: "rp1", slot_key: SLOTS[0], storage_path: "s/rp", print_size: "4x4", status: "pending" });
-  w.fill(SLOTS.slice(6, 10));
+  w.fill(SLOTS.slice(8, 15));
   const { id, round } = w.click();
   w.reprints = [];
   const r = await handlePaidOrder(orderFor(11002, id, round.total), w.deps());
@@ -363,7 +363,7 @@ test("a reprint removed before payment holds the order", async () => {
 
 test("a repeated hold alerts once; a held order that is fixed and retried becomes ready and emails 'received' once", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const { id, round } = w.click();
   const removed = w.photoRows.pop()!;
   const order = orderFor(12001, id, round.total);
@@ -377,12 +377,12 @@ test("a repeated hold alerts once; a held order that is fixed and retried become
   assert.equal(fixed.status, "ready", fixed.reasons.join(";"));
   assert.deepEqual(w.notices.map((n) => n.kind), ["held", "received"]);
   const received = w.notices[1];
-  assert.deepEqual([received.newPhotos, received.extraPrints, received.reprints, received.printedSoFar, received.bookSlots], [6, 0, 0, 6, SLOTS.length]);
+  assert.deepEqual([received.newPhotos, received.extraPrints, received.reprints, received.printedSoFar, received.bookSlots], [8, 0, 0, 8, SLOTS.length]);
 });
 
 test("orders that are not print orders are ignored; sent and error orders are never touched; an email failure never fails the order", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const ign = await handlePaidOrder(orderFor(1, "x", 1, { line_items: [{ variant_id: 999, quantity: 1 }] }), w.deps());
   assert.equal(ign.status, "ignored");
   assert.equal(w.recorded.length, 0);
@@ -402,22 +402,22 @@ test("orders that are not print orders are ignored; sent and error orders are ne
 
 test("bad orders are refused with a clear reason: no round, no token, unknown round, other session, wrong book, journal, no ship-to, extras over the sanity limit", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const { id, round } = w.click();
   const attrs = (...pairs: Array<[string, string]>) => pairs.map(([name, value]) => ({ name, value }));
   const reason = async (o: ShopifyPaidOrder) => (await handlePaidOrder(o, w.deps())).reasons[0];
-  assert.match(await reason(orderFor(14001, id, 6, { note_attributes: attrs(["session_token", "tok"], ["book_theme", THEME]) })), /no round_id/);
-  assert.match(await reason(orderFor(14002, id, 6, { note_attributes: attrs(["book_theme", THEME], ["round_id", id]) })), /no session_token/);
-  assert.match(await reason(orderFor(14003, "nope", 6)), /round nope was not found/);
-  assert.match(await reason(orderFor(14004, id, 6, { note_attributes: attrs(["session_token", "nope"], ["book_theme", THEME], ["round_id", id]) })), /Session not found/);
-  assert.match(await reason(orderFor(14005, id, 6, { note_attributes: attrs(["session_token", "tok"], ["book_theme", "little_camper"], ["round_id", id]) })), /order says little_camper but the session is little_artist/);
-  assert.match(await reason(orderFor(14006, id, 6, { note_attributes: attrs(["session_token", "tok"], ["book_theme", "love_grows_desert_sand"], ["round_id", id]) })), /cannot be printed through the Photo Lab yet/);
+  assert.match(await reason(orderFor(14001, id, 8, { note_attributes: attrs(["session_token", "tok"], ["book_theme", THEME]) })), /no round_id/);
+  assert.match(await reason(orderFor(14002, id, 8, { note_attributes: attrs(["book_theme", THEME], ["round_id", id]) })), /no session_token/);
+  assert.match(await reason(orderFor(14003, "nope", 8)), /round nope was not found/);
+  assert.match(await reason(orderFor(14004, id, 8, { note_attributes: attrs(["session_token", "nope"], ["book_theme", THEME], ["round_id", id]) })), /Session not found/);
+  assert.match(await reason(orderFor(14005, id, 8, { note_attributes: attrs(["session_token", "tok"], ["book_theme", "little_camper"], ["round_id", id]) })), /order says little_camper but the session is little_artist/);
+  assert.match(await reason(orderFor(14006, id, 8, { note_attributes: attrs(["session_token", "tok"], ["book_theme", "love_grows_desert_sand"], ["round_id", id]) })), /cannot be printed through the Photo Lab yet/);
   assert.match(await reason(orderFor(14007, id, round.total, { shipping_address: null })), /shipment address1 is required/);
   w.rounds.get(id)!.session_id = "someone-else";
   assert.match(await reason(orderFor(14008, id, round.total)), /different session/);
 
   const big = new World();
-  big.fill(SLOTS.slice(0, 6));
+  big.fill(SLOTS.slice(0, 8));
   big.addExtra("extra_big", 101);
   const c = big.click();
   const r = await handlePaidOrder(orderFor(14009, c.id, c.round.total), big.deps());
@@ -427,12 +427,12 @@ test("bad orders are refused with a clear reason: no round, no token, unknown ro
 
 test("building from a round's snapshot reads only that order's frozen copies", async () => {
   const w = new World();
-  w.fill(SLOTS.slice(0, 6));
+  w.fill(SLOTS.slice(0, 8));
   const r = await pay(w, 15001);
   const served: string[] = [];
   const guarded = frozenOnly("15001", async (p) => { served.push(p); return fetchImage(p); });
   for (const row of r.result.snapshot!.photoRows) await guarded(row.storage_path);
-  assert.equal(served.length, 6);
+  assert.equal(served.length, 8);
   await assert.rejects(guarded("live/month_1"), /not a frozen copy of order 15001/);
 });
 

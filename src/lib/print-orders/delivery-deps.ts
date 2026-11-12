@@ -1,8 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { sendPrintOrderAlert, sendPrintOrderStalledAlert } from "@/lib/email";
+import { sendPrintOrderAlert, sendPrintOrderStalledAlert, sendPrintOrderUnknownFolderAlert } from "@/lib/email";
 import type { RecordedOrderRow } from "./build-from-snapshot";
 import type { Destination } from "./config";
-import type { SentOrderRef } from "./error-monitor";
+import type { SentOrderRef, UnknownFolderAlertInfo } from "./error-monitor";
 import type { StalledCandidate, StalledOrderInfo } from "./stalled-monitor";
 
 /** print_orders reads and guarded status changes for delivery and the _error check. Server-side only. */
@@ -42,6 +42,31 @@ export async function findSentByExternalIds(externalIds: string[]): Promise<Sent
     shopifyOrderName: r.shopify_order_name as string | null,
     externalId: r.external_id as string,
   }));
+}
+
+/** Which of these external_ids exist in print_orders, in any status. */
+export async function findKnownExternalIds(externalIds: string[]): Promise<string[]> {
+  if (externalIds.length === 0) return [];
+  const { data, error } = await supabaseAdmin.from("print_orders").select("external_id").in("external_id", externalIds);
+  if (error) throw new Error(`print_orders lookup failed: ${error.message}`);
+  return (data ?? []).map((r) => r.external_id as string);
+}
+
+/**
+ * Record an unknown _error folder (migration 016). True only when this call inserted the row,
+ * so only one run alerts. A duplicate (already alerted) returns false.
+ */
+export async function claimUnknownErrorFolder(destination: string, folder: string, reason: string, at: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("print_error_unknown_folders")
+    .upsert({ destination, folder, reason, first_seen_at: at }, { onConflict: "destination,folder", ignoreDuplicates: true })
+    .select("folder");
+  if (error) throw new Error(`print_error_unknown_folders insert failed: ${error.message}`);
+  return (data ?? []).length === 1;
+}
+
+export async function alertUnknownErrorFolder(info: UnknownFolderAlertInfo) {
+  await sendPrintOrderUnknownFolderAlert(info);
 }
 
 /** sent → error, only while still sent. True when this call changed the row (so only one caller alerts). */

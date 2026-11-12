@@ -48,7 +48,8 @@ test("a square source larger than a square slot is scaled down, never up", async
     fetchImage,
   });
   const meta = await sharp(big.images[0].data).metadata();
-  assert.deepEqual([meta.width, meta.height], [900, 900]); // baby_bump slot is 3x3
+  // baby_bump slot is 3x3: scaled down to 900x900, then placed on the 1200px 4x4 sheet with trim marks.
+  assert.deepEqual([meta.width, meta.height], [1200, 1200]);
   assert.ok(big.warnings.some((w) => /downscaled from 1200x1200px to 900x900px/.test(w)));
   assert.ok(big.warnings.some((w) => /stored as 4x4 but the book slot prints 3x3/.test(w)));
 

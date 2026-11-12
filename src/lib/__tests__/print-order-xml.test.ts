@@ -14,24 +14,28 @@ const valid = (): PrintOrderInput => ({
 });
 const FILES = ["0001_a.jpg"];
 
-test("every PrintSize has a product mapping for both dealers, and sheets exist only for always-padded sizes", () => {
+test("every PrintSize has a product mapping for both dealers; every size under 4x4 prints on the 4x4 sheet", () => {
+  const SHEET_SIZES = ["3x3", "3.5x3.5", "4x3"];
   for (const kind of ["demo", "live"] as const) {
     for (const size of ALL_PRINT_SIZES) {
       const cfg = PRINT_PRODUCTS[kind][size];
       assert.ok(cfg && cfg.productCode, `${kind} ${size} has no mapping`);
-      assert.equal(cfg.printedAs === "sheet", isAlwaysPaddedTo4x4(size), size);
+      assert.equal(cfg.printedAs === "sheet", SHEET_SIZES.includes(size), size);
       if (cfg.printedAs === "sheet") assert.deepEqual([cfg.sheetWidth, cfg.sheetHeight], [1200, 1200]);
     }
   }
+  // The customer ZIP's rule is separate and unchanged: it keeps 3x3 as its own file by default.
+  assert.equal(isAlwaysPaddedTo4x4("3x3"), false);
+  assert.equal(isAlwaysPaddedTo4x4("4x3"), true);
 });
 
 test("demo dealer 3404 product codes (Photo Finale, 2026-10-22); live stays a placeholder", () => {
   const code = (size: keyof typeof PRINT_PRODUCTS.demo) => PRINT_PRODUCTS.demo[size].productCode;
-  assert.equal(code("3x3"), "7364");
   assert.equal(code("4x4"), "7963");
   assert.equal(code("4x6"), "7965");
   assert.equal(code("5x5"), "7969");
-  // Both padded sizes are ordered as the 4x4 sheet they print on.
+  // Every sheet size is ordered as the 4x4 sheet it prints on (3x3 Press Print 7364 is no longer used).
+  assert.equal(code("3x3"), "7963");
   assert.equal(code("3.5x3.5"), "7963");
   assert.equal(code("4x3"), "7963");
   // 4x3 switched to native would be ordered as 3x4 Matte.
@@ -108,6 +112,9 @@ test("a padded size's aspect follows its print method: sheet → the sheet's sha
   assert.throws(() => productEntry("4x3", { printedAs: "sheet" }, PRODUCT_CODES.demo), /needs sheetWidth/);
   // No dealer sells 3.5x3.5 paper, so it cannot be flipped to native without a code.
   assert.throws(() => productEntry("3.5x3.5", { printedAs: "native" }, PRODUCT_CODES.demo), /no 3\.5x3\.5 paper/);
+  // Nor 3x3 any more (decision 2026-10-30: no hand-cut, no native 3x3).
+  assert.equal(PRINT_PRODUCTS.demo["3x3"].aspect, 1);
+  assert.throws(() => productEntry("3x3", { printedAs: "native" }, PRODUCT_CODES.demo), /no 3x3 paper/);
 });
 
 test("destination: demo by default with test mode on; live only with the env var and test mode off", () => {

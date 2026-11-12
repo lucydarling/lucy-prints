@@ -41,6 +41,11 @@ export async function GET(req: NextRequest) {
     body.seen = r.seen.length;
     body.marked = r.marked;
     body.alertFailures = r.alertFailures;
+    body.unknownAlerted = r.unknownAlerted;
+    if (r.unknownError) {
+      body.unknownError = "server error";
+      status = 500;
+    }
   } catch (err) {
     console.error("print order _error check failed:", err);
     body.error = "server error";

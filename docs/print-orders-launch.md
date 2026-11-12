@@ -7,11 +7,11 @@ Nothing is sent to Photo Finale or Persnickety. `live/` is never written (`LIVE_
 - Shopify `orders/paid` webhook → `POST /api/webhooks/shopify/orders-paid` (Node runtime, HMAC-verified).
 - For a print order it freezes the photos at payment, checks them, and records `ready` / `held` / `refused` in `print_orders`. Refused and held outcomes email Kevin.
 - **Printing is in rounds (step 5).** Each order prints a *round* recorded when the customer clicks "Print my photos" (`print_rounds`): the book photos, extras and paid reprints not yet printed. The session never locks as a whole; a slot or extra locks only once an order containing it is `ready` (a `print_order_items` row; a unique key prevents printing anything twice). Upload/recrop/delete on a printed slot or extra answer 409; a printed slot can be replaced as a paid reprint (`print_reprints`, included in the next order, original never overwritten). Notes and baby details are always editable. A webhook or retry never re-checks or overwrites a `sent`/`error` order.
-- **Pricing is per print** (placeholder $20, `config.ts`) plus $6 S&H per order; the cart is one line per print variant with quantity = prints; the webhook requires the paid quantity per variant to equal the round, else it **holds** the order (alert, nothing locked). `MIN_PRINTS_PER_ORDER` (5, placeholder) is enforced at the button and the webhook; extras have no customer-facing cap, only a hidden limit of 100 per order.
+- **Pricing is per print** (placeholder $20, `config.ts`) plus $6 S&H per order; the cart is one line per print variant with quantity = prints; the webhook requires the paid quantity per variant to equal the round, else it **holds** the order (alert, nothing locked). `MIN_PRINTS_PER_ORDER` (8, Persnickety's minimum, Chari 2026-10-30) is enforced at the button and the webhook; extras have no customer-facing cap, only a hidden limit of 100 per order.
 - Order folder builder (Photo Finale `apm_order` XML + JPEGs), `TEST-` ids, local-folder/ZIP output only, buildable from the frozen snapshot (`print-order:build`).
 - Builder refuses any file whose shape (after padding) is not its product's `aspect` (pfRouter would silently center-crop it). `aspect` is derived from the print method in `config.ts`.
 - **Delivery (manual):** `npm run print-order:deliver -- <order id>` uploads to Dropbox and marks the order `sent` (section 5).
-- **`_error` check:** `GET /api/cron/print-order-errors` (Vercel Cron, every 15 minutes (`*/15 * * * *`, needs the Pro plan), `CRON_SECRET`-gated) and `npm run print-order:check-errors`. Each sent order found in `<hotfolder>/_error/` becomes `error` with pfRouter's `reason.txt`, and Kevin gets one alert.
+- **`_error` check:** `GET /api/cron/print-order-errors` (Vercel Cron, every 15 minutes (`*/15 * * * *`, needs the Pro plan), `CRON_SECRET`-gated) and `npm run print-order:check-errors`. Each sent order found in `<hotfolder>/_error/` becomes `error` with pfRouter's `reason.txt`, and Kevin gets one alert. A folder in `_error/` that matches **no** `print_orders` row at all (any status; e.g. a folder dropped in by hand) gets one "[Photo Lab] Unknown order in _error: <folder>" alert instead, once per folder ever (recorded in `print_error_unknown_folders`, migration 016, step 7, 2026-11-12). Folders of orders already marked `error` stay quiet. If 016 is missing, that part fails, is logged and the cron answers 500; the sent-order part still runs.
 - **Not-picked-up check (2026-10-27):** the same cron then looks for `sent` orders whose `sent_at` is older than `STALLED_AFTER_MINUTES` (30, `config.ts`) and whose folder is still at `<hotfolder>/<external_id>` (not moved to `processed/<dest>/` or `_error/`). Kevin gets one alert per order (guarded update of `print_orders.stalled_alerted_at`, migration 015); the alert says whether `.pfrouter-partner.json` exists in the folder (missing = pfRouter never saw it: not running or not syncing). Two or more stalled in one run send a single combined "pfRouter may be down" alert. Only orders sent in the last `STALLED_LOOKBACK_HOURS` (72) are checked. Read-only toward Dropbox. Manual run: `npm run print-order:check-stalled`. **Apply 015 before deploying**; if the column is missing the stalled check fails (logged, cron answers 500) but the `_error` check still runs.
 - **Step 4 (customer-facing, hidden):** the "Print my photos" button on `/review`, a server-side checkout route, customer emails, and "Ordered" labels. All of it is invisible until print ordering is turned on (section 8).
 - **Not built:** automatic delivery from the webhook; the **prepaid-prints discount-code flow** (skipped on purpose, section 9); the **shipped** email is built but wired to nothing.
@@ -115,8 +115,8 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
 
 **Still open:**
 1. **The live dealer's (4013) product codes** (Chari). The demo dealer's codes were answered 2026-10-22 and are in `config.ts` (section 13). DealerCodes answered 2026-10-14.
-2. ~~Native 3x3 / 3.5x3.5 / 4x3?~~ Partly answered 2026-10-22: 3x3 prints natively (3x3 Press Print). A native 3x4 Matte exists (demo code 7960), but **4x3 stays on the 4x4 sheet for now** (Kevin, 2026-10-22), and so does 3.5x3.5. Flipping 4x3 to native in `config.ts` changes its `aspect` and its code (to the 4x3 paper's) automatically.
-3. Padding placement on 4x4 sheets: image bottom-left, padding top/right, no trim guides. OK for their trimming?
+2. ~~Native 3x3 / 3.5x3.5 / 4x3?~~ Answered 2026-10-30 (Persnickety): their machines can't run anything under ~3.5x5 on its own, and Kevin + Haily chose **no hand-cutting**. Since step 7 (2026-11-12) **3x3, 3.5x3.5, 4x3 and 3x4 all print on the 4x4 sheet with trim marks** and the customer trims them. The demo 3x3 Press Print code (7364) is no longer used.
+3. ~~Padding placement on 4x4 sheets~~ Decided 2026-11-12: image bottom-left (fewest cuts), padding top/right, gray trim marks in the padding (see "Trim marks" in section 13). **Josh is testing the sample sheets in the lab** (`Photo App/Persnickety Trim-Mark Samples (2026-11-12)/`, rebuilt with `npm run print-order:trim-samples -- <photo> <dir>`).
 4. ~~Dealer / `_error` / processed folder~~ Answered 2026-10-12 (above); the `processed/` location is ours to configure (decided, see above).
 5. ~~How is a repeated `external_id` treated?~~ Answered 2026-10-12 (above).
 6. Shipping speeds: the `delivery_type` values our dealer has active (Chari's team). Tracking (Jason, next week).
@@ -192,13 +192,16 @@ No logins, passwords or tokens for myLab, pfRouter or Dropbox go in this repo.
 
 | Our size | Printed as | Demo code |
 |---|---|---|
-| 3x3 | native (3x3 Press Print) | 7364 |
 | 4x4 | native (4x4 Matte) | 7963 |
 | 4x6 (and 6x4) | native (4x6 Matte) | 7965 |
 | 5x5 | native (5x5 Matte) | 7969 |
-| 3.5x3.5 | on the 4x4 sheet (4x4 Matte; there is no 3.5x3.5 code) | 7963 |
-| 4x3 (and 3x4) | on the 4x4 sheet (4x4 Matte), for now | 7963 |
-| 4x3, if switched to native | 3x4 Matte | 7960 (not used today) |
+| 3x3 | on the 4x4 sheet with trim marks (since 2026-11-12; Persnickety can't print 3x3) | 7963 |
+| 3.5x3.5 | on the 4x4 sheet with trim marks (there is no 3.5x3.5 code) | 7963 |
+| 4x3 (and 3x4) | on the 4x4 sheet with trim marks | 7963 |
+| 3x3 Press Print | not used since 2026-11-12 | 7364 |
+| 4x3, if switched to native | 3x4 Matte | 7960 (not used) |
+
+**Trim marks (step 7, 2026-11-12; `TRIM_MARK` in `config.ts`, drawn by `trimMarkRects` / `composeSheet` in `image.ts`).** The photo sits bottom-left at its exact print size (a sheet photo that arrives at another pixel size but the right shape is scaled to exactly its size so it trims true; a wrong shape is refused). Marks are solid gray (#808080), 4px (1/75") thick, only in the white padding, never on the photo, with their photo-side edge exactly on the cut line. Each cut line (the photo's top edge, its right edge) is marked at both ends: past the photo's corner, an extension mark from 1/16" past the corner to 1/8" short of the sheet edge; where the photo meets the sheet edge, a 1/4" mark lying against the photo's edge. Nothing within 1/8" of the sheet edge. Customer instruction: "cut along the side of the gray mark closest to the photo." No text on the sheet. The customer ZIP's own trim guides are separate and unchanged.
 
 Steps:
 1. **Install pfRouter** (installer due from Jason this week).
