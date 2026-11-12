@@ -102,17 +102,17 @@ const base = { token: "tok123", bookTheme: THEME, extraRows: [] as never[], repr
 const createRound = async () => "round-1";
 
 test("checkout: a saved book gets the confirm line, the price breakdown and a cart-clearing Shopify URL carrying the round", async () => {
-  const r = await prepareCheckout({ ...base, photoRows: photoRows(6), createRound });
+  const r = await prepareCheckout({ ...base, photoRows: photoRows(9), createRound });
   assert.ok(r.ok);
   if (!r.ok) return;
-  assert.match(r.message, /^You're printing 6 new photos\. 0 of \d+ printed so far\.$/);
-  assert.equal(r.price.lines[0].quantity, 6);
-  assert.equal(r.price.totalCents, 6 * r.price.lines[0].unitCents + r.price.shippingCents);
+  assert.match(r.message, /^You're printing 9 new photos\. 0 of \d+ printed so far\.$/);
+  assert.equal(r.price.lines[0].quantity, 9);
+  assert.equal(r.price.totalCents, 9 * r.price.lines[0].unitCents + r.price.shippingCents);
   const u = new URL(r.url);
   assert.match(u.host, /lucydarling\.com$|example-shop\.test$/);
   assert.equal(u.pathname, "/cart/clear");
   const inner = new URL(u.searchParams.get("return_to")!, "https://x.test");
-  assert.equal(inner.pathname, "/cart/111:6");
+  assert.equal(inner.pathname, "/cart/111:9");
   assert.equal(inner.searchParams.get("attributes[session_token]"), "tok123");
   assert.equal(inner.searchParams.get("attributes[book_theme]"), THEME);
   assert.equal(inner.searchParams.get("attributes[round_id]"), "round-1");
@@ -144,8 +144,8 @@ test("checkout: blocks an empty book, nothing new, an under-minimum round and an
 
 test("checkout: extras and reprints count toward the minimum; only the hidden 100-extras limit blocks extras", async () => {
   const extra = (n: number) => [{ extra_id: "e", print_size: "4x4", orientation: "portrait", storage_path: "p/e", quantity: n }];
-  const ok = await prepareCheckout({ ...base, photoRows: photoRows(2), extraRows: extra(3), createRound });
-  assert.ok(ok.ok && /2 new photos and 3 extra prints/.test(ok.message), JSON.stringify(ok));
+  const ok = await prepareCheckout({ ...base, photoRows: photoRows(5), extraRows: extra(3), createRound });
+  assert.ok(ok.ok && /5 new photos and 3 extra prints/.test(ok.message), JSON.stringify(ok));
   assert.equal((await prepareCheckout({ ...base, photoRows: [], extraRows: extra(40), createRound })).ok, true, "no customer-facing cap");
   const over = await prepareCheckout({ ...base, photoRows: [], extraRows: extra(MAX_EXTRAS_PER_ORDER + 1), createRound });
   assert.ok(!over.ok && /looks like a mistake/.test(over.errors[0]));

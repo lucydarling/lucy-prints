@@ -18,7 +18,7 @@ import { realPaidOrderDeps } from "@/lib/print-orders/paid-order-deps";
 import { computeRound, type ReprintRow } from "@/lib/print-orders/round";
 import { getPrintedState, printedSlotCount } from "@/lib/print-orders/printed";
 import { validatePrintRequest } from "@/lib/print-orders/print-request";
-import { variantIdForKey } from "@/lib/print-orders/config";
+import { MIN_PRINTS_PER_ORDER, variantIdForKey } from "@/lib/print-orders/config";
 
 const THEME = "little_artist";
 const SLOTS = getSlots(THEME);
@@ -122,25 +122,28 @@ async function main() {
   const under = await currentRound();
   ok(under.round.total === 2 && under.check.errors.some((e) => /at least \d+ prints/.test(e)), "2 new photos: blocked under the minimum, no round recorded");
 
-  // ---- Round 2: 6 new photos (2 waiting + 4 more) ----
-  await fill(SLOTS.slice(8, 12).map((s) => s.key));
-  const c2 = await click();
-  ok(c2.id && c2.round.total === 6, `round 2 recorded: ${c2.round.total} new prints, none of round 1`);
-  const r2 = await handlePaidOrder(order(2, c2.id!, c2.round.total), deps);
-  ok(r2.status === "ready" && r2.printCount === 6, `order 2 ready with 6 prints (${r2.status} ${r2.reasons.join(";")})`);
-  ok(r2.printedSoFar === 12, `progress after order 2: ${r2.printedSoFar} of ${r2.bookSlots}`);
+  // Every later round is exactly the minimum (8 since 2026-11-12, Persnickety).
+  if (MIN_PRINTS_PER_ORDER !== 8) throw new Error(`this script's rounds are sized for an 8-print minimum (now ${MIN_PRINTS_PER_ORDER})`);
 
-  // ---- Reprint of slot 0 + 4 new photos ----
+  // ---- Round 2: 8 new photos (2 waiting + 6 more) ----
+  await fill(SLOTS.slice(8, 14).map((s) => s.key));
+  const c2 = await click();
+  ok(c2.id && c2.round.total === 8, `round 2 recorded: ${c2.round.total} new prints, none of round 1`);
+  const r2 = await handlePaidOrder(order(2, c2.id!, c2.round.total), deps);
+  ok(r2.status === "ready" && r2.printCount === 8, `order 2 ready with 8 prints (${r2.status} ${r2.reasons.join(";")})`);
+  ok(r2.printedSoFar === 14, `progress after order 2: ${r2.printedSoFar} of ${r2.bookSlots}`);
+
+  // ---- Reprint of slot 0 + 7 new photos ----
   const rpPath = `${sid}/reprints/${SLOTS[0].key}-e2e.jpg`;
   const d0 = getPrintDimensions(SLOTS[0].size, SLOTS[0].orientation);
   await put(rpPath, d0.width, d0.height);
   const { error: rpErr } = await supabaseAdmin.from("print_reprints").insert({ session_id: sid, slot_key: SLOTS[0].key, storage_path: rpPath, print_size: getPrintSizeLabel(SLOTS[0].size, SLOTS[0].orientation) });
   if (rpErr) throw new Error(rpErr.message);
-  await fill(SLOTS.slice(12, 16).map((s) => s.key));
+  await fill(SLOTS.slice(14, 21).map((s) => s.key));
   const c3 = await click();
-  ok(c3.id && c3.round.reprints === 1 && c3.round.total === 5, `round 3 recorded: ${c3.round.newPhotos} new + ${c3.round.reprints} reprint`);
+  ok(c3.id && c3.round.reprints === 1 && c3.round.total === 8, `round 3 recorded: ${c3.round.newPhotos} new + ${c3.round.reprints} reprint`);
   const r3 = await handlePaidOrder(order(3, c3.id!, c3.round.total), deps);
-  ok(r3.status === "ready" && r3.printCount === 5, `order 3 ready with 5 prints (${r3.status} ${r3.reasons.join(";")})`);
+  ok(r3.status === "ready" && r3.printCount === 8, `order 3 ready with 8 prints (${r3.status} ${r3.reasons.join(";")})`);
   const items = await itemRows();
   ok(items.filter((i) => i.item_key === SLOTS[0].key).map((i) => i.generation).sort().join() === "1,2", "slot 0 has generation 1 and 2 items");
   const live = (await supabaseAdmin.from("session_photos").select("storage_path").eq("session_id", sid).eq("slot_key", SLOTS[0].key).single()).data;
@@ -150,7 +153,7 @@ async function main() {
   ok(rp?.[0]?.status === "included", "reprint marked included");
 
   // ---- Quantity mismatch (paid one fewer) holds, locks nothing ----
-  await fill(SLOTS.slice(16, 21).map((s) => s.key));
+  await fill(SLOTS.slice(21, 29).map((s) => s.key));
   const c4 = await click();
   const before = (await itemRows()).length;
   const r4 = await handlePaidOrder(order(4, c4.id!, c4.round.total - 1), deps);

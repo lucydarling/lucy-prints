@@ -1,4 +1,4 @@
-import { getPrintDimensions, getProductForTheme, isAlwaysPaddedTo4x4, type PrintSize } from "@/lib/photo-slots";
+import { getPrintDimensions, getProductForTheme, type PrintSize } from "@/lib/photo-slots";
 
 /**
  * Everything about print orders that is not yet known. Each value marked
@@ -80,7 +80,8 @@ export interface PrintProductConfig {
   /**
    * "native": the file is the print's own size.
    * "sheet": the file is placed on a sheet of `sheetWidth`×`sheetHeight` px
-   * (bottom-left, white padding top/right, no trim guides) and ordered as that sheet size.
+   * (bottom-left, white padding top/right, gray trim marks in the padding, see
+   * TRIM_MARK) and ordered as that sheet size.
    */
   printedAs: "native" | "sheet";
   /** Only for printedAs "sheet". */
@@ -94,15 +95,16 @@ export interface PrintProductConfig {
 export type ProductSpec = Omit<PrintProductConfig, "aspect" | "productCode">;
 
 /**
- * The papers a dealer sells. 3.5x3.5 has none: it is always ordered on the 4x4 sheet.
+ * The papers a dealer sells that we order. 3x3 and 3.5x3.5 have none: Persnickety
+ * can't run anything under ~3.5x5 on its own, so both are always ordered on the
+ * 4x4 sheet with trim marks (decision 2026-10-30: no hand-cutting).
  * Each dealer has its own product codes; one code covers both orientations.
  */
-export type Paper = Exclude<PrintSize, "3.5x3.5">;
+export type Paper = Exclude<PrintSize, "3x3" | "3.5x3.5">;
 export type ProductCodes = Record<Paper, string>;
 export const PRODUCT_CODES: Record<DestinationKind, ProductCodes> = {
-  // Demo dealer 3404 (Photo Finale, 2026-10-22).
+  // Demo dealer 3404 (Photo Finale, 2026-10-22). Its 3x3 Press Print (7364) is no longer used.
   demo: {
-    "3x3": "7364", // 3x3 Press Print
     "4x3": "7960", // 3x4 Matte; only used if 4x3 is switched to native (today it prints on the 4x4 sheet)
     "4x4": "7963",
     "4x6": "7965",
@@ -110,7 +112,6 @@ export const PRODUCT_CODES: Record<DestinationKind, ProductCodes> = {
   },
   // PLACEHOLDER — live dealer 4013's codes, waiting on Chari.
   live: {
-    "3x3": "TBD-3X3",
     "4x3": "TBD-4X3",
     "4x4": "TBD-4X4",
     "4x6": "TBD-4X6",
@@ -140,12 +141,15 @@ export function productEntry(size: PrintSize, spec: ProductSpec, codes: ProductC
 
 const SHEET_4X4 = { sheetWidth: 1200, sheetHeight: 1200, sheetPaper: "4x4" as const };
 
-// How each size is printed. 4x3 could print natively (3x4 Matte) but stays on the 4x4 sheet for now (2026-10-22).
+// How each size is printed. Every size under 4x4 prints on the 4x4 sheet with trim marks and
+// the customer trims it (Kevin + Haily with Persnickety, 2026-10-30: no hand-cutting).
+// Deliberately NOT tied to isAlwaysPaddedTo4x4: that drives the customer ZIP, which keeps 3x3
+// as its own file unless the customer asks otherwise.
 // Typed Record<PrintSize, …> so a new PrintSize cannot silently drop out.
 const PRODUCT_SPECS: Record<PrintSize, ProductSpec> = {
-  "3x3": { printedAs: "native" },
-  "3.5x3.5": { printedAs: isAlwaysPaddedTo4x4("3.5x3.5") ? "sheet" : "native", ...SHEET_4X4 },
-  "4x3": { printedAs: isAlwaysPaddedTo4x4("4x3") ? "sheet" : "native", ...SHEET_4X4 },
+  "3x3": { printedAs: "sheet", ...SHEET_4X4 },
+  "3.5x3.5": { printedAs: "sheet", ...SHEET_4X4 },
+  "4x3": { printedAs: "sheet", ...SHEET_4X4 },
   "4x4": { printedAs: "native" },
   "4x6": { printedAs: "native" },
   "5x5": { printedAs: "native" },
@@ -171,12 +175,37 @@ export const HARD_MIN_FRACTION = 0.5;
 export const ASPECT_TOLERANCE = 0.005;
 
 /**
+ * Trim marks on a sheet print (approved 2026-11-12). Pixels at 300 DPI on the 1200px 4x4 sheet.
+ * Solid gray lines, only in the white padding, never on the photo. Each mark lies along a cut
+ * line with its photo-side edge exactly on that line ("cut along the side of the gray mark
+ * closest to the photo"). Every cut line gets a mark at both ends:
+ *  - where the cut runs past the photo's corner into white space: an extension mark, starting
+ *    GAP past the corner and stopping EDGE_MARGIN short of the sheet edge;
+ *  - where the photo runs to the sheet edge: a FLUSH_LENGTH mark lying against the photo's edge
+ *    on the white side, starting EDGE_MARGIN in from the sheet edge.
+ * Nothing is drawn within EDGE_MARGIN of the sheet edge, so a slight lab edge trim loses nothing.
+ */
+export const TRIM_MARK = {
+  /** 4px = 1/75" (~0.34 mm, about 1 pt). */
+  THICKNESS: 4,
+  COLOR: { r: 128, g: 128, b: 128 },
+  /** 1/16": space between the photo's corner and an extension mark. */
+  GAP: 19,
+  /** 1/8": nothing closer to the sheet edge than this. */
+  EDGE_MARGIN: 38,
+  /** 1/4": a mark lying against the photo's edge. */
+  FLUSH_LENGTH: 75,
+  /** An extension mark shorter than this is drawn as a flush mark instead. */
+  MIN_EXTENSION: 38,
+} as const;
+
+/**
  * Printing in rounds (step 5). Everything below marked PLACEHOLDER is
  * waiting on Chari — confirm before any real order.
  */
 
-/** PLACEHOLDER — confirm with Chari: fewest prints one order may contain (new photos + extras + reprints). */
-export const MIN_PRINTS_PER_ORDER = 5;
+/** Persnickety's minimum (Chari, 2026-10-30): fewest prints one order may contain (new photos + extras + reprints). */
+export const MIN_PRINTS_PER_ORDER = 8;
 
 /**
  * Klaviyo "time for another print round" property (print_round_due), see

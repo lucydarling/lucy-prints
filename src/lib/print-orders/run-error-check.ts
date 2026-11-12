@@ -1,5 +1,12 @@
 import { resolveDestination } from "./config";
-import { alertPrinterError, findSentByExternalIds, markError } from "./delivery-deps";
+import {
+  alertPrinterError,
+  alertUnknownErrorFolder,
+  claimUnknownErrorFolder,
+  findKnownExternalIds,
+  findSentByExternalIds,
+  markError,
+} from "./delivery-deps";
 import { readOnlyDropboxClient } from "./dropbox-destination";
 import { checkErrorFolder } from "./error-monitor";
 
@@ -11,5 +18,8 @@ export function runErrorCheck() {
     findSent: findSentByExternalIds,
     markError,
     alert: alertPrinterError,
+    findKnown: findKnownExternalIds,
+    claimUnknown: claimUnknownErrorFolder,
+    alertUnknown: alertUnknownErrorFolder,
   });
 }

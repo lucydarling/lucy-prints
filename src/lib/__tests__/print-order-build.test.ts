@@ -100,17 +100,29 @@ test("a stored print_size that disagrees with the book slot is flagged", async (
   assert.match(order.warnings[0], /baby_bump: stored as 4x4 but the book slot prints 3x3/);
 });
 
-test("a 4x3 print sits bottom-left on a white 4x4 sheet with no trim guides", async () => {
+test("a 4x3 print sits bottom-left on a white 4x4 sheet; only its two trim marks are drawn in the padding", async () => {
   const { params } = await fixture();
   const order = await buildOrder(params);
   const f = order.images.find((x) => x.name.includes("ultrasound"))!;
   const { data, info } = await sharp(f.data).raw().toBuffer({ resolveWithObject: true });
   const px = (x: number, y: number) => [0, 1, 2].map((c) => data[(y * info.width + x) * info.channels + c]);
-  // Padding is top 300px and right 0 (4x3 is 1200 wide): top strip is pure white.
-  for (const [x, y] of [[5, 5], [600, 150], [1195, 295]]) {
+  // Padding is top 300px and right 0 (4x3 is 1200 wide): white except the marks on rows 296-299.
+  for (const [x, y] of [[5, 5], [600, 150], [1195, 290], [600, 292]]) { // row 292: no full-width line (rows 296-299 ring a little from JPEG next to the photo)
     assert.ok(px(x, y).every((v) => v >= 253), `expected white at ${x},${y}: ${px(x, y)}`);
   }
+  for (const [x, y] of [[60, 298], [1120, 298]]) {
+    assert.ok(px(x, y).every((v) => Math.abs(v - 128) <= 6), `expected a gray trim mark at ${x},${y}: ${px(x, y)}`);
+  }
   assert.ok(!px(600, 450).every((v) => v >= 253), "photo area should not be white");
+});
+
+test("a 3x3 book photo is now ordered on the 4x4 sheet, as the 4x4 code", async () => {
+  const order = await buildOrder((await fixture()).params);
+  const f = order.images.find((x) => x.name.includes("baby_bump"))!;
+  assert.match(f.name, /baby_bump_3x3_on_4x4\.jpg$/);
+  const meta = await sharp(f.data).metadata();
+  assert.deepEqual([meta.width, meta.height], [1200, 1200]);
+  assert.equal(order.input.items.find((it) => it.image === f.name)!.product, PRODUCT_CODES.demo["4x4"]);
 });
 
 test("EXIF orientation is applied before sizing", async () => {
@@ -227,8 +239,8 @@ test("a file whose shape is not its product's is refused (pfRouter would silentl
 
 });
 
-test("files whose shape matches their product pass: square, 4x6 both ways, a 4x3 padded onto a 4x4 sheet", async () => {
-  // The fixture holds a 4x4 and a 3x3 (square), a 4x6 portrait, a 6x4 landscape and a 4x3 (padded to a 4x4 sheet).
+test("files whose shape matches their product pass: square, 4x6 both ways, a 4x3 and a 3x3 padded onto a 4x4 sheet", async () => {
+  // The fixture holds a 4x4, a 3x3 (on a 4x4 sheet), a 4x6 portrait, a 6x4 landscape and a 4x3 (on a 4x4 sheet).
   const built = await buildOrder((await fixture()).params);
   assert.equal(built.printCount, 6);
   const names = built.images.map((f) => f.name);

@@ -377,6 +377,12 @@ test("deliver: if the database refuses the sent update after delivery, it says s
 
 // ---------- _error monitoring ----------
 
+const NO_UNKNOWN = {
+  findKnown: async (ids: string[]) => ids,
+  claimUnknown: async () => { throw new Error("not called"); },
+  alertUnknown: async () => { throw new Error("not called"); },
+};
+
 test("_error check: each sent order found there becomes error with pfRouter's reason, alerted once, never again", async () => {
   const fake = new FakeDropbox();
   fake.addFile(`${ROOT}/demo/_error/TEST-1/reason.txt`, Buffer.from("Unknown product TBD-4X4\n"));
@@ -399,11 +405,15 @@ test("_error check: each sent order found there becomes error with pfRouter's re
         return true;
       },
       alert: async (i) => { alerts.push(i); },
+      findKnown: async (ids) => ids.filter((id) => /^TEST-\d$/.test(id)),
+      claimUnknown: async () => true,
+      alertUnknown: async () => {},
     });
 
   const r1 = await run();
   assert.deepEqual(r1.marked.sort(), ["TEST-1", "TEST-2", "TEST-3-resend-20261010123456"]);
   assert.deepEqual(r1.ignored, ["SOMEONE-ELSE"]);
+  assert.deepEqual(r1.unknownAlerted, ["SOMEONE-ELSE"], "matches no print_orders row: the unknown-folder alert");
   assert.deepEqual(status, { "1": "error", "2": "error", "3": "error" });
   assert.equal(alerts.length, 3);
   assert.equal(alerts.find((a) => a.shopifyOrderId === "1")!.reason, "Unknown product TBD-4X4");
@@ -420,6 +430,7 @@ test("_error check: no _error folder yet is fine; a failed alert still leaves th
   const empty = await checkErrorFolder({
     client: client(new FakeDropbox(), []), dest: DEMO,
     findSent: async () => { throw new Error("not called"); }, markError: async () => true, alert: async () => {},
+    ...NO_UNKNOWN,
   });
   assert.deepEqual(empty.seen, []);
 
@@ -430,9 +441,59 @@ test("_error check: no _error folder yet is fine; a failed alert still leaves th
     findSent: async () => [{ shopifyOrderId: "1", externalId: "TEST-1" }],
     markError: async () => true,
     alert: async () => { throw new Error("resend down"); },
+    ...NO_UNKNOWN,
   });
   assert.deepEqual(r.marked, ["TEST-1"]);
   assert.deepEqual(r.alertFailures, ["TEST-1"]);
+});
+
+test("_error check: a folder matching no print_orders row alerts once ('unknown order in _error'), ever; known orders never do", async () => {
+  const fake = new FakeDropbox();
+  fake.addFile(`${ROOT}/demo/_error/TEST-LD-07/reason.txt`, Buffer.from("The API rejected the order: order_item 1: no active product matches 99999.\n"));
+  fake.addFile(`${ROOT}/demo/_error/07-bad-product-code/TEST.xml`, Buffer.from("<x/>")); // no reason.txt
+  fake.addFile(`${ROOT}/demo/_error/TEST-OLD/reason.txt`, Buffer.from("x")); // a real order, already "error" from an earlier run
+  fake.addFile(`${ROOT}/demo/_error/TEST-OLD-resend-20261010123456/reason.txt`, Buffer.from("x")); // its resend
+  const claimed = new Set<string>();
+  const alerts: Array<{ destination: string; folder: string; reason: string }> = [];
+  const known: string[][] = [];
+  const run = (alertUnknown = async (i: { destination: string; folder: string; reason: string }) => { alerts.push(i); }) =>
+    checkErrorFolder({
+      client: client(fake, []), dest: DEMO,
+      findSent: async () => [], // nothing is "sent"
+      markError: async () => { throw new Error("not called"); },
+      alert: async () => { throw new Error("not called"); },
+      findKnown: async (ids) => { known.push(ids); return ids.filter((id) => id === "TEST-OLD"); },
+      claimUnknown: async (dest, folder) => { const k = `${dest}/${folder}`; if (claimed.has(k)) return false; claimed.add(k); return true; },
+      alertUnknown,
+    });
+
+  const r1 = await run();
+  assert.deepEqual(r1.unknownAlerted.sort(), ["07-bad-product-code", "TEST-LD-07"]);
+  assert.equal(r1.unknownError, undefined);
+  assert.deepEqual(known[0].sort(), ["07-bad-product-code", "TEST-LD-07", "TEST-OLD"], "resend folders are looked up as their order");
+  assert.deepEqual(alerts.map((a) => a.folder).sort(), ["07-bad-product-code", "TEST-LD-07"]);
+  const a07 = alerts.find((a) => a.folder === "TEST-LD-07")!;
+  assert.equal(a07.destination, "demo");
+  assert.match(a07.reason, /no active product matches 99999/);
+  assert.match(alerts.find((a) => a.folder === "07-bad-product-code")!.reason, /left no reason\.txt/);
+
+  const r2 = await run();
+  assert.deepEqual(r2.unknownAlerted, [], "never twice for the same folder");
+  assert.equal(alerts.length, 2);
+
+  // A failed alert is recorded (claimed) and not retried; a failing lookup is reported, not thrown.
+  fake.addFolder(`${ROOT}/demo/_error/STRAY-3`);
+  const r3 = await run(async () => { throw new Error("resend down"); });
+  assert.deepEqual([r3.unknownAlerted, r3.alertFailures], [["STRAY-3"], ["STRAY-3"]]);
+  assert.deepEqual((await run()).unknownAlerted, []);
+  const broken = await checkErrorFolder({
+    client: client(fake, []), dest: DEMO,
+    findSent: async () => [], markError: async () => true, alert: async () => {},
+    findKnown: async () => { throw new Error("relation print_error_unknown_folders does not exist"); },
+    claimUnknown: async () => true, alertUnknown: async () => {},
+  });
+  assert.match(broken.unknownError ?? "", /does not exist/);
+  assert.deepEqual(fake.uploads, [], "the check never writes to Dropbox");
 });
 
 test("cron route: refuses without CRON_SECRET configured, and without the right bearer token", async () => {

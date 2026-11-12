@@ -317,6 +317,19 @@ ${isError ? "" : `<li>Session token: ${esc(info.sessionToken || "(none on the or
  * Tell Kevin that "sent" print orders are still sitting in the hotfolder (pfRouter has not
  * picked them up). One order → its own alert; 2+ → a single "pfRouter may be down" alert.
  */
+/** A folder in a hotfolder's _error that matches no print order of ours. Sent once per folder. */
+export async function sendPrintOrderUnknownFolderAlert(info: { destination: string; folder: string; reason: string }) {
+  const to = process.env.PRINT_ORDER_ALERT_TO || "kevin@lucydarling.com";
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return sendEmail({
+    to,
+    subject: `[Photo Lab] Unknown order in _error: ${info.folder}`,
+    html: `<p>pfRouter rejected a folder that matches <strong>no print order</strong> in print_orders: <code>${esc(info.destination)}/_error/${esc(info.folder)}</code>.</p>
+<p>Reason from pfRouter: <code>${esc(info.reason)}</code></p>
+<p>No customer order is affected unless someone placed this folder by hand for a real order. Nothing was moved or changed in Dropbox. This alert is sent once per folder.</p>`,
+  }, { route: "alert" });
+}
+
 export async function sendPrintOrderStalledAlert(orders: Array<{
   shopifyOrderId: string;
   shopifyOrderName?: string;
