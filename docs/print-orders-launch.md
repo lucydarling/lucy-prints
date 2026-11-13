@@ -1,7 +1,7 @@
 # Print orders — launch readiness
 
 Status: **test mode; manual delivery to a DEMO Dropbox hotfolder only.** Written 2026-10-09, step 3 added 2026-10-10, **rewritten for print-in-rounds 2026-10-11 (step 5)**. For the live rehearsal see `docs/print-orders-rehearsal.md`.
-Nothing is sent to Photo Finale or Persnickety. `live/` is never written (`LIVE_DELIVERY_ALLOWED = false`).
+Nothing is sent to Photo Finale or Persnickety. `live/` is written only when `PRINT_LAB_ENV=live` (step 9, 2026-11-13; not set). Switching labs: `docs/print-orders-live-switch.md`.
 
 ## 1. What exists
 - Shopify `orders/paid` webhook → `POST /api/webhooks/shopify/orders-paid` (Node runtime, HMAC-verified).
@@ -28,7 +28,7 @@ New for print orders:
 | `SHOPIFY_EXTRA_PRINT_VARIANT_IDS` | Comma-separated variant ids of a paid "extra print" product, if extras ever become paid. Leave unset while extras are free. | No |
 | `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `DROPBOX_REFRESH_TOKEN`, `DROPBOX_ROOT_PATH` | Dropbox delivery (local `.env.local`) and the `_error` cron (Vercel). The refresh token comes from `npm run dropbox:connect`. | For delivery / cron |
 | `CRON_SECRET` | Gates `/api/cron/print-order-errors`; Vercel Cron sends it as a bearer token. Without it the route answers 500. | For the cron |
-| `PRINT_DESTINATION` | `demo` (default) or `live`. `live` also needs `TEST_MODE` off, and is blocked anyway while `LIVE_DELIVERY_ALLOWED` is false. **Do not set it.** | No |
+| `PRINT_LAB_ENV` | Which lab account orders go to: unset/`demo` = demo dealer 3404 + `demo/` tree, `live` = dealer 4013 + `live/` tree (delivery, product codes and both cron checks follow it). Replaces `PRINT_DESTINATION` (if that is set and disagrees, everything refuses). **Do not set it until Kevin says go**; see `docs/print-orders-live-switch.md`. | No |
 | `PRINT_ORDERS_ENABLED` | `true` shows the button to everyone and opens the checkout route. **Unset/anything else = off** (the launch switch). | No (default off) |
 | `PRINT_PREVIEW_SECRET` | 16+ characters. `/review?print_preview=<secret>` sets an httpOnly cookie in that browser; that cookie opens print ordering for that browser even with the flag off. | For the private preview |
 | `PRINT_REPLY_TO` | Reply-to on every customer print email (the support inbox). The held email tells the customer to reply, so **set it before launch**; unset = no Reply-To header (replies would go to the send-only `prints@` address). | Before launch |
@@ -84,7 +84,7 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
    - It refuses unless the order is `ready`, and refuses if the rebuilt id or print count differs from what was recorded.
    - It uses the same code as the webhook (`buildFromSnapshot`), so the XML and validation are identical. The ship-to and customer name come from the Shopify order, saved in the snapshot at payment.
    - Output: `print-orders-out/TEST-<order id>/` (images, then the XML) and `TEST-<order id>.zip`. Read any `WARNING:` lines (images off-size or scaled down).
-2. Open the XML and spot-check: ship-to address, item count = `print_count` in `print_orders`, product codes (a `TEST-` order carries demo dealer 3404's real codes, see section 13; the live dealer's codes are still `TBD-…` placeholders until Chari sends them).
+2. Open the XML and spot-check: ship-to address, item count = `print_count` in `print_orders`, product codes (a `TEST-` order carries demo dealer 3404's real codes, see section 13; since step 9 a live order carries `PRODUCT_CODES.live`, the same 7963/7965/7969; a `TBD-` code anywhere means something is wrong).
 3. Never hand-copy a folder into a hotfolder; use `print-order:deliver` so the order is recorded as sent. Do not create `.pfrouter-partner.json`.
 
 `npm run print-order:sample -- <session token>` is **testing only**: it reads the customer's LIVE session and uses placeholder ship-to details. Never use it for a real order.
@@ -104,7 +104,7 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
 - One product code per size covers both orientations (6x4 uses the 4x6 code).
 - Any resolution is accepted. We still refuse files under 50% of the print size, only to catch broken/placeholder files.
 - **If a file's shape doesn't match its product, pfRouter silently center-crops it.** So every product has an `aspect` in `config.ts` and the builder refuses an order whose file (after padding) isn't that shape (0.5% tolerance).
-- Testing goes to a separate **demo dealer account**: `resolveDestination()` in `config.ts` (demo by default; live only with `PRINT_DESTINATION=live` and `TEST_MODE` off).
+- Testing goes to a separate **demo dealer account**: `resolveDestination()` in `config.ts`: one setting, `PRINT_LAB_ENV` (demo by default; `live` = dealer 4013). Since step 9 (2026-11-13) a `TEST-` order may go to live; only demo with `TEST_MODE` off is refused.
 - pfRouter watches a shared cloud folder at Persnickety; we see its `_error` folder through the same share. Chosen provider: **Dropbox** (dedicated account, scoped Full-Dropbox app).
 
 **Answered (2026-10-12, Photo Finale):**
@@ -114,7 +114,7 @@ Database: **012 (print rounds: `print_rounds`, `print_order_items`, `print_repri
 - **Repeated `external_id`s are allowed** (a new lab order is created), so the resend path (`<id>-resend-<timestamp>`) may be enabled later. **`RESEND_ENABLED` stays `false`** for now; resending prints a second set and bills a second lab order, so enable it deliberately.
 
 **Still open:**
-1. **The live dealer's (4013) product codes** (Chari). The demo dealer's codes were answered 2026-10-22 and are in `config.ts` (section 13). DealerCodes answered 2026-10-14.
+1. **The live dealer's (4013) product codes**: in `config.ts` since step 9 (2026-11-13) as 7963/7965/7969 per Kevin's brief; Josh still to confirm them for 4013. The demo dealer's codes were answered 2026-10-22 and are in `config.ts` (section 13). DealerCodes answered 2026-10-14.
 2. ~~Native 3x3 / 3.5x3.5 / 4x3?~~ Answered 2026-10-30 (Persnickety): their machines can't run anything under ~3.5x5 on its own, and Kevin + Haily chose **no hand-cutting**. Since step 7 (2026-11-12) **3x3, 3.5x3.5, 4x3 and 3x4 all print on the 4x4 sheet with trim marks** and the customer trims them. The demo 3x3 Press Print code (7364) is no longer used.
 3. ~~Padding placement on 4x4 sheets~~ Decided 2026-11-12 (Kevin + Haily, step 8, layout A): one small print per 4x4 sheet, **centered**, with traditional **corner crop marks** (see "Crop marks" in section 13). No 4x6 pairing. Step 7's bottom-left layout is replaced. Lab samples: `Photo App/Persnickety Trim-Mark Samples (2026-11-12)/`, rebuilt with `npm run print-order:trim-samples -- <photo> <dir> [--portrait <photo>]`; Kevin's reference mockups: `Photo App/Persnickety Crop-Mark Samples (2026-11-12)/`.
 4. ~~Dealer / `_error` / processed folder~~ Answered 2026-10-12 (above); the `processed/` location is ours to configure (decided, see above).
@@ -177,7 +177,7 @@ Nothing in this item is implemented.
 ## 13. Windows machine: pfRouter setup (2026-10-14; demo setup received 2026-10-22)
 Photo Finale (Jason) sent the DealerCodes on 2026-10-14 and the demo setup on 2026-10-22. They are account IDs, not secrets.
 - **Demo: DealerCode 3404, license 21277** (provisioned, ready for test orders)
-- **Live: DealerCode 4013** (its product codes are still TBD until Chari sends them)
+- **Live: DealerCode 4013** (product codes 7963/7965/7969 in `PRODUCT_CODES.live` since step 9, pending Josh's confirmation; live license number still to come from Jason)
 
 Both DealerCodes are set in **pfRouter's config on our Windows machine, not in the XML** (`config.ts` only uses them as a log label). One dealer per running pfRouter instance.
 
@@ -188,7 +188,7 @@ Both DealerCodes are set in **pfRouter's config on our Windows machine, not in t
 
 No logins, passwords or tokens for myLab, pfRouter or Dropbox go in this repo.
 
-**Demo dealer 3404 product codes (Photo Finale, 2026-10-22)**, in `PRODUCT_CODES.demo` in `config.ts`. A `TEST-` order carries these; a real order carries `PRODUCT_CODES.live` (still `TBD-…`). A size printed on the 4x4 sheet is ordered as a 4x4 and takes its code automatically.
+**Demo dealer 3404 product codes (Photo Finale, 2026-10-22)**, in `PRODUCT_CODES.demo` in `config.ts`. Since step 9 an order carries the codes of the lab `PRINT_LAB_ENV` points at (`PRODUCT_CODES.live` is the same 7963/7965/7969; only an unused native 3x4 is still `TBD-`). A size printed on the 4x4 sheet is ordered as a 4x4 and takes its code automatically.
 
 | Our size | Printed as | Demo code |
 |---|---|---|
@@ -212,9 +212,5 @@ Steps:
    - Create `processed/demo` and `processed/live` first. They must sit **outside** the hotfolders (see section 7: pfRouter treats every subfolder of a hotfolder as an order).
 3. **Run one `TEST-` order end to end:** `print-order:deliver` -> pfRouter picks it up -> the order appears in Photo Finale under dealer 3404 (myLab → Orders → Search) -> the order folder is moved to `processed/demo/`.
 
-## 14. Go-live switch (2026-10-14)
-Do this **only at launch**, after the ~10/21 shipped-email shutoff is confirmed and `LIVE_DELIVERY_ALLOWED` is flipped:
-- pfRouter `DealerCode` 3404 -> **4013**
-- hotfolder `demo/` -> **`live/`** (`/LucyDarling-PrintOrders/live/`)
-- `postAction` move destination -> **`/LucyDarling-PrintOrders/processed/live/`**
-- `config.ts`: replace the `TBD-…` values in `PRODUCT_CODES.live` with dealer 4013's codes (from Chari) before the first real order.
+## 14. Go-live switch (rewritten 2026-11-13, step 9)
+Only on Kevin's go. The full checklist (Dropbox folders, myLab Advanced Configuration for the live license, the `PRINT_LAB_ENV=live` setting, the first live TEST- order, switching back) is **`docs/print-orders-live-switch.md`**. In short: create `live/` and `processed/live/`; pfRouter `DealerCode` 3404 -> **4013** with `path` `live/` and `moveTo` `processed/live/`; then `PRINT_LAB_ENV=live` in Vercel Production (redeploy) and in `.env.local`. `LIVE_DELIVERY_ALLOWED` no longer exists: the env var is the one switch.

@@ -1,4 +1,4 @@
-import { maxExtrasPerOrder } from "./config";
+import { maxExtrasPerOrder, type DestinationKind } from "./config";
 import { buildOrder, type BuiltOrder } from "./build-order";
 import type { PrintSnapshot } from "./paid-order";
 import { getSlots } from "@/lib/photo-slots";
@@ -16,7 +16,9 @@ export async function buildFromSnapshot(
   snapshot: PrintSnapshot,
   fetchImage: (storagePath: string) => Promise<Buffer>,
   /** The prints this order was charged for (the round's total), when known. */
-  expectedPrintCount?: number
+  expectedPrintCount?: number,
+  /** Which lab's product codes (default: the active PRINT_LAB_ENV). */
+  lab?: DestinationKind
 ): Promise<BuiltOrder> {
   const info = snapshot.order;
   if (!info) {
@@ -31,6 +33,7 @@ export async function buildFromSnapshot(
     shipTo: info.shipTo,
     customer: info.customer,
     expectedPrintCount,
+    lab,
     paid: {
       bookSlotKeys: getSlots(info.bookTheme).map((s) => s.key),
       maxExtras: maxExtrasPerOrder(info.bookTheme),
@@ -94,10 +97,12 @@ export async function rebuildRecordedOrder(
   shopifyOrderId: string,
   row: RecordedOrderRow | null,
   download: (storagePath: string) => Promise<Buffer>,
-  allowed: string[] = ["ready"]
+  allowed: string[] = ["ready"],
+  /** Which lab's product codes (deliver passes its destination; default: the active PRINT_LAB_ENV). */
+  lab?: DestinationKind
 ): Promise<BuiltOrder> {
   const snapshot = requireReadySnapshot(shopifyOrderId, row, allowed);
-  const order = await buildFromSnapshot(shopifyOrderId, snapshot, frozenOnly(shopifyOrderId, download));
+  const order = await buildFromSnapshot(shopifyOrderId, snapshot, frozenOnly(shopifyOrderId, download), undefined, lab);
   if (row!.external_id && row!.external_id !== order.folderName) {
     throw new Error(`rebuilt id ${order.folderName} differs from the recorded ${row!.external_id} — refusing`);
   }

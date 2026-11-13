@@ -10,10 +10,10 @@ import {
   joinPath,
   normalizeRoot,
 } from "@/lib/print-orders/dropbox";
-import { DropboxDestination, assertDestinationWritable, dropboxClientFor, processedPath } from "@/lib/print-orders/dropbox-destination";
+import { DropboxDestination, dropboxClientFor, processedPath } from "@/lib/print-orders/dropbox-destination";
 import { RESEND_DISABLED_MESSAGE, deliverPrintOrder, type DeliverDeps } from "@/lib/print-orders/deliver";
 import { checkErrorFolder, externalIdFromFolder } from "@/lib/print-orders/error-monitor";
-import { RESEND_ENABLED, LIVE_DELIVERY_ALLOWED, resolveDestination, type Destination } from "@/lib/print-orders/config";
+import { RESEND_ENABLED, resolveDestination, type Destination } from "@/lib/print-orders/config";
 import type { RecordedOrderRow } from "@/lib/print-orders/build-from-snapshot";
 import type { PrintSnapshot } from "@/lib/print-orders/paid-order";
 import { GET as cronGET } from "@/app/api/cron/print-order-errors/route";
@@ -179,11 +179,16 @@ test("the client refuses outside paths and non-writable writes BEFORE any reques
   assert.ok(fake.has(`${ROOT}/demo/ok.jpg`));
 });
 
-test("a demo client can never write to live/, and a live client is refused while live delivery is off", () => {
-  assert.equal(LIVE_DELIVERY_ALLOWED, false);
-  assert.throws(() => assertDestinationWritable(LIVE), /live dealer is disabled/);
-  assert.throws(() => dropboxClientFor(LIVE, { DROPBOX_ROOT_PATH: ROOT, DROPBOX_APP_KEY: "k", DROPBOX_APP_SECRET: "s", DROPBOX_REFRESH_TOKEN: "r" }), /disabled/);
-  assert.doesNotThrow(() => assertDestinationWritable(LIVE, true));
+test("each lab's client writes only to staging/ and its own hotfolder (demo never touches live/, live never demo/)", async () => {
+  const env = { DROPBOX_ROOT_PATH: ROOT, DROPBOX_APP_KEY: "k", DROPBOX_APP_SECRET: "s", DROPBOX_REFRESH_TOKEN: "r" };
+  for (const [dest, other] of [[DEMO, "live"], [LIVE, "demo"]] as const) {
+    const fake = new FakeDropbox();
+    const c = dropboxClientFor(dest, env, fake.fetch as typeof fetch);
+    await c.upload(`${ROOT}/${dest.hotfolder}/ok.jpg`, Buffer.from("x"));
+    await c.upload(`${ROOT}/staging/ok.jpg`, Buffer.from("x"));
+    await assert.rejects(c.upload(`${ROOT}/${other}/no.jpg`, Buffer.from("x")), DropboxPathRefused);
+    await assert.rejects(c.upload(`${ROOT}/processed/${dest.hotfolder}/no.jpg`, Buffer.from("x")), DropboxPathRefused);
+  }
   assert.throws(() => dropboxClientFor(DEMO, { DROPBOX_ROOT_PATH: ROOT }), /credentials are incomplete/);
 });
 
@@ -527,4 +532,46 @@ test("webhook route: no signature is 401 whether or not the secret is set; a sig
     if (saved === undefined) delete process.env.SHOPIFY_WEBHOOK_SECRET;
     else process.env.SHOPIFY_WEBHOOK_SECRET = saved;
   }
+});
+
+// ---------- step 9: the live lab (PRINT_LAB_ENV=live) ----------
+
+test("deliver (live lab): a TEST- order goes to live/ with the live product codes and never touches demo/", async () => {
+  const fake = new FakeDropbox();
+  const env = { DROPBOX_ROOT_PATH: ROOT, DROPBOX_APP_KEY: "k", DROPBOX_APP_SECRET: "s", DROPBOX_REFRESH_TOKEN: "r" };
+  const liveTest = resolveDestination("live", true, undefined); // TEST_MODE stays on: a test order printed by the real lab
+  const marks: Array<[string, string, string]> = [];
+  const { deps } = deliverDeps(fake, readyRow(), {
+    destination: liveTest,
+    destinationFor: (dest, folderName) => new DropboxDestination(dropboxClientFor(dest, env, fake.fetch as typeof fetch), dest, { runId: "r1", folderName }),
+    markSent: async (id, from, dest) => { marks.push([id, from, dest.kind]); return true; },
+  });
+  const r = await deliverPrintOrder(ORDER_ID, {}, deps);
+  assert.equal(r.location, `${ROOT}/live/TEST-${ORDER_ID}`);
+  assert.equal(r.destination.dealer, "dealer 4013");
+  assert.deepEqual(marks, [[ORDER_ID, "ready", "live"]], "print_orders.destination records live");
+  const xml = fake.children(`${ROOT}/live/TEST-${ORDER_ID}`).find((n) => n.name.endsWith(".xml"))!.data!.toString();
+  // ultrasound 4x3 and baby_bump 3x3 print on the 4x4 sheet, baby_photo is a native 4x4: all live 7963.
+  assert.deepEqual([...xml.matchAll(/product="([^"]+)"/g)].map((m) => m[1]), ["7963", "7963", "7963"]);
+  assert.ok(!fake.seenPaths.some((p) => /\/demo(\/|$)/i.test(p)), "nothing touched demo/");
+});
+
+test("_error check (live lab): reads live/_error only; a demo/_error folder is not its business", async () => {
+  const fake = new FakeDropbox();
+  fake.addFile(`${ROOT}/live/_error/TEST-1/reason.txt`, Buffer.from("bad\n"));
+  fake.addFile(`${ROOT}/demo/_error/TEST-2/reason.txt`, Buffer.from("old demo\n"));
+  const unknown: string[] = [];
+  const r = await checkErrorFolder({
+    client: client(fake, []),
+    dest: LIVE,
+    findSent: async (ids) => ids.map((id) => ({ shopifyOrderId: id.slice(5), externalId: id })),
+    markError: async () => true,
+    alert: async () => {},
+    findKnown: async (ids) => ids,
+    claimUnknown: async (destination, folder) => { unknown.push(`${destination}/${folder}`); return true; },
+    alertUnknown: async () => {},
+  });
+  assert.deepEqual(r.marked, ["TEST-1"]);
+  assert.deepEqual(unknown, []);
+  assert.ok(fake.seenPaths.every((p) => !p.toLowerCase().includes("/demo")), "never looked in demo/");
 });

@@ -12,9 +12,11 @@ import {
   ASPECT_TOLERANCE,
   DEFAULT_DELIVERY_TYPE,
   PRINT_PRODUCTS,
+  resolveDestination,
   TEST_ID_PREFIX,
   TEST_MODE,
   VENDOR_NAME,
+  type DestinationKind,
 } from "./config";
 import { prepareImage, ImageProblem } from "./image";
 import { buildOrderXml, validateOrder, type PrintOrderInput, type ShipTo } from "./order-xml";
@@ -43,6 +45,8 @@ export interface BuildOrderParams {
   shipTo: ShipTo;
   customer: { fname?: string; lname?: string };
   testMode?: boolean;
+  /** Which lab's product codes to use. Defaults to the active PRINT_LAB_ENV (resolveDestination). */
+  lab?: DestinationKind;
   /**
    * Exact print count to require (used by the manual sample script).
    */
@@ -99,9 +103,9 @@ export async function buildOrder(p: BuildOrderParams): Promise<BuiltOrder> {
   const errors: string[] = [];
   const warnings: string[] = [];
   const testMode = p.testMode ?? TEST_MODE;
-  // Each dealer has its own product codes. Test orders go only to the demo dealer and
-  // real ones only to live (resolveDestination refuses any other pairing).
-  const products = PRINT_PRODUCTS[testMode ? "demo" : "live"];
+  // Each dealer has its own product codes: those of the lab PRINT_LAB_ENV points at (the same
+  // setting delivery and the cron checks use). resolveDestination refuses demo with real ids.
+  const products = PRINT_PRODUCTS[p.lab ?? resolveDestination(undefined, testMode).kind];
 
   type Job = {
     base: string;

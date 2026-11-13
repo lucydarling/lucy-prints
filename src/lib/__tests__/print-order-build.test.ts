@@ -178,14 +178,17 @@ test("uncropped photos, bad quantities and charge mismatches refuse", async () =
 test("test mode prefixes external_id; an id too long after the prefix refuses", async () => {
   const a = await fixture({ externalId: "x".repeat(28) });
   await assert.rejects(buildOrder(a.params), /external_id must be 1-32/);
-  const b = await fixture({ testMode: false, externalId: "REAL1" });
+  // A real id (test mode off) is refused on the demo lab, the default.
+  await assert.rejects(buildOrder((await fixture({ testMode: false, externalId: "REAL1" })).params), /TEST_MODE is off/);
+  const b = await fixture({ testMode: false, externalId: "REAL1", lab: "live" });
   const real = await buildOrder(b.params);
   assert.equal(real.folderName, "REAL1");
-  // Test orders carry the demo dealer's product codes, real ones the live dealer's.
+  // Each order carries the product codes of the lab it is built for.
   const demoCodes = new Set(Object.values(PRODUCT_CODES.demo));
+  const liveCodes = new Set(Object.values(PRODUCT_CODES.live));
   const test = await buildOrder((await fixture()).params);
   assert.ok(test.input.items.length > 0 && test.input.items.every((i) => demoCodes.has(i.product)));
-  assert.ok(real.input.items.every((i) => i.product.startsWith("TBD-")));
+  assert.ok(real.input.items.length > 0 && real.input.items.every((i) => liveCodes.has(i.product) && !i.product.startsWith("TBD-")));
 });
 
 test("local destination writes images first and the XML last; ZIP holds the same files", async () => {
