@@ -58,7 +58,7 @@ It rebuilds from the frozen snapshot, uploads to `staging/`, moves the finished 
 - Round 2 contains **only** the photos added since round 1 (no repeats); a reprint round contains the new crop (same slot name) and not the old one.
 - Product codes are demo dealer 3404's (since 2026-10-22): 4x4 and every size on the 4x4 sheet (3x3, 3.5x3.5, 4x3/3x4, since 2026-11-12) → 7963, 4x6/6x4 → 7965, 5x5 → 7969. A `TBD-…` code in a `TEST-` order means something is wrong.
 - No `WARNING:` lines about off-size images (or understand them).
-- Every 3x3, 3.5x3.5, 4x3 and 3x4 file is a 1200x1200 sheet with the photo bottom-left and short gray trim marks in the white area, none on the photo. A 7364 code anywhere means an old build.
+- Every 3x3, 3.5x3.5, 4x3 and 3x4 file is a 1200x1200 sheet with the photo centered and short gray corner crop marks in the white margin, none on the photo (since step 8, 2026-11-12). A 7364 code anywhere means an old build.
 - In the database: `print_order_items` has one row per printed slot/extra (reprints at `generation` 2) and `print_rounds.status = 'paid'`.
 
 ## 4. Refunds

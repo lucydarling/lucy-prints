@@ -100,20 +100,20 @@ test("a stored print_size that disagrees with the book slot is flagged", async (
   assert.match(order.warnings[0], /baby_bump: stored as 4x4 but the book slot prints 3x3/);
 });
 
-test("a 4x3 print sits bottom-left on a white 4x4 sheet; only its two trim marks are drawn in the padding", async () => {
+test("a 4x3 print sits centered on a white 4x4 sheet (full width); only its four crop-mark ticks are drawn in the margin", async () => {
   const { params } = await fixture();
   const order = await buildOrder(params);
   const f = order.images.find((x) => x.name.includes("ultrasound"))!;
   const { data, info } = await sharp(f.data).raw().toBuffer({ resolveWithObject: true });
   const px = (x: number, y: number) => [0, 1, 2].map((c) => data[(y * info.width + x) * info.channels + c]);
-  // Padding is top 300px and right 0 (4x3 is 1200 wide): white except the marks on rows 296-299.
-  for (const [x, y] of [[5, 5], [600, 150], [1195, 290], [600, 292]]) { // row 292: no full-width line (rows 296-299 ring a little from JPEG next to the photo)
-    assert.ok(px(x, y).every((v) => v >= 253), `expected white at ${x},${y}: ${px(x, y)}`);
+  // Margins are rows 0-149 and 1050-1199 (4x3 is 1200 wide, 900 tall): white except the ticks.
+  for (const [x, y] of [[5, 5], [600, 75], [1195, 140], [600, 140], [600, 1060], [600, 1190]]) {
+    assert.ok(px(x, y).every((v) => v >= 250), `expected white at ${x},${y}: ${px(x, y)}`);
   }
-  for (const [x, y] of [[60, 298], [1120, 298]]) {
-    assert.ok(px(x, y).every((v) => Math.abs(v - 128) <= 6), `expected a gray trim mark at ${x},${y}: ${px(x, y)}`);
+  for (const [x, y] of [[60, 147], [1120, 147], [60, 1052], [1120, 1052]]) {
+    assert.ok(px(x, y).every((v) => Math.abs(v - 128) <= 6), `expected a gray tick at ${x},${y}: ${px(x, y)}`);
   }
-  assert.ok(!px(600, 450).every((v) => v >= 253), "photo area should not be white");
+  assert.ok(!px(600, 600).every((v) => v >= 253), "photo area should not be white");
 });
 
 test("a 3x3 book photo is now ordered on the 4x4 sheet, as the 4x4 code", async () => {
