@@ -58,7 +58,7 @@ export async function deliverPrintOrder(
     throw new Error(`order ${shopifyOrderId} is "${row.status}", not ready — refusing to deliver it`);
   }
 
-  const order = await rebuildRecordedOrder(shopifyOrderId, row, deps.download, resend ? ["sent"] : ["ready"]);
+  const order = await rebuildRecordedOrder(shopifyOrderId, row, deps.download, resend ? ["sent"] : ["ready"], dest.kind);
   const now = (deps.now ?? (() => new Date()))();
   const folderName = resend ? `${order.folderName}-resend-${now.toISOString().replace(/\D/g, "").slice(0, 14)}` : order.folderName;
 

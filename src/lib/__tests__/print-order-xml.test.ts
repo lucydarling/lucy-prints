@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ALL_PRINT_SIZES, getPrintDimensions, isAlwaysPaddedTo4x4 } from "@/lib/photo-slots";
-import { PRINT_PRODUCTS, PRODUCT_CODES, productEntry, resolveDestination } from "@/lib/print-orders/config";
+import { PRINT_PRODUCTS, PRODUCT_CODES, productEntry } from "@/lib/print-orders/config";
 import { buildOrderXml, escapeXmlAttr, validateOrder, type PrintOrderInput } from "@/lib/print-orders/order-xml";
 
 const valid = (): PrintOrderInput => ({
@@ -29,7 +29,7 @@ test("every PrintSize has a product mapping for both dealers; every size under 4
   assert.equal(isAlwaysPaddedTo4x4("4x3"), true);
 });
 
-test("demo dealer 3404 product codes (Photo Finale, 2026-10-22); live stays a placeholder", () => {
+test("demo dealer 3404 product codes (Photo Finale, 2026-10-22)", () => {
   const code = (size: keyof typeof PRINT_PRODUCTS.demo) => PRINT_PRODUCTS.demo[size].productCode;
   assert.equal(code("4x4"), "7963");
   assert.equal(code("4x6"), "7965");
@@ -40,7 +40,6 @@ test("demo dealer 3404 product codes (Photo Finale, 2026-10-22); live stays a pl
   assert.equal(code("4x3"), "7963");
   // 4x3 switched to native would be ordered as 3x4 Matte.
   assert.equal(productEntry("4x3", { printedAs: "native" }, PRODUCT_CODES.demo).productCode, "7960");
-  for (const size of ALL_PRINT_SIZES) assert.match(PRINT_PRODUCTS.live[size].productCode, /^TBD-/, size);
 });
 
 test("a valid mail order passes and matches the spec's mail shape", () => {
@@ -117,14 +116,4 @@ test("a padded size's aspect follows its print method: sheet → the sheet's sha
   assert.throws(() => productEntry("3x3", { printedAs: "native" }, PRODUCT_CODES.demo), /no 3x3 paper/);
 });
 
-test("destination: demo by default with test mode on; live only with the env var and test mode off", () => {
-  assert.equal(resolveDestination(undefined, true).kind, "demo");
-  assert.equal(resolveDestination("", true).hotfolder, "demo");
-  assert.equal(resolveDestination("demo", true).kind, "demo");
-  assert.equal(resolveDestination("live", false).kind, "live");
-  assert.throws(() => resolveDestination("live", true), /TEST_MODE is on/);
-  assert.throws(() => resolveDestination(undefined, false), /TEST_MODE is off/);
-  assert.throws(() => resolveDestination("demo", false), /TEST_MODE is off/);
-  assert.throws(() => resolveDestination("LIVE", false), /must be "demo" or "live"/);
-  assert.throws(() => resolveDestination("prod", true), /must be "demo" or "live"/);
-});
+// The PRINT_LAB_ENV switch itself is tested in print-order-lab-env.test.ts (step 9).

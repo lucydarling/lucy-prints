@@ -1,5 +1,5 @@
 import type { BuiltOrder } from "./build-order";
-import { LIVE_DELIVERY_ALLOWED, type Destination } from "./config";
+import type { Destination } from "./config";
 import type { OrderDestination } from "./destination";
 import { DropboxApiError, DropboxClient, dropboxCredentialsFromEnv, joinPath, type Env } from "./dropbox";
 
@@ -11,7 +11,8 @@ import { DropboxApiError, DropboxClient, dropboxCredentialsFromEnv, joinPath, ty
  *   processed/demo/<folder>/     where pfRouter moves an accepted order (postAction "move"). OUTSIDE the
  *   processed/live/<folder>/     hotfolders on purpose: pfRouter treats every subfolder of a hotfolder as an order.
  *                                We configure this destination ourselves; we only ever READ it (never writable).
- *   live/…                       the real dealer — nothing writes here until LIVE_DELIVERY_ALLOWED
+ *   live/, live/_error/          the same for the live dealer 4013. Only the tree PRINT_LAB_ENV points at
+ *                                is ever written (config.ts resolveDestination).
  */
 export const STAGING = "staging";
 export const ERROR_FOLDER = "_error";
@@ -19,7 +20,6 @@ export const PROCESSED_FOLDER = "processed";
 
 /** A Dropbox client for this destination: writes only to staging/ and this destination's hotfolder. */
 export function dropboxClientFor(dest: Destination, env: Env = process.env, fetchFn?: typeof fetch) {
-  assertDestinationWritable(dest);
   return new DropboxClient({
     root: env.DROPBOX_ROOT_PATH ?? "",
     writable: [STAGING, dest.hotfolder],
@@ -31,12 +31,6 @@ export function dropboxClientFor(dest: Destination, env: Env = process.env, fetc
 /** A read-only client (the _error check). */
 export function readOnlyDropboxClient(env: Env = process.env, fetchFn?: typeof fetch) {
   return new DropboxClient({ root: env.DROPBOX_ROOT_PATH ?? "", writable: [], credentials: dropboxCredentialsFromEnv(env), fetch: fetchFn });
-}
-
-export function assertDestinationWritable(dest: Destination, liveAllowed = LIVE_DELIVERY_ALLOWED) {
-  if (dest.kind === "live" && !liveAllowed) {
-    throw new Error("delivery to the live dealer is disabled (LIVE_DELIVERY_ALLOWED is false) — nothing written");
-  }
 }
 
 export const hotfolderPath = (c: DropboxClient, dest: Destination) => joinPath(c.root, dest.hotfolder);
@@ -59,9 +53,7 @@ export class DropboxDestination implements OrderDestination {
     private readonly client: DropboxClient,
     private readonly dest: Destination,
     private readonly opts: { runId: string; folderName?: string }
-  ) {
-    assertDestinationWritable(dest);
-  }
+  ) {}
 
   /** Remove leftovers of earlier failed runs of this order from staging (our own copies only). */
   async cleanStaging(folder: string): Promise<string[]> {

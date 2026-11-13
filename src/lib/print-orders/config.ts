@@ -3,7 +3,7 @@ import { getPrintDimensions, getProductForTheme, type PrintSize } from "@/lib/ph
 /**
  * Everything about print orders that is not yet known. Each value marked
  * PLACEHOLDER must be confirmed with Photo Finale / Persnickety before any
- * order is delivered. Only the demo dealer's product codes are real.
+ * order is delivered.
  */
 
 /** PLACEHOLDER — confirm with Photo Finale/Persnickety: name of this system in `apm_order/@vendor`. */
@@ -17,12 +17,22 @@ export const TEST_MODE = true;
 export const TEST_ID_PREFIX = "TEST-";
 
 /**
- * Where orders go. Testing goes to a separate DEMO dealer account (its own
- * hotfolder), never the real one. Only two combinations are allowed:
- *   - "demo": the default. Requires TEST_MODE on.
- *   - "live": only when the env var PRINT_DESTINATION=live is set AND TEST_MODE is off.
- * Anything else throws. LIVE_DELIVERY_ALLOWED additionally blocks every write to
- * the live hotfolder until delivery has been proven on the demo dealer.
+ * Which print lab account orders go to: ONE setting, the env var PRINT_LAB_ENV.
+ *   - "demo" (the default, also when unset): Photo Finale demo dealer 3404, demo product
+ *     codes, Dropbox hotfolder `demo/` (+ `demo/_error/`, `processed/demo/`).
+ *   - "live": the real dealer 4013 (Persnickety), live product codes, hotfolder `live/`
+ *     (+ `live/_error/`, `processed/live/`).
+ * Everything that differs between the two (dealer label, product codes, folder tree, the
+ * _error and stalled cron checks) follows from this one value. Delivery writes, and the
+ * cron watches, only the active tree.
+ *
+ * TEST_MODE is separate: it only decides the `TEST-` prefix on external ids (and who may
+ * get customer emails). A TEST- order may go to either lab (live + TEST_MODE = a test order
+ * printed by the real lab). The one refused pairing is demo with TEST_MODE off: real ids
+ * must never go to the demo dealer.
+ *
+ * PRINT_DESTINATION was this setting's old name (documented as never set). It is still read so a
+ * stale value can't be silently ignored: if it is set and disagrees with PRINT_LAB_ENV, refuse.
  */
 export type DestinationKind = "demo" | "live";
 export interface Destination {
@@ -32,29 +42,30 @@ export interface Destination {
   hotfolder: DestinationKind;
 }
 /**
- * Photo Finale DealerCodes (2026-10-14). A label for logs only: the code itself
- * is set in pfRouter's config on the Windows machine, never in the XML.
+ * Photo Finale DealerCodes (Jason, 2026-10-14). A label for logs only: the code itself
+ * is set in pfRouter's config on the Windows machine, never in the XML (the apm_order
+ * spec has no dealer field).
  */
-const DEALERS: Record<DestinationKind, string> = {
+export const DEALERS: Record<DestinationKind, string> = {
   demo: "dealer 3404",
   live: "dealer 4013",
 };
-export const LIVE_DELIVERY_ALLOWED = false;
 
 export function resolveDestination(
-  envValue: string | undefined = process.env.PRINT_DESTINATION,
-  testMode: boolean = TEST_MODE
+  envValue: string | undefined = process.env.PRINT_LAB_ENV,
+  testMode: boolean = TEST_MODE,
+  legacyValue: string | undefined = process.env.PRINT_DESTINATION
 ): Destination {
   const want = (envValue ?? "").trim() || "demo";
-  if (want === "demo") {
-    if (!testMode) throw new Error("PRINT_DESTINATION is demo but TEST_MODE is off — refusing (real ids must not go to the demo dealer)");
-    return { kind: "demo", dealer: DEALERS.demo, hotfolder: "demo" };
+  if (want !== "demo" && want !== "live") throw new Error(`PRINT_LAB_ENV must be "demo" or "live" (got "${want}")`);
+  const legacy = (legacyValue ?? "").trim();
+  if (legacy && legacy !== want) {
+    throw new Error(`PRINT_DESTINATION="${legacy}" disagrees with PRINT_LAB_ENV="${want}" — remove PRINT_DESTINATION (renamed to PRINT_LAB_ENV)`);
   }
-  if (want === "live") {
-    if (testMode) throw new Error("PRINT_DESTINATION=live but TEST_MODE is on — refusing");
-    return { kind: "live", dealer: DEALERS.live, hotfolder: "live" };
+  if (want === "demo" && !testMode) {
+    throw new Error("PRINT_LAB_ENV is demo but TEST_MODE is off — refusing (real ids must not go to the demo dealer)");
   }
-  throw new Error(`PRINT_DESTINATION must be "demo" or "live" (got "${want}")`);
+  return { kind: want, dealer: DEALERS[want], hotfolder: want };
 }
 
 /**
@@ -110,12 +121,16 @@ export const PRODUCT_CODES: Record<DestinationKind, ProductCodes> = {
     "4x6": "7965",
     "5x5": "7969",
   },
-  // PLACEHOLDER — live dealer 4013's codes, waiting on Chari.
+  // Live dealer 4013 (Persnickety), Kevin's step 9 brief 2026-11-13: 7963 / 7965 / 7969 for
+  // 4x4 / 4x6 / 5x5 matte (lustre). The same Photo Finale IDs as the demo dealer, where Jason's
+  // 2026-10-22 demo setup names them 4x4 Matte / 4x6 Matte / 5x5 Matte. Chari (2026-10-30):
+  // "whatever myLab defaults to"; Josh has not yet confirmed them for 4013. Every sheet size
+  // (3x3, 3.5x3.5, 4x3/3x4) orders as the 4x4 code.
   live: {
-    "4x3": "TBD-4X3",
-    "4x4": "TBD-4X4",
-    "4x6": "TBD-4X6",
-    "5x5": "TBD-5X5",
+    "4x3": "TBD-4X3", // never used: 4x3 prints on the 4x4 sheet (a native 3x4 would need its own live code)
+    "4x4": "7963",
+    "4x6": "7965",
+    "5x5": "7969",
   },
 };
 

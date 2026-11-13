@@ -26,7 +26,7 @@ Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE
 **Vercel (Production)**
 - [ ] `NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT` = `48078680424673`. Set in Production and Preview. The old `NEXT_PUBLIC_SHOPIFY_VARIANT_STANDARD` and `NEXT_PUBLIC_SHOPIFY_VARIANT_LUXURY` variables are no longer read by any code and can be deleted from Vercel. **It is a `NEXT_PUBLIC_` variable, so redeploy after setting it.**
 - [ ] `SHOPIFY_WEBHOOK_SECRET` = the signing secret Shopify shows when you create the webhook (below). Redeploy.
-- [ ] Already set: `PRINT_PREVIEW_SECRET`, `PRINT_REPLY_TO`, `NEXT_PUBLIC_APP_URL`, Dropbox vars, `CRON_SECRET`. **Not set: `PRINT_ORDERS_ENABLED`, `PRINT_DESTINATION`.**
+- [ ] Already set: `PRINT_PREVIEW_SECRET`, `PRINT_REPLY_TO`, `NEXT_PUBLIC_APP_URL`, Dropbox vars, `CRON_SECRET`. **Not set: `PRINT_ORDERS_ENABLED`, `PRINT_LAB_ENV` (demo by default; `PRINT_DESTINATION` is its old name).**
 
 **Webhook**
 - [ ] Shopify admin → Settings → Notifications → Webhooks → Create webhook: Event **Order payment** (`orders/paid`), Format JSON, URL `https://memories.lucydarling.com/api/webhooks/shopify/orders-paid`. Copy the signing secret into `SHOPIFY_WEBHOOK_SECRET` (above) and redeploy. Non-print orders are ignored (200, nothing recorded).
