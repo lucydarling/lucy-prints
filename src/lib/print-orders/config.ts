@@ -268,8 +268,6 @@ export const STALLED_LOOKBACK_HOURS = 72;
 /** An unpaid round (recorded when the customer clicks "Print my photos") stops being payable after this long. */
 export const ROUND_TTL_HOURS = 24;
 
-/** PLACEHOLDER — confirm with Chari: shipping and handling per order (a flat Shopify shipping-profile rate, not computed here). */
-export const SHIPPING_AND_HANDLING_CENTS = 600;
 
 /**
  * Which Shopify variant sells each kind of print. One logical key per price
@@ -293,10 +291,11 @@ export function variantKeyFor(size: PrintSize, kind: PrintItemKind): PrintVarian
   return VARIANT_KEY_BY_SIZE[size];
 }
 /**
- * PLACEHOLDER — price per print in cents, confirm with Chari. The real price is the
- * Shopify variant's; this copy is only for the breakdown shown before checkout.
+ * Every print variant key. Prices are NOT kept in code: the confirm step reads the variant's
+ * price and the shipping-profile rate from Shopify at click time (shopify-price.ts), so it
+ * always shows what checkout will charge (Kevin, 2026-11-13; replaced the $20 / $6 placeholders).
  */
-export const PRICE_CENTS_BY_VARIANT_KEY: Record<PrintVariantKey, number> = { print: 2000 };
+export const PRINT_VARIANT_KEYS: readonly PrintVariantKey[] = ["print"];
 /**
  * The variant id for each key: NEXT_PUBLIC_SHOPIFY_VARIANT_PRINT (variant
  * 48078680424673, "Photo print" in Shopify). Static env reads so Next inlines
@@ -309,5 +308,5 @@ export function variantIdForKey(key: PrintVariantKey, env: NodeJS.ProcessEnv = p
 }
 /** Every variant id that counts as a print line on a paid order. */
 export function allPrintVariantIds(env: NodeJS.ProcessEnv = process.env): string[] {
-  return [...new Set((Object.keys(PRICE_CENTS_BY_VARIANT_KEY) as PrintVariantKey[]).map((k) => variantIdForKey(k, env)))];
+  return [...new Set(PRINT_VARIANT_KEYS.map((k) => variantIdForKey(k, env)))];
 }

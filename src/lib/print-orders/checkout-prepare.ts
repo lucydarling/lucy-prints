@@ -3,6 +3,7 @@ import { printingMessage, validatePrintRequest } from "./print-request";
 import { computeRound, priceBreakdown, type ReprintRow, type RoundSummary } from "./round";
 import { printedSlotCount, type PrintedState } from "./printed";
 import type { SessionExtraRow, SessionPhotoRow } from "./build-order";
+import type { ShopifyPricing } from "./shopify-price";
 
 export type CheckoutPrepared =
   | {
@@ -38,6 +39,11 @@ export async function prepareCheckout(input: {
   /** Throws if the Shopify variant env vars are missing. */
   buildUrl?: typeof buildFreshCartCheckoutUrl;
   variantId?: Parameters<typeof computeRound>[0]["variantId"];
+  /**
+   * Shopify's prices for these variant quantities (fetchShopifyPricing in the route). Called
+   * before the round is recorded, so a failure records nothing. Throws → the route answers 503.
+   */
+  fetchPricing: (quantities: Record<string, number>) => Promise<ShopifyPricing>;
 }): Promise<CheckoutPrepared> {
   const round = computeRound({
     bookTheme: input.bookTheme,
@@ -56,6 +62,7 @@ export async function prepareCheckout(input: {
   });
   if (check.errors.length > 0) return { ok: false, errors: check.errors };
 
+  const price = priceBreakdown(round.byKey, await input.fetchPricing(round.quantities), input.variantId);
   const roundId = await input.createRound(round);
   const url = (input.buildUrl ?? buildFreshCartCheckoutUrl)({
     quantities: round.quantities,
@@ -75,6 +82,6 @@ export async function prepareCheckout(input: {
     total: round.total,
     printedSoFar: check.printedSoFar,
     of: check.of,
-    price: priceBreakdown(round.byKey),
+    price,
   };
 }

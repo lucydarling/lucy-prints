@@ -2,7 +2,7 @@
 
 Written 2026-10-11 for print-in-rounds (step 5). **Nothing in this rehearsal goes to Photo Finale or Persnickety.** Delivery is manual, to the Dropbox `demo/` hotfolder only, in TEST_MODE (`TEST-` ids; customer emails only reach @lucydarling.com addresses). `PRINT_ORDERS_ENABLED` stays unset; Justin sees the feature only through the private preview link.
 
-Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE_CENTS_BY_VARIANT_KEY` in `src/lib/print-orders/config.ts`), **$6.00 S&H per order**, **8-print minimum** (`MIN_PRINTS_PER_ORDER`, Persnickety's, confirmed by Chari 2026-10-30). The price Shopify charges is the variant's price; the number in the confirm step comes from `config.ts`, so **change both together** or the confirm step and checkout will disagree.
+Prices come from Shopify at click time (the "Photo print" variant price and the shipping profile's quote; `npm run print-order:price-check` shows them), **8-print minimum** (`MIN_PRINTS_PER_ORDER`, Persnickety's, confirmed by Chari 2026-10-30). The price Shopify charges is the variant's price; the number in the confirm step comes from `config.ts`, so **change both together** or the confirm step and checkout will disagree.
 
 ## 1. Setup checklist (Kevin)
 
@@ -12,7 +12,7 @@ Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE
 
 **Shopify product "Custom Photo Prints for Memory Book"**
 1. Variants: one variant, "Photo print" (id `48078680424673`). Done 2026-10-11 (the Luxury variant is deleted).
-2. Price: currently a **$1.00 placeholder** in Shopify. For the rehearsal the paid amount does not matter to the app; for launch set the real price and keep it equal to `PRICE_CENTS_BY_VARIANT_KEY.print` ÷ 100.
+2. Price: currently a **$1.00 placeholder** in Shopify. For the rehearsal the paid amount does not matter to the app; for launch set the real price in Shopify; the confirm step reads it from Shopify, so there is nothing to keep in sync.
 3. Inventory: don't track quantity. "This is a physical product" stays on (shipping is needed).
 4. **Status: Active** (done; the cart link answers 410 while it is Draft).
 5. **Keep it out of collections and search:**
@@ -35,8 +35,8 @@ Prices below are PLACEHOLDERS until Chari confirms: **$20.00 per print** (`PRICE
 
 1. Justin opens the **preview link** you give him (`https://memories.lucydarling.com/review?print_preview=<PRINT_PREVIEW_SECRET>`) in the browser he'll use. It sets a 30-day cookie; only that browser sees print ordering.
 2. He starts a book with an **@lucydarling.com email** (so test-mode emails reach him) and saves at least **8 photos** (extras count too). Use real-size photos.
-3. On the review page: **Print my photos** → the confirm step must read *"You're printing N new photos… 0 of 49 printed so far."* with the price lines (N × $20.00, S&H $6.00, total). → *Continue to checkout* → he pays with his own card.
-4. Checkout must show exactly the confirm step's quantity and `Shipping & handling $6.00`. His cart should contain only the print product (the link empties the cart first).
+3. On the review page: **Print my photos** → the confirm step must read *"You're printing N new photos… 0 of 49 printed so far."* with the price lines (N × the Shopify variant price, S&H = Shopify's quote, total before tax). → *Continue to checkout* → he pays with his own card.
+4. Checkout must show exactly the confirm step's quantity, per-print price and shipping amount (Shopify names the rate "Photo Print Shipping"); only tax is added. His cart should contain only the print product (the link empties the cart first).
 5. **Round 2:** he adds more photos (at least 8 new prints per round; extras count) and orders again → the confirm step counts only photos added since round 1, and *"X of 49 printed so far"* includes round 1. Printed photos are labelled **Printed** and can't be changed.
 6. **Reprint:** on a printed photo he taps **Replace photo**, crops a new one, and the card says *replacement added to your next order*. Round 3 includes it (confirm step: "…and 1 reprint").
 7. **Under-minimum / nothing-new:** with fewer than 8 new prints, or nothing new, the button explains why and nothing is charged.
