@@ -18,8 +18,8 @@ export class ImageProblem extends Error {}
 /**
  * Validate one stored cropped image and turn it into the print file:
  * EXIF-rotated, sRGB, JPEG q95, 300 DPI, and (when the product is printed on
- * a sheet) placed bottom-left on a white sheet with padding top/right and gray
- * trim marks in the padding (see trimMarkRects).
+ * a sheet) centered on a white sheet with gray corner crop marks in the margin
+ * (see trimMarkRects).
  * A native print is never resized (the lab scales the file to its paper; a short
  * image is flagged, not stretched). A sheet print IS scaled to exactly its print
  * size, because the customer cuts it out at that size: a 3x3 that came in at
@@ -114,14 +114,15 @@ export async function prepareImage(
 }
 
 /**
- * The sheet as raw RGB: white, the `w`×`h` RGB photo bottom-left (padding on top and to the right,
- * as the customer ZIP does), then the trim marks. The photo's pixels are copied unchanged.
+ * The sheet as raw RGB: white, the `w`×`h` RGB photo centered (see photoOrigin), then the crop
+ * marks. The photo's pixels are copied unchanged.
  */
 export async function composeSheet(photoRgb: Buffer, w: number, h: number, sw: number, sh: number): Promise<Buffer> {
   const { r, g, b } = TRIM_MARK.COLOR;
+  const { x, y } = photoOrigin(w, h, sw, sh);
   return sharp({ create: { width: sw, height: sh, channels: 3, background: "#FFFFFF" } })
     .composite([
-      { input: photoRgb, raw: { width: w, height: h, channels: 3 }, left: 0, top: sh - h },
+      { input: photoRgb, raw: { width: w, height: h, channels: 3 }, left: x, top: y },
       ...trimMarkRects(w, h, sw, sh).map((m) => ({
         input: { create: { width: m.width, height: m.height, channels: 3 as const, background: { r, g, b } } },
         left: m.x,
@@ -133,44 +134,61 @@ export async function composeSheet(photoRgb: Buffer, w: number, h: number, sw: n
     .toBuffer();
 }
 
+/** Where a `w`×`h` photo sits on a `sw`×`sh` sheet: centered. Refuses a half-pixel offset. */
+export function photoOrigin(w: number, h: number, sw: number, sh: number): { x: number; y: number } {
+  const x = (sw - w) / 2;
+  const y = (sh - h) / 2;
+  if (x < 0 || y < 0 || !Number.isInteger(x) || !Number.isInteger(y)) {
+    throw new Error(`${w}x${h} cannot be centered on ${sw}x${sh} on whole pixels`);
+  }
+  return { x, y };
+}
+
 export interface MarkRect {
   x: number;
   y: number;
   width: number;
   height: number;
-  /** Which cut it marks and how: "h" = the cut along the photo's top edge, "v" = along its right edge. */
-  cut: "h" | "v";
-  kind: "extension" | "flush";
+  /** The cut edge it marks. */
+  edge: "top" | "bottom" | "left" | "right";
+  /** "corner": in the margin beyond the end of the edge. "tick": beside a photo edge that runs to the sheet edge. */
+  kind: "corner" | "tick";
 }
 
 /**
- * The trim marks for a `w`×`h` photo placed bottom-left on a `sw`×`sh` sheet (see TRIM_MARK).
- * Cut lines: y = sh − h (the photo's top edge, if there is padding above it) and x = w (its right
- * edge, if there is padding to its right). Every mark lies in the padding with its photo-side edge
- * exactly on its cut line, so no mark ever covers a photo pixel. Pure, so tests can check it.
+ * The crop marks for a `w`×`h` photo centered on a `sw`×`sh` sheet (see TRIM_MARK). A cut edge is a
+ * photo edge with white margin outside it. Each of its two ends gets one mark lying in the
+ * THICKNESS px just outside the edge: a corner mark (GAP past the photo's corner to EDGE_MARGIN
+ * before the sheet edge) where there is margin beyond that end, else a TICK_LENGTH tick EDGE_MARGIN
+ * in from the sheet edge. No mark ever covers a photo pixel. Pure, so tests can check it.
  */
 export function trimMarkRects(w: number, h: number, sw: number, sh: number): MarkRect[] {
-  const { THICKNESS: T, GAP: G, EDGE_MARGIN: M, FLUSH_LENGTH: F, MIN_EXTENSION } = TRIM_MARK;
-  const top = sh - h;
-  const right = sw - w;
-  if ((top > 0 && top < T) || (right > 0 && right < T)) {
-    throw new Error(`${w}x${h} on ${sw}x${sh}: padding too thin for a ${T}px trim mark`);
-  }
+  const { THICKNESS: T, GAP: G, EDGE_MARGIN: E, TICK_LENGTH: L } = TRIM_MARK;
+  const { x: x0, y: y0 } = photoOrigin(w, h, sw, sh);
+  const x1 = x0 + w; // first column right of the photo
+  const y1 = y0 + h; // first row below the photo
+  if ((y0 > 0 && y0 < T) || (x0 > 0 && x0 < T)) throw new Error(`${w}x${h} on ${sw}x${sh}: margin too thin for a ${T}px crop mark`);
+
+  /** The two marks along one edge, as [start, end) spans on the axis the edge runs along. */
+  const spans = (lo: number, hi: number, size: number): Array<[number, number, MarkRect["kind"]]> => {
+    const out: Array<[number, number, MarkRect["kind"]]> = [];
+    out.push(lo > 0 ? [E, lo - G, "corner"] : [E, E + L, "tick"]);
+    out.push(hi < size ? [hi + G, size - E, "corner"] : [size - E - L, size - E, "tick"]);
+    for (const [a, b] of out) if (b - a < 1) throw new Error(`${w}x${h} on ${sw}x${sh}: no room for a crop mark`);
+    return out;
+  };
   const marks: MarkRect[] = [];
-  if (top > 0) {
-    // Horizontal cut at y = top; marks occupy rows top−T … top−1.
-    const y = top - T;
-    marks.push({ x: M, y, width: F, height: T, cut: "h", kind: "flush" }); // left end: the photo meets the sheet's left edge
-    const ext = sw - M - (w + G);
-    if (right > 0 && ext >= MIN_EXTENSION) marks.push({ x: w + G, y, width: ext, height: T, cut: "h", kind: "extension" });
-    else marks.push({ x: sw - M - F, y, width: F, height: T, cut: "h", kind: "flush" });
+  if (y0 > 0) {
+    for (const [a, b, kind] of spans(x0, x1, sw)) {
+      marks.push({ x: a, y: y0 - T, width: b - a, height: T, edge: "top", kind });
+      marks.push({ x: a, y: y1, width: b - a, height: T, edge: "bottom", kind });
+    }
   }
-  if (right > 0) {
-    // Vertical cut at x = w; marks occupy columns w … w+T−1.
-    const ext = top - G - M;
-    if (top > 0 && ext >= MIN_EXTENSION) marks.push({ x: w, y: M, width: T, height: ext, cut: "v", kind: "extension" });
-    else marks.push({ x: w, y: M, width: T, height: F, cut: "v", kind: "flush" });
-    marks.push({ x: w, y: sh - M - F, width: T, height: F, cut: "v", kind: "flush" }); // bottom end: the photo meets the sheet's bottom edge
+  if (x0 > 0) {
+    for (const [a, b, kind] of spans(y0, y1, sh)) {
+      marks.push({ x: x0 - T, y: a, width: T, height: b - a, edge: "left", kind });
+      marks.push({ x: x1, y: a, width: T, height: b - a, edge: "right", kind });
+    }
   }
   return marks;
 }

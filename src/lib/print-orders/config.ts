@@ -80,8 +80,8 @@ export interface PrintProductConfig {
   /**
    * "native": the file is the print's own size.
    * "sheet": the file is placed on a sheet of `sheetWidth`×`sheetHeight` px
-   * (bottom-left, white padding top/right, gray trim marks in the padding, see
-   * TRIM_MARK) and ordered as that sheet size.
+   * (centered, white margin, gray corner crop marks in the margin, see TRIM_MARK)
+   * and ordered as that sheet size.
    */
   printedAs: "native" | "sheet";
   /** Only for printedAs "sheet". */
@@ -175,28 +175,27 @@ export const HARD_MIN_FRACTION = 0.5;
 export const ASPECT_TOLERANCE = 0.005;
 
 /**
- * Trim marks on a sheet print (approved 2026-11-12). Pixels at 300 DPI on the 1200px 4x4 sheet.
- * Solid gray lines, only in the white padding, never on the photo. Each mark lies along a cut
- * line with its photo-side edge exactly on that line ("cut along the side of the gray mark
- * closest to the photo"). Every cut line gets a mark at both ends:
- *  - where the cut runs past the photo's corner into white space: an extension mark, starting
- *    GAP past the corner and stopping EDGE_MARGIN short of the sheet edge;
- *  - where the photo runs to the sheet edge: a FLUSH_LENGTH mark lying against the photo's edge
- *    on the white side, starting EDGE_MARGIN in from the sheet edge.
- * Nothing is drawn within EDGE_MARGIN of the sheet edge, so a slight lab edge trim loses nothing.
+ * Crop marks on a sheet print (step 8, layout A, Kevin + Haily 2026-11-12; replaces step 7's
+ * bottom-left layout). Pixels at 300 DPI on the 1200px 4x4 sheet. The photo is CENTERED on the
+ * sheet; traditional corner crop marks, solid gray, never on the photo. Each mark lies in the
+ * THICKNESS px just outside a cut edge, in line with that edge, so cutting on the photo side of
+ * the marks gives the true print size. For each cut edge, one mark beyond each end of the edge:
+ *  - where there is margin beyond the end (3x3, 3.5x3.5): from GAP past the photo's corner to
+ *    EDGE_MARGIN before the sheet edge (3x3: 112px; 3.5x3.5: 37px);
+ *  - where the photo runs to the sheet edge (the 4" side of 4x3 / 3x4): a TICK_LENGTH tick beside
+ *    the photo, EDGE_MARGIN in from the sheet edge.
+ * No full-length lines. Nothing within EDGE_MARGIN of the sheet edge.
  */
 export const TRIM_MARK = {
   /** 4px = 1/75" (~0.34 mm, about 1 pt). */
   THICKNESS: 4,
   COLOR: { r: 128, g: 128, b: 128 },
-  /** 1/16": space between the photo's corner and an extension mark. */
+  /** 1/16": white between the photo's corner and a mark. */
   GAP: 19,
-  /** 1/8": nothing closer to the sheet edge than this. */
-  EDGE_MARGIN: 38,
-  /** 1/4": a mark lying against the photo's edge. */
-  FLUSH_LENGTH: 75,
-  /** An extension mark shorter than this is drawn as a flush mark instead. */
-  MIN_EXTENSION: 38,
+  /** 1/16": white between a mark and the sheet edge. */
+  EDGE_MARGIN: 19,
+  /** ~3/8": a tick beside a photo edge that runs to the sheet edge. */
+  TICK_LENGTH: 112,
 } as const;
 
 /**
