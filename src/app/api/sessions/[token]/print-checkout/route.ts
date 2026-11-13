@@ -6,6 +6,7 @@ import { getPrintedState } from "@/lib/print-orders/printed";
 import { ROUND_TTL_HOURS } from "@/lib/print-orders/config";
 import { printButtonAllowed } from "@/lib/print-orders/print-gate";
 import { prepareCheckout } from "@/lib/print-orders/checkout-prepare";
+import { fetchShopifyPricing } from "@/lib/print-orders/shopify-price";
 import type { SessionExtraRow, SessionPhotoRow } from "@/lib/print-orders/build-order";
 import type { ReprintRow } from "@/lib/print-orders/round";
 import { checkRateLimit, RATE_LIMITS, tooManyRequestsResponse } from "@/lib/rate-limit";
@@ -60,6 +61,7 @@ export async function POST(
       extraRows: (extraRows ?? []) as SessionExtraRow[],
       reprintRows: (reprintRows ?? []) as ReprintRow[],
       printed,
+      fetchPricing: (quantities) => fetchShopifyPricing(quantities),
       createRound: async (round) => {
         const { data, error } = await supabaseAdmin
           .from("print_rounds")

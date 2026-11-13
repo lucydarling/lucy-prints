@@ -1,7 +1,5 @@
 import { getBookSlots, parsePrintLabel, regionChoicesFromStoredPhotos, type PrintSize } from "@/lib/photo-slots";
 import {
-  PRICE_CENTS_BY_VARIANT_KEY,
-  SHIPPING_AND_HANDLING_CENTS,
   variantIdForKey,
   variantKeyFor,
   type PrintItemKind,
@@ -9,6 +7,7 @@ import {
 } from "./config";
 import type { SessionExtraRow, SessionPhotoRow } from "./build-order";
 import type { PrintedState } from "./printed";
+import type { ShopifyPricing } from "./shopify-price";
 
 /** One pending replacement crop for an already-printed slot (print_reprints row). */
 export interface ReprintRow {
@@ -116,14 +115,28 @@ export function quantityMismatches(paid: Record<string, number>, round: Record<s
   return out;
 }
 
-/** Price lines for the confirm step, from the (placeholder) config prices. */
-export function priceBreakdown(byKey: Partial<Record<PrintVariantKey, number>>) {
+/**
+ * Price lines for the confirm step, from Shopify's own prices (see shopify-price.ts): one line
+ * per variant key, quantity × that variant's price, plus Shopify's shipping quote.
+ */
+export function priceBreakdown(
+  byKey: Partial<Record<PrintVariantKey, number>>,
+  pricing: ShopifyPricing,
+  variantId: (k: PrintVariantKey) => string = (k) => variantIdForKey(k)
+) {
   const lines = (Object.keys(byKey) as PrintVariantKey[]).map((k) => {
     const quantity = byKey[k] ?? 0;
-    const unitCents = PRICE_CENTS_BY_VARIANT_KEY[k];
+    const unitCents = pricing.unitCentsByVariant[variantId(k)];
+    if (!Number.isInteger(unitCents)) throw new Error(`no Shopify price for the "${k}" print variant`);
     return { key: k, quantity, unitCents, cents: quantity * unitCents };
   });
   const printsCents = lines.reduce((n, l) => n + l.cents, 0);
-  return { lines, printsCents, shippingCents: SHIPPING_AND_HANDLING_CENTS, totalCents: printsCents + SHIPPING_AND_HANDLING_CENTS };
+  return {
+    lines,
+    printsCents,
+    shippingCents: pricing.shippingCents,
+    shippingFrom: pricing.shippingFrom,
+    totalCents: printsCents + pricing.shippingCents,
+  };
 }
 export const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;

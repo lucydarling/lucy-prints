@@ -17,7 +17,8 @@
     "print-order:check-stalled": "node --env-file=.env.local --import tsx scripts/print-order-check-stalled.ts",
     "dropbox:connect": "node --env-file=.env.local --import tsx scripts/dropbox-connect.ts",
     "print-order:rounds-e2e": "node --env-file=.env.local --import tsx scripts/print-order-rounds-e2e.ts",
-    "print-order:trim-samples": "node --import tsx scripts/print-order-trim-samples.ts"
+    "print-order:trim-samples": "node --import tsx scripts/print-order-trim-samples.ts",
+    "print-order:price-check": "node --env-file=.env.local --import tsx scripts/print-order-price-check.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1",

@@ -98,7 +98,14 @@ const photoRows = (n: number) =>
   getSlots(THEME).slice(0, n).map((s) => ({
     slot_key: s.key, storage_path: `p/${s.key}`, print_size: getPrintSizeLabel(s.size, s.orientation), status: "cropped" as const,
   }));
-const base = { token: "tok123", bookTheme: THEME, extraRows: [] as never[], reprintRows: [] as never[], printed: emptyPrinted(), variantId: () => "111" };
+/** Shopify's answer, as fetchShopifyPricing returns it: 137 cents a print, 650 cents shipping. */
+const fetchPricing = async (q: Record<string, number>) => ({
+  unitCentsByVariant: Object.fromEntries(Object.keys(q).map((id) => [id, 137])),
+  shippingCents: 650,
+  shippingFrom: false,
+  shippingName: "Photo Print Shipping",
+});
+const base = { token: "tok123", bookTheme: THEME, extraRows: [] as never[], reprintRows: [] as never[], printed: emptyPrinted(), variantId: () => "111", fetchPricing };
 const createRound = async () => "round-1";
 
 test("checkout: a saved book gets the confirm line, the price breakdown and a cart-clearing Shopify URL carrying the round", async () => {
@@ -107,7 +114,9 @@ test("checkout: a saved book gets the confirm line, the price breakdown and a ca
   if (!r.ok) return;
   assert.match(r.message, /^You're printing 9 new photos\. 0 of \d+ printed so far\.$/);
   assert.equal(r.price.lines[0].quantity, 9);
-  assert.equal(r.price.totalCents, 9 * r.price.lines[0].unitCents + r.price.shippingCents);
+  // Every number on the confirm step is Shopify's: its variant price and its shipping quote.
+  assert.deepEqual(r.price.lines.map((l) => [l.quantity, l.unitCents, l.cents]), [[9, 137, 9 * 137]]);
+  assert.deepEqual([r.price.shippingCents, r.price.shippingFrom, r.price.totalCents], [650, false, 9 * 137 + 650]);
   const u = new URL(r.url);
   assert.match(u.host, /lucydarling\.com$|example-shop\.test$/);
   assert.equal(u.pathname, "/cart/clear");
@@ -187,3 +196,26 @@ test("emails: received lists counts and ship-to and escapes customer-supplied te
   for (const e of [r, h, s]) assert.ok(!/free|discount|guarantee|days/i.test(e.html.replace(/<[^>]+>/g, " ")), "no offers or promises");
 });
 
+
+test("checkout: Shopify is asked for exactly the cart the link will hold; if it can't answer, no round is recorded", async () => {
+  const asked: Array<Record<string, number>> = [];
+  let rounds = 0;
+  const r = await prepareCheckout({
+    ...base, photoRows: photoRows(9), createRound: async () => { rounds++; return "round-1"; },
+    fetchPricing: async (q) => { asked.push(q); return fetchPricing(q); },
+  });
+  assert.ok(r.ok);
+  assert.deepEqual(asked, [{ "111": 9 }]);
+  if (r.ok) assert.equal(new URL(new URL(r.url).searchParams.get("return_to")!, "https://x.test").pathname, "/cart/111:9");
+  const failing = prepareCheckout({
+    ...base, photoRows: photoRows(9), createRound: async () => { rounds++; return "round-2"; },
+    fetchPricing: async () => { throw new Error("Shopify answered 503"); },
+  });
+  await assert.rejects(failing, /Shopify answered 503/);
+  assert.equal(rounds, 1, "the failed click recorded no round");
+  // A price for a different variant than the cart's is refused, never shown.
+  await assert.rejects(
+    prepareCheckout({ ...base, photoRows: photoRows(9), createRound, fetchPricing: async () => ({ ...(await fetchPricing({ "999": 1 })) }) }),
+    /no Shopify price for the "print" print variant/
+  );
+});

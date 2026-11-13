@@ -24,7 +24,7 @@ export function PrintOrderSection() {
   const [confirm, setConfirm] = useState<{
     url: string;
     message: string;
-    price: { lines: Array<{ quantity: number; unitCents: number; cents: number }>; printsCents: number; shippingCents: number; totalCents: number };
+    price: { lines: Array<{ quantity: number; unitCents: number; cents: number }>; printsCents: number; shippingCents: number; shippingFrom?: boolean; totalCents: number };
   } | null>(null);
 
   useEffect(() => {
@@ -119,8 +119,8 @@ export function PrintOrderSection() {
                   <span>{money(l.cents)}</span>
                 </p>
               ))}
-              <p className="flex justify-between"><span>Shipping &amp; handling</span><span>{money(confirm.price.shippingCents)}</span></p>
-              <p className="flex justify-between font-semibold text-gray-800 pt-1 border-t border-gray-100"><span>Total</span><span>{money(confirm.price.totalCents)}</span></p>
+              <p className="flex justify-between"><span>Shipping &amp; handling</span><span>{confirm.price.shippingFrom ? "from " : ""}{money(confirm.price.shippingCents)}</span></p>
+              <p className="flex justify-between font-semibold text-gray-800 pt-1 border-t border-gray-100"><span>Total before tax</span><span>{confirm.price.shippingFrom ? "from " : ""}{money(confirm.price.totalCents)}</span></p>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed mb-4">
               Once you pay, the photos in this order are locked. Everything else in your book stays open for your next order. Only photos that are saved will print.
