@@ -4,12 +4,14 @@ import sharp from "sharp";
 import { getPrintDimensions, getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
 import {
   handlePaidOrder,
+  PaidOrderBusy,
+  recordMayOverwrite,
   type AlertInfo,
+  type ExistingOrder,
   type CommitResult,
   type CustomerNotice,
   type PaidOrderDeps,
   type PaidOrderResult,
-  type PrintSnapshot,
   type RoundRecord,
   type ShopifyPaidOrder,
 } from "@/lib/print-orders/paid-order";
@@ -49,8 +51,14 @@ class World {
   reprints: Array<ReprintRow & { status: string }> = [];
   rounds = new Map<string, RoundRecord>();
   items: Array<{ order: string; kind: string; key: string; gen: number }> = [];
-  orders = new Map<string, { status: string; snapshot?: PrintSnapshot; roundId?: string }>();
+  orders = new Map<string, ExistingOrder>();
+  /** Fresh claims (claim_print_order): order id -> claim number. */
+  claims = new Map<string, number>();
+  nextClaim = 1;
+  commits = 0;
   recorded: Array<PaidOrderResult & { shopifyOrderId: string }> = [];
+  /** Every write attempted, including the ones the guard refused. */
+  attempts: string[] = [];
   alerts: AlertInfo[] = [];
   notices: CustomerNotice[] = [];
   freezes = 0;
@@ -66,8 +74,11 @@ class World {
   addExtra(id: string, quantity: number) {
     this.extraRows.push({ extra_id: id, print_size: "4x4", orientation: "portrait", storage_path: `live/${id}`, quantity });
   }
-  printed(): PrintedState {
-    return printedStateFromItems(this.items.map((i) => ({ kind: i.kind, item_key: i.key, generation: i.gen })));
+  /** Printed items; `exceptOrder` leaves out that Shopify order's own items (as the real query does). */
+  printed(exceptOrder?: string): PrintedState {
+    return printedStateFromItems(
+      this.items.filter((i) => i.order !== exceptOrder).map((i) => ({ kind: i.kind, item_key: i.key, generation: i.gen }))
+    );
   }
   /** What the checkout route does on a click: compute the round and record it. */
   click(ttlMs = 24 * 3600_000) {
@@ -93,10 +104,19 @@ class World {
       },
       loadRound: async (id) => w.rounds.get(id) ?? null,
       loadReprints: async () => w.reprints.filter((r) => r.status === "pending"),
-      loadPrinted: async () => w.printed(),
+      loadPrinted: async (_sessionId, orderId) => w.printed(orderId),
       roundUsedByOtherOrder: async (roundId, orderId) =>
         [...w.orders.entries()].some(([id, o]) => id !== orderId && o.roundId === roundId && ["ready", "sent", "error"].includes(o.status)),
-      loadExisting: async (id) => w.orders.get(id) ?? null,
+      loadExisting: async (id) => (w.orders.has(id) ? { ...w.orders.get(id)! } : null),
+      // claim_print_order: insert a processing row, or take the claim if nobody holds it.
+      claim: async (id) => {
+        if (w.claims.has(id)) return null;
+        const n = w.nextClaim++;
+        w.claims.set(id, n);
+        if (!w.orders.has(id)) w.orders.set(id, { status: "processing" });
+        return async () => { if (w.claims.get(id) === n) w.claims.delete(id); };
+      },
+      sleep: () => new Promise((r) => setTimeout(r, 1)),
       freeze: async (id, photoRows, extraRows) => {
         w.freezes += 1;
         return {
@@ -106,6 +126,7 @@ class World {
         };
       },
       commitRound: async ({ shopifyOrderId, roundId, snapshot }): Promise<CommitResult> => {
+        w.commits += 1;
         const reprintSlots = new Set((snapshot.reprints ?? []).map((r) => r.slot_key));
         const rows: Array<{ order: string; kind: string; key: string; gen: number }> = [];
         for (const r of snapshot.photoRows) {
@@ -134,9 +155,16 @@ class World {
         if (over.throwNotify) throw new Error("resend down");
         w.notices.push(n);
       },
+      // record_print_order: the same guard as the database.
       record: async (r) => {
+        w.attempts.push(r.status);
+        if (!recordMayOverwrite(w.orders.get(r.shopifyOrderId)?.status, r.status)) return false;
         w.recorded.push(r);
-        w.orders.set(r.shopifyOrderId, { status: r.status, snapshot: r.snapshot, roundId: r.roundId });
+        w.orders.set(r.shopifyOrderId, {
+          status: r.status, snapshot: r.snapshot, roundId: r.roundId, sessionId: r.sessionId,
+          externalId: r.externalId, printCount: r.printCount,
+        });
+        return true;
       },
     };
   }
@@ -393,6 +421,7 @@ test("orders that are not print orders are ignored; sent and error orders are ne
     const r = await handlePaidOrder(orderFor(13001, "x", 1), w2.deps());
     assert.equal(r.status, status);
     assert.equal(w2.recorded.length, 0);
+    assert.equal(w2.claims.size, 0, "claim released");
     await assert.rejects(handlePaidOrder(orderFor(13001, "x", 1), w2.deps(), { refreeze: true }), new RegExp(`already ${status}`));
   }
 
@@ -464,4 +493,134 @@ test("computeRound: unknown slots and empty or storage-less rows are ignored; pr
   assert.deepEqual(round.items.reprints, [{ reprint_id: "ok", slot_key: SLOTS[0] }]);
   assert.deepEqual([round.newPhotos, round.extras, round.reprints, round.total], [1, 2, 1, 4]);
   assert.deepEqual(round.quantities, { [V]: 4 });
+});
+
+// ---- Duplicate deliveries of the same Shopify order (2026-11-17, #60895) ----
+
+test("same order delivered twice, interleaved as on 2026-11-17: ends ready, one 'received' email, no refused/held alert", async () => {
+  const w = new World();
+  w.fill(SLOTS.slice(0, 8));
+  const { id, round } = w.click();
+  const order = orderFor(16001, id, round.total);
+
+  // Reproduce the race without serialization: B's claim is granted and its first read
+  // of print_orders ran before A wrote anything (null), while its printed check runs
+  // after A's items exist.
+  const b = w.deps();
+  b.claim = async () => async () => {};
+  let firstRead = true;
+  const realLoad = b.loadExisting;
+  b.loadExisting = async (oid) => { if (firstRead) { firstRead = false; return null; } return realLoad(oid); };
+
+  const a = await handlePaidOrder(order, w.deps());
+  assert.equal(a.status, "ready", a.reasons.join(";"));
+  const second = await handlePaidOrder(order, b);
+  assert.equal(second.status, "ready", "B reports what is recorded, not 'already printed'");
+  assert.equal(w.orders.get("16001")!.status, "ready");
+  assert.equal(w.alerts.length, 0, "no refused/held alert");
+  assert.deepEqual(w.notices.map((n) => n.kind), ["received"]);
+  assert.equal(w.items.filter((i) => i.order === "16001").length, 8, "items not duplicated");
+  assert.ok(w.recorded.every((r) => r.status === "processing" || r.status === "ready"), "no refused/held write landed");
+  assert.ok(!w.attempts.includes("refused") && !w.attempts.includes("held"), "B never even decided refused: its own items are not 'already printed'");
+
+  // And the real interleaving with serialization: both start together.
+  const w2 = new World();
+  w2.fill(SLOTS.slice(0, 8));
+  const c = w2.click();
+  const o2 = orderFor(16002, c.id, c.round.total);
+  const [r1, r2] = await Promise.all([handlePaidOrder(o2, w2.deps()), handlePaidOrder(o2, w2.deps())]);
+  assert.deepEqual([r1.status, r2.status], ["ready", "ready"]);
+  assert.equal(w2.freezes, 1, "the second delivery waited, then wrote nothing");
+  assert.equal(w2.commits, 1);
+  assert.equal(w2.alerts.length, 0);
+  assert.deepEqual(w2.notices.map((n) => n.kind), ["received"]);
+  assert.equal(w2.claims.size, 0, "claims released");
+});
+
+test("same order delivered twice in sequence: the second returns the recorded ready result with no writes, emails or alerts", async () => {
+  const w = new World();
+  w.fill(SLOTS.slice(0, 8));
+  const { id, round } = w.click();
+  const order = orderFor(17001, id, round.total);
+  const first = await handlePaidOrder(order, w.deps());
+  assert.equal(first.status, "ready");
+  const writes = w.recorded.length;
+  const second = await handlePaidOrder(order, w.deps());
+  assert.equal(second.status, "ready");
+  assert.equal(second.printCount, 8);
+  assert.equal(second.externalId, first.externalId);
+  assert.equal(w.recorded.length, writes, "no print_orders write");
+  assert.equal(w.freezes, 1, "no freeze");
+  assert.equal(w.commits, 1, "no commit");
+  assert.equal(w.alerts.length, 0);
+  assert.equal(w.notices.length, 1);
+});
+
+test("a refused or held result never overwrites a ready, sent or error row, and then alerts nobody", async () => {
+  for (const status of ["ready", "sent", "error"]) {
+    for (const outcome of ["refused", "held"] as const) {
+      const w = new World();
+      w.fill(SLOTS.slice(0, 8));
+      const { id, round } = w.click();
+      w.orders.set("18001", { status, externalId: "TEST-18001", printCount: 8 });
+      const deps = w.deps();
+      deps.loadExisting = (() => { let n = 0; return async (oid: string) => (n++ === 0 ? null : w.orders.get(oid) ?? null); })(); // stale first read
+      const order = outcome === "refused"
+        ? orderFor(18001, id, round.total, { note_attributes: [{ name: "session_token", value: "tok" }, { name: "book_theme", value: THEME }] })
+        : orderFor(18001, id, round.total - 1); // quantity mismatch -> held
+      const r = await handlePaidOrder(order, deps);
+      assert.equal(r.status, status, `${outcome} over ${status}`);
+      assert.equal(w.orders.get("18001")!.status, status);
+      assert.equal(w.alerts.length, 0);
+      assert.equal(w.notices.length, 0);
+    }
+  }
+  // The rule itself (record_print_order in migration 017 enforces the same).
+  for (const cur of ["ready", "sent", "error"]) for (const next of ["refused", "held", "processing"]) assert.equal(recordMayOverwrite(cur, next), false);
+  assert.equal(recordMayOverwrite("sent", "ready"), false);
+  assert.equal(recordMayOverwrite("processing", "held"), true, "a collision at commit still holds the order");
+  assert.equal(recordMayOverwrite("held", "ready"), true, "a fixed hold becomes ready");
+  assert.equal(recordMayOverwrite("refused", "processing"), true);
+  assert.equal(recordMayOverwrite(undefined, "refused"), true);
+});
+
+test("a slot printed by a DIFFERENT order still refuses; own items never do", async () => {
+  const w = new World();
+  w.fill(SLOTS.slice(0, 8));
+  const { id, round } = w.click();
+  w.items.push({ order: "other-order", kind: "slot", key: SLOTS[3], gen: 1 });
+  const r = await handlePaidOrder(orderFor(19001, id, round.total), w.deps());
+  assert.equal(r.status, "refused");
+  assert.match(r.reasons[0], new RegExp(`already printed \\(no paid reprint\\): ${SLOTS[3]}`));
+  assert.equal(w.alerts.length, 1);
+  assert.equal(w.printed("other-order").slots.size, 0);
+});
+
+test("a delivery that stopped after freezing ('processing' with a snapshot) is finished by the retry, reusing the snapshot", async () => {
+  const w = new World();
+  w.fill(SLOTS.slice(0, 8));
+  const { id, round } = w.click();
+  const order = orderFor(20001, id, round.total);
+  const deps = w.deps();
+  const realCommit = deps.commitRound;
+  deps.commitRound = async () => { throw new Error("crash before commit"); };
+  await assert.rejects(handlePaidOrder(order, deps), /crash before commit/);
+  assert.equal(w.orders.get("20001")!.status, "processing");
+  assert.equal(w.claims.size, 0, "claim released even on a crash");
+  w.photoRows = w.photoRows.filter((r) => r.slot_key !== SLOTS[0]); // customer edits after payment
+  deps.commitRound = realCommit;
+  const retry = await handlePaidOrder(order, w.deps());
+  assert.equal(retry.status, "ready", retry.reasons.join(";"));
+  assert.equal(w.freezes, 1, "snapshot reused");
+  assert.equal(w.items.filter((i) => i.order === "20001").length, 8);
+});
+
+test("a second delivery still blocked after the wait gives up with PaidOrderBusy (Shopify retries) and writes nothing", async () => {
+  const w = new World();
+  w.fill(SLOTS.slice(0, 8));
+  const { id, round } = w.click();
+  w.claims.set("21001", 999); // another delivery holds it
+  await assert.rejects(handlePaidOrder(orderFor(21001, id, round.total), w.deps(), { claimWaitMs: 20 }), PaidOrderBusy);
+  assert.equal(w.recorded.length, 0);
+  assert.equal(w.alerts.length, 0);
 });
