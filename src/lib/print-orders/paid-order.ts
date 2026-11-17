@@ -28,7 +28,30 @@ export interface ShopifyPaidOrder {
   contact_email?: string | null;
 }
 
-export type PaidOrderStatus = "ignored" | "ready" | "held" | "refused" | "sent" | "error";
+/** "processing" = claimed and frozen but not yet committed (never a final answer to Shopify). */
+export type PaidOrderStatus = "ignored" | "processing" | "ready" | "held" | "refused" | "sent" | "error";
+
+/** What is already recorded for a Shopify order. */
+export interface ExistingOrder {
+  status: string;
+  snapshot?: PrintSnapshot;
+  externalId?: string;
+  printCount?: number;
+  sessionId?: string;
+  roundId?: string;
+}
+
+/**
+ * The rule record_print_order (migration 017) enforces in the database, here
+ * for the tests' in-memory stand-in: refused, held and processing never
+ * overwrite ready, sent or error; nothing overwrites sent or error.
+ */
+export function recordMayOverwrite(current: string | undefined, next: string): boolean {
+  if (!current) return true;
+  if (current === "sent" || current === "error") return false;
+  if (current === "ready" && next !== "ready") return false;
+  return true;
+}
 
 /**
  * The exact rows a paid order prints, frozen at payment: only that round's
@@ -123,11 +146,23 @@ export interface PaidOrderDeps {
   loadRound: (roundId: string) => Promise<RoundRecord | null>;
   /** Pending reprints for the session (print_reprints.status = 'pending'). */
   loadReprints: (sessionId: string) => Promise<ReprintRow[]>;
-  loadPrinted: (sessionId: string) => Promise<PrintedState>;
+  /**
+   * What is printed for the session, NOT counting items owned by this same
+   * Shopify order (a second delivery of an order must not see its own items as
+   * "already printed"). Items of any other order count.
+   */
+  loadPrinted: (sessionId: string, shopifyOrderId: string) => Promise<PrintedState>;
   /** True when a DIFFERENT Shopify order already has a ready/sent/error print order for this round. */
   roundUsedByOtherOrder: (roundId: string, shopifyOrderId: string) => Promise<boolean>;
   /** What we already recorded for this Shopify order (webhook retries, manual retries). */
-  loadExisting: (shopifyOrderId: string) => Promise<{ status: string; snapshot?: PrintSnapshot } | null>;
+  loadExisting: (shopifyOrderId: string) => Promise<ExistingOrder | null>;
+  /**
+   * Take this order for one delivery (claim_print_order, migration 017). Returns a
+   * release function, or null while another delivery holds a fresh claim.
+   */
+  claim: (shopifyOrderId: string) => Promise<(() => Promise<void>) | null>;
+  /** Waits between claim attempts. Optional; defaults to setTimeout. */
+  sleep?: (ms: number) => Promise<void>;
   /**
    * Freeze the rows: copy each stored image to a path nobody else writes to
    * (e.g. print-orders/<order id>/…) and return rows pointing at the copies.
@@ -156,7 +191,11 @@ export interface PaidOrderDeps {
    * the real one sends at most once per order and failures never fail the order.
    */
   notify?: (n: CustomerNotice) => Promise<void>;
-  record: (r: PaidOrderResult & { shopifyOrderId: string; shopifyOrderName?: string }) => Promise<void>;
+  /**
+   * Write the outcome (record_print_order, migration 017). Returns false when the
+   * database refused it because the row is already ready, sent or error.
+   */
+  record: (r: PaidOrderResult & { shopifyOrderId: string; shopifyOrderName?: string }) => Promise<boolean>;
 }
 
 const attr = (o: ShopifyPaidOrder, name: string) =>
@@ -169,7 +208,17 @@ export interface HandleOptions {
    * re-freezes on retry: its customer may have fixed what was missing.
    */
   refreeze?: boolean;
+  /** How long a second delivery waits for the first to finish before giving up (default 30 s). */
+  claimWaitMs?: number;
 }
+
+/** Thrown when another delivery of the same order is still running after the wait. Answer 5xx so Shopify retries. */
+export class PaidOrderBusy extends Error {}
+
+const fromExisting = (e: ExistingOrder): PaidOrderResult => ({
+  status: e.status as PaidOrderStatus, reasons: [], warnings: [], snapshot: e.snapshot,
+  externalId: e.externalId, printCount: e.printCount, sessionId: e.sessionId, roundId: e.roundId,
+});
 
 /**
  * Decide what a paid Shopify order means for printing, and (if it is a print
@@ -191,20 +240,53 @@ export async function handlePaidOrder(
   opts: HandleOptions = {}
 ): Promise<PaidOrderResult> {
   const orderId = String(order.id);
-  const token = attr(order, "session_token");
   const lines = order.line_items ?? [];
   const printLines = lines.filter((l) => deps.printVariantIds.includes(String(l.variant_id)));
   if (printLines.length === 0) return { status: "ignored", reasons: ["no print line item"], warnings: [] };
 
+  // One delivery at a time per order. A second one waits for the first, then
+  // reads what it decided (below) and writes, emails and alerts nothing.
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const deadline = Date.now() + (opts.claimWaitMs ?? 30_000);
+  let release = await deps.claim(orderId);
+  while (!release) {
+    if (Date.now() >= deadline) throw new PaidOrderBusy(`order ${orderId} is being processed by another delivery`);
+    await sleep(500);
+    release = await deps.claim(orderId);
+  }
+  try {
+    return await processClaimed(order, orderId, printLines, deps, opts);
+  } finally {
+    try {
+      await release();
+    } catch (err) {
+      console.error(`could not release the claim on order ${orderId} (it expires on its own):`, err);
+    }
+  }
+}
+
+async function processClaimed(
+  order: ShopifyPaidOrder,
+  orderId: string,
+  printLines: NonNullable<ShopifyPaidOrder["line_items"]>,
+  deps: PaidOrderDeps,
+  opts: HandleOptions
+): Promise<PaidOrderResult> {
+  const token = attr(order, "session_token");
   const existing = await deps.loadExisting(orderId);
   // Sent to the printer (or failed there): never re-checked, re-frozen or overwritten here.
   if (existing?.status === "sent" || existing?.status === "error") {
     if (opts.refreeze) throw new Error(`order is already ${existing.status} — refusing to re-freeze it`);
-    return { status: existing.status, reasons: [], warnings: [], snapshot: existing.snapshot };
+    return fromExisting(existing);
   }
-  if (opts.refreeze && existing?.status === "ready") {
-    throw new Error("order is already ready — refusing to re-freeze it");
+  if (existing?.status === "ready") {
+    if (opts.refreeze) throw new Error("order is already ready — refusing to re-freeze it");
+    // Ready means frozen AND committed: a repeated delivery changes nothing.
+    return fromExisting(existing);
   }
+  // A delivery that froze the order and then stopped before committing (crash, timeout):
+  // its snapshot is what gets printed, so checks against live rows are skipped.
+  const frozenBefore = existing?.status === "processing" && !!existing.snapshot;
 
   const seen: { babyName?: string | null; roundId?: string; paidQuantity?: number } = {};
   const customerEmail = (order.email || order.contact_email || order.customer?.email || "").trim() || undefined;
@@ -224,7 +306,7 @@ export async function handlePaidOrder(
   };
 
 
-  const recordNow = (r: PaidOrderResult) =>
+  const recordNow = (r: PaidOrderResult): Promise<boolean> =>
     deps.record({
       ...r,
       customerEmail: r.customerEmail ?? customerEmail,
@@ -233,8 +315,10 @@ export async function handlePaidOrder(
       shopifyOrderId: orderId,
       shopifyOrderName: order.name,
     });
-  const done = async (r: PaidOrderResult) => {
-    await recordNow(r);
+  const done = async (r: PaidOrderResult): Promise<PaidOrderResult> => {
+    // The database refuses to downgrade a ready/sent/error row. Then this delivery
+    // decided nothing: report what is recorded, and email/alert nobody.
+    if (!(await recordNow(r))) return settled();
     if ((r.status === "ready" || r.status === "held") && existing?.status !== r.status && deps.notify && customerEmail) {
       try {
         // A hold can happen before anything was frozen, so it needs nothing from the snapshot.
@@ -266,6 +350,11 @@ export async function handlePaidOrder(
       }
     }
     return r;
+  };
+  const settled = async (): Promise<PaidOrderResult> => {
+    const now = await deps.loadExisting(orderId);
+    if (!now) throw new Error(`print order ${orderId} was not recorded`);
+    return fromExisting(now);
   };
   const refuse = (...reasons: string[]) => done({ status: "refused", reasons, warnings: [] });
 
@@ -305,20 +394,20 @@ export async function handlePaidOrder(
   const roundCheck = validatePrintRequest({ bookTheme: theme, newPhotos: round.items.slots.length, extraPrints: roundExtras, reprints: round.items.reprints.length });
   if (roundCheck.errors.length > 0) return hold(`the recorded round is not printable: ${roundCheck.errors.join("; ")}`);
   const placed = order.created_at ? Date.parse(order.created_at) : Date.now();
-  if (existing?.status !== "ready" && Date.parse(round.expires_at) < placed) {
+  if (!frozenBefore && Date.parse(round.expires_at) < placed) {
     return hold("the round had expired (24 hours) before this order was placed");
   }
 
   // Already-printed slots are never printed again unless a pending reprint replaces them.
-  const printed = await deps.loadPrinted(sessionId);
+  const printed = await deps.loadPrinted(sessionId, orderId);
   const pending = await deps.loadReprints(sessionId);
   const pendingById = new Map(pending.map((p) => [p.id, p]));
   const printedAgain = round.items.slots.filter((s) => printed.slots.has(s.slot_key)).map((s) => s.slot_key);
-  if (printedAgain.length > 0 && existing?.status !== "ready") {
+  if (printedAgain.length > 0) {
     return refuse(`already printed (no paid reprint): ${printedAgain.join(", ")}`);
   }
   const printedExtras = round.items.extras.filter((e) => printed.extras.has(e.extra_id)).map((e) => e.extra_id);
-  if (printedExtras.length > 0 && existing?.status !== "ready") {
+  if (printedExtras.length > 0) {
     return refuse(`extras already printed: ${printedExtras.join(", ")}`);
   }
 
@@ -348,7 +437,7 @@ export async function handlePaidOrder(
       photoRows.push({ slot_key: row.slot_key, storage_path: row.storage_path, print_size: row.print_size, status: "cropped" });
     }
   }
-  if (missing.length > 0 && existing?.status !== "ready") return hold(`changed since checkout: ${missing.join("; ")}`);
+  if (missing.length > 0 && !frozenBefore) return hold(`changed since checkout: ${missing.join("; ")}`);
 
   // Freeze at payment (first sight), or reuse what was frozen. Never live rows after that.
   const reuse = existing?.snapshot && existing.status !== "held" && !opts.refreeze;
@@ -372,9 +461,12 @@ export async function handlePaidOrder(
     return finish({ status: "refused", reasons: [(err as Error).message], warnings: [] });
   }
 
-  // The order row must exist before its items (they reference it). If we stop after this
-  // and before the commit, a retry of the webhook finds a ready order and commits again.
-  await recordNow({ status: "ready", reasons: [], warnings: built.warnings, externalId: built.folderName, printCount: built.printCount, sessionId, roundId, snapshot });
+  // Save the snapshot as "processing" before the items (they reference the row). If we stop
+  // after this and before the commit, a retry finds it, reuses the snapshot and commits.
+  // Nothing delivers a processing order. If the row is already final, stop here.
+  if (!(await recordNow({ status: "processing", reasons: [], warnings: built.warnings, externalId: built.folderName, printCount: built.printCount, sessionId, roundId, snapshot }))) {
+    return settled();
+  }
   // Make the items count as printed. A collision with another order's items holds this one.
   const commit = await deps.commitRound({ shopifyOrderId: orderId, sessionId, roundId, snapshot });
   if (!commit.ok) return finish({ status: "held", reasons: [commit.reason], warnings: [] });

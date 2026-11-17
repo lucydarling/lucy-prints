@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { sendPrintOrderAlert, sendPrintOrderHeld, sendPrintOrderReceived, resolveAppUrl } from "@/lib/email";
 import { BOOK_THEMES, getSlots } from "@/lib/photo-slots";
@@ -33,7 +34,7 @@ export function realPaidOrderDeps(): PaidOrderDeps {
       if (error) throw new Error(`print_reprints lookup failed: ${error.message}`);
       return (data ?? []) as ReprintRow[];
     },
-    loadPrinted: (sessionId) => getPrintedState(sessionId),
+    loadPrinted: (sessionId, shopifyOrderId) => getPrintedState(sessionId, { excludeShopifyOrderId: shopifyOrderId }),
     roundUsedByOtherOrder: async (roundId, shopifyOrderId) => {
       const { data, error } = await supabaseAdmin
         .from("print_orders")
@@ -48,11 +49,31 @@ export function realPaidOrderDeps(): PaidOrderDeps {
     loadExisting: async (shopifyOrderId) => {
       const { data, error } = await supabaseAdmin
         .from("print_orders")
-        .select("status, snapshot")
+        .select("status, snapshot, external_id, print_count, session_id, round_id")
         .eq("shopify_order_id", shopifyOrderId)
         .maybeSingle();
       if (error) throw new Error(`print_orders lookup failed: ${error.message}`);
-      return data ? { status: data.status as string, snapshot: (data.snapshot ?? undefined) as PrintSnapshot | undefined } : null;
+      return data
+        ? {
+            status: data.status as string,
+            snapshot: (data.snapshot ?? undefined) as PrintSnapshot | undefined,
+            externalId: (data.external_id ?? undefined) as string | undefined,
+            printCount: (data.print_count ?? undefined) as number | undefined,
+            sessionId: (data.session_id ?? undefined) as string | undefined,
+            roundId: (data.round_id ?? undefined) as string | undefined,
+          }
+        : null;
+    },
+    // Migration 017. A claim older than 5 minutes (a crashed delivery; the route's limit is 60 s) is taken over.
+    claim: async (shopifyOrderId) => {
+      const claimId = randomUUID();
+      const { data, error } = await supabaseAdmin.rpc("claim_print_order", { p_shopify_order_id: shopifyOrderId, p_claim: claimId, p_stale_seconds: 300 });
+      if (error) throw new Error(`print order claim failed: ${error.message}`);
+      if (data !== true) return null;
+      return async () => {
+        const { error: relErr } = await supabaseAdmin.rpc("release_print_order", { p_shopify_order_id: shopifyOrderId, p_claim: claimId });
+        if (relErr) throw new Error(relErr.message);
+      };
     },
     // Copies are made inside the bucket under print-orders/<order id>/ — nothing is deleted or moved.
     freeze: async (shopifyOrderId, photoRows, extraRows) => {
@@ -103,9 +124,11 @@ export function realPaidOrderDeps(): PaidOrderDeps {
         .eq("shopify_order_id", n.shopifyOrderId);
       if (markError) console.error(`sent ${n.kind} email but could not record ${col}:`, markError.message);
     },
+    // Migration 017: one guarded statement, so a refused/held/processing result can never
+    // overwrite a ready, sent or error row. False = the database kept the existing row.
     record: async (r) => {
-      const { error } = await supabaseAdmin.from("print_orders").upsert(
-        {
+      const { data, error } = await supabaseAdmin.rpc("record_print_order", {
+        p: {
           shopify_order_id: r.shopifyOrderId,
           shopify_order_name: r.shopifyOrderName ?? null,
           session_id: r.sessionId ?? null,
@@ -117,13 +140,11 @@ export function realPaidOrderDeps(): PaidOrderDeps {
           print_count: r.printCount ?? null,
           round_id: r.roundId ?? null,
           paid_quantity: r.paidQuantity ?? null,
-          ...(r.customerEmail ? { customer_email: r.customerEmail } : {}),
-          test_mode: true,
-          updated_at: new Date().toISOString(),
+          customer_email: r.customerEmail ?? null,
         },
-        { onConflict: "shopify_order_id" }
-      );
+      });
       if (error) throw new Error(`print_orders write failed: ${error.message}`);
+      return data === true;
     },
   };
 }

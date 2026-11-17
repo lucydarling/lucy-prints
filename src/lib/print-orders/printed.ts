@@ -41,11 +41,17 @@ export function printedStateFromItems(rows: PrintedItemRow[]): PrintedState {
  * frozen copies, so a missed lock can never change a printed order; a customer
  * blocked by an outage would be worse.
  */
-export async function getPrintedState(sessionId: string): Promise<PrintedState> {
-  const { data, error } = await supabaseAdmin
-    .from("print_order_items")
-    .select("kind, item_key, generation")
-    .eq("session_id", sessionId);
+export async function getPrintedState(sessionId: string, opts: { excludeShopifyOrderId?: string } = {}): Promise<PrintedState> {
+  // With excludeShopifyOrderId, items owned by that Shopify order's print_orders row are
+  // left out, in the same query (an inner join), so a concurrent write can't slip between two reads.
+  const query = opts.excludeShopifyOrderId
+    ? supabaseAdmin
+        .from("print_order_items")
+        .select("kind, item_key, generation, print_orders!inner(shopify_order_id)")
+        .eq("session_id", sessionId)
+        .neq("print_orders.shopify_order_id", opts.excludeShopifyOrderId)
+    : supabaseAdmin.from("print_order_items").select("kind, item_key, generation").eq("session_id", sessionId);
+  const { data, error } = await query;
   if (error) {
     // 42P01 / PGRST205 = table not created yet.
     if (!/42P01|PGRST205|does not exist|schema cache/i.test(`${error.code ?? ""} ${error.message}`)) {

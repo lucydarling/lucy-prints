@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handlePaidOrder, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
+import { handlePaidOrder, PaidOrderBusy, type ShopifyPaidOrder } from "@/lib/print-orders/paid-order";
 import { realPaidOrderDeps } from "@/lib/print-orders/paid-order-deps";
 import { verifyShopifyHmac } from "@/lib/print-orders/webhook-hmac";
 import { syncPrintRoundReminders } from "@/lib/print-orders/round-reminder-sync";
@@ -46,8 +46,18 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "bad body" }, { status: 400 });
   }
+  // Which delivery this is: Shopify keeps X-Shopify-Webhook-Id on its own retries
+  // and gives a separate event a new one. Logged so a duplicate can be told apart.
+  const delivery = {
+    order: order?.id,
+    webhookId: req.headers.get("x-shopify-webhook-id"),
+    eventId: req.headers.get("x-shopify-event-id"),
+    triggeredAt: req.headers.get("x-shopify-triggered-at"),
+  };
+  console.log(`[orders-paid] delivery ${JSON.stringify(delivery)}`);
   try {
     const result = await handlePaidOrder(order, realPaidOrderDeps());
+    console.log(`[orders-paid] order ${delivery.order} webhook ${delivery.webhookId}: ${result.status}`);
     // Refresh the Klaviyo round-reminder properties (only when print ordering is
     // on for everyone; never throws, never changes the webhook's answer).
     if (result.status === "ready" && result.sessionId) {
@@ -55,6 +65,11 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ status: result.status });
   } catch (err) {
+    // Another delivery of this order is still running: let Shopify retry later.
+    if (err instanceof PaidOrderBusy) {
+      console.warn(`[orders-paid] ${err.message}`);
+      return NextResponse.json({ error: "busy" }, { status: 503 });
+    }
     console.error("print order webhook failed:", err);
     return NextResponse.json({ error: "server error" }, { status: 500 });
   }
