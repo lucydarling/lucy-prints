@@ -8,12 +8,19 @@
  *   npm run print-order:duplicate-e2e -- local   <session id>   both deliveries through handlePaidOrder + real Supabase deps
  *   npm run print-order:duplicate-e2e -- route   <session id>   both deliveries POSTed to the deployed webhook with a valid HMAC
  *                                                             (needs SHOPIFY_WEBHOOK_SECRET in the environment)
+ *   npm run print-order:duplicate-e2e -- prepare <session id>   sets the test up and writes the exact body to DUP_BODY_FILE,
+ *                                                             for signing elsewhere (e.g. in the Shopify admin page, so the
+ *                                                             secret never leaves it); then run `route` with
+ *                                                             SHOPIFY_WEBHOOK_HMAC=<base64 signature of that body>
  *   npm run print-order:duplicate-e2e -- cleanup <session id>   removes ONLY this test's rows and files
  *
  * The session must have no photos, rounds or orders of its own before `local`/`route`:
  * cleanup empties it again. Order id 99000301 can never collide with a real Shopify order.
  */
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import pathLib from "node:path";
 import sharp from "sharp";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getPrintDimensions, getPrintSizeLabel, getSlots } from "@/lib/photo-slots";
@@ -33,12 +40,25 @@ const ok = (cond: unknown, msg: string) => {
 
 async function main() {
   const [mode, sid] = process.argv.slice(2);
-  if (!["local", "route", "cleanup"].includes(mode) || !sid) throw new Error("usage: duplicate-e2e local|route|cleanup <session id>");
+  if (!["local", "prepare", "route", "cleanup"].includes(mode) || !sid) throw new Error("usage: duplicate-e2e local|prepare|route|cleanup <session id>");
   const { data: session } = await supabaseAdmin.from("sessions").select("id, token, email, book_theme").eq("id", sid).maybeSingle();
   if (!session) throw new Error("session not found");
   if (!/@lucydarling\.com$/i.test(session.email) || session.book_theme !== THEME) throw new Error("refusing: not an internal @lucydarling.com little_artist test session");
   if (mode === "cleanup") return cleanup(sid);
+  const bodyFile = process.env.DUP_BODY_FILE ?? pathLib.join(os.tmpdir(), "duplicate-e2e-body.json");
+  const presigned = mode === "route" && !process.env.SHOPIFY_WEBHOOK_SECRET && process.env.SHOPIFY_WEBHOOK_HMAC;
+  const { order, body, started } = presigned
+    ? (JSON.parse(fs.readFileSync(bodyFile, "utf8")) as { order: ShopifyPaidOrder; body: string; started: string })
+    : await setup(sid, session.token as string, mode);
+  if (mode === "prepare") {
+    fs.writeFileSync(bodyFile, JSON.stringify({ order, body, started }));
+    console.log(`body written to ${bodyFile} (${Buffer.byteLength(body)} bytes); sign it and run route with SHOPIFY_WEBHOOK_HMAC`);
+    return;
+  }
+  await run(sid, mode, order, body, started);
+}
 
+async function setup(sid: string, token: string, mode: string) {
   for (const t of ["session_photos", "print_rounds", "print_orders", "print_order_items"]) {
     const { count } = await supabaseAdmin.from(t).select("*", { count: "exact", head: true }).eq("session_id", sid);
     if (count) throw new Error(`refusing: the session already has ${count} ${t} rows (run cleanup first, or pick an empty test session)`);
@@ -64,13 +84,15 @@ async function main() {
   const order: ShopifyPaidOrder = {
     id: ORDER_ID, name: "#DUP-E2E", email: "duplicate-e2e@example.test", created_at: new Date().toISOString(), financial_status: "paid",
     line_items: [{ variant_id: Number(variantIdForKey("print")), quantity: round.total }],
-    note_attributes: [{ name: "session_token", value: session.token }, { name: "book_theme", value: THEME }, { name: "round_id", value: r.id }],
+    note_attributes: [{ name: "session_token", value: token }, { name: "book_theme", value: THEME }, { name: "round_id", value: r.id }],
     shipping_address: { first_name: "Dup", last_name: "Tester", address1: "1 Test Way", city: "Salt Lake City", province_code: "UT", zip: "84116", country_code: "US" },
     customer: { first_name: "Dup", last_name: "Tester" },
   };
   console.log(`round ${r.id}: ${round.total} prints; order ${ORDER_ID}; mode ${mode}`);
-  const started = new Date().toISOString();
+  return { order, body: JSON.stringify(order), started: new Date().toISOString() };
+}
 
+async function run(sid: string, mode: string, order: ShopifyPaidOrder, body: string, started: string) {
   if (mode === "local") {
     const counts = { notify: 0, alert: 0 };
     const deps = realPaidOrderDeps();
@@ -84,9 +106,8 @@ async function main() {
     ok(counts.alert === 0, `no refused/held alert (${counts.alert})`);
   } else {
     const secret = process.env.SHOPIFY_WEBHOOK_SECRET;
-    if (!secret) throw new Error("SHOPIFY_WEBHOOK_SECRET is not set");
-    const body = JSON.stringify(order);
-    const hmac = crypto.createHmac("sha256", secret).update(body, "utf8").digest("base64");
+    const hmac = secret ? crypto.createHmac("sha256", secret).update(body, "utf8").digest("base64") : process.env.SHOPIFY_WEBHOOK_HMAC;
+    if (!hmac) throw new Error("set SHOPIFY_WEBHOOK_SECRET, or SHOPIFY_WEBHOOK_HMAC after `prepare`");
     const post = (webhookId: string) =>
       fetch(WEBHOOK_URL, {
         method: "POST", body,
