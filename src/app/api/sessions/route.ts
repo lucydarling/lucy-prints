@@ -13,6 +13,7 @@ import {
   isSideBookTheme,
 } from "@/lib/klaviyo";
 import { isThemeAllowed } from "@/lib/preview-gate";
+import { sanitizeProps } from "@/lib/usage-events";
 import { syncPrintRoundReminders } from "@/lib/print-orders/round-reminder-sync";
 import {
   checkRateLimit,
@@ -220,6 +221,19 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         console.error("Klaviyo sync after response failed (new):", err);
+      }
+    });
+
+    // Entry source (UTM + referrer host) for this NEW session only; a returning
+    // email that reuses a session is not a new start. Best effort, after the response.
+    after(async () => {
+      try {
+        const { error: evError } = await supabaseAdmin
+          .from("photo_lab_events")
+          .insert({ session_id: session.id, event: "session_started", props: sanitizeProps("session_started", body.entry) });
+        if (evError) console.error("session_started event error:", evError.message);
+      } catch (err) {
+        console.error("session_started event failed:", err);
       }
     });
 

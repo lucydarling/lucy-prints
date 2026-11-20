@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSaveStore } from "@/store/save-store";
 import { usePhotoStore } from "@/store/photo-store";
 import { getProductForTheme } from "@/lib/photo-slots";
+import { getEntrySource } from "@/lib/entry-source";
 
 // Outer shell — only renders the form when the modal is open so useState
 // initializers always read fresh values from the store on each open.
@@ -91,6 +92,7 @@ function SaveProgressModalForm() {
           bookTheme,
           notes: Object.keys(notes).length > 0 ? notes : undefined,
           detailsMode: detailsMode || undefined,
+          entry: getEntrySource(),
         }),
       });
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import { EntrySourceCapture } from "@/components/EntrySourceCapture";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -83,6 +84,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} antialiased bg-gray-50`}
       >
+        <EntrySourceCapture />
         {children}
         <footer className="text-center text-xs text-gray-400 py-6 mt-12 border-t border-gray-100">
           <a href="https://lucydarling.com" className="hover:text-gray-600 transition-colors">Lucy Darling</a>

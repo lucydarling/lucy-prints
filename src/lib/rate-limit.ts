@@ -49,6 +49,8 @@ export const RATE_LIMITS = {
   siblings: { limit: 30, window: "60 s", prefix: "rl:siblings" },
   // The print button calls this once per click.
   printCheckout: { limit: 20, window: "60 s", prefix: "rl:print-checkout" },
+  // Usage events: a few per page view at most; 60/min per session token.
+  events: { limit: 60, window: "60 s", prefix: "rl:events" },
   // Email spam is the abuse vector → tight per-email, looser per-IP.
   myBooksEmailPerEmail: { limit: 3, window: "10 m", prefix: "rl:mybooks:email" },
   myBooksEmailPerIp: { limit: 10, window: "10 m", prefix: "rl:mybooks:ip" },

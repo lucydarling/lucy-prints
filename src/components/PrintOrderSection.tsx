@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSaveStore } from "@/store/save-store";
+import { trackEvent } from "@/lib/track-event";
 
 /**
  * The block at the bottom of the review page. Until the server says print
@@ -68,7 +69,14 @@ export function PrintOrderSection() {
     try {
       const res = await fetch(`/api/sessions/${sessionToken}/print-checkout`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (data.url && data.message && data.price) setConfirm({ url: data.url, message: data.message, price: data.price });
+      if (data.url && data.message && data.price) {
+        setConfirm({ url: data.url, message: data.message, price: data.price });
+        trackEvent(sessionToken, "print_price_shown", {
+          print_count: (data.price.lines as Array<{ quantity: number }>).reduce((n, l) => n + l.quantity, 0),
+          prints_cents: data.price.printsCents,
+          shipping_cents: data.price.shippingCents,
+        });
+      }
       else setErrors(data.errors ?? ["print ordering is not available right now"]);
     } catch {
       setErrors(["print ordering is not available right now"]);
@@ -132,7 +140,7 @@ export function PrintOrderSection() {
             >
               Continue to checkout
             </button>
-            <button type="button" onClick={() => setConfirm(null)} className="w-full mt-2 py-2 text-xs text-gray-500 underline">
+            <button type="button" onClick={() => { trackEvent(sessionToken, "print_confirm_cancelled"); setConfirm(null); }} className="w-full mt-2 py-2 text-xs text-gray-500 underline">
               Cancel
             </button>
           </div>

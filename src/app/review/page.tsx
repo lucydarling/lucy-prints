@@ -8,6 +8,7 @@ import { useSaveStore } from "@/store/save-store";
 import { getBookProgress, getBookSlots, getPrintAspectRatio, getProductForTheme, type PrintSize } from "@/lib/photo-slots";
 import { bookPrintItems, slotPrint, summarizePrints } from "@/lib/print-summary";
 import { downloadPhotosZip } from "@/lib/download-zip";
+import { trackEvent, nextDownloadNumber } from "@/lib/track-event";
 import { SaveProgressModal } from "@/components/SaveProgressModal";
 import { BabyInfoModal } from "@/components/BabyInfoModal";
 import { useAutoUpload } from "@/hooks/useAutoUpload";
@@ -49,6 +50,25 @@ export default function ReviewPage() {
     }
   }, [bookTheme, router]);
 
+  // One call per finished ZIP: the post-save auto-download and executeDownload
+  // are mutually exclusive (see handleDownload), so each ZIP records one event.
+  // Fire-and-forget: never awaited, never throws.
+  function recordDownload(padAll: boolean, pad3: boolean) {
+    if (!sessionToken || !bookTheme) return;
+    const slots = getBookSlots(bookTheme, regionLayouts);
+    const slotCount = slots.filter((slot) => photos[slot.key]?.croppedUrl).length;
+    const extrasCount = extras.filter((e) => e.croppedUrl).length;
+    const has3x3 =
+      summarizePrints(bookPrintItems(slots, photos, extras)).countBySize["3x3"] > 0;
+    trackEvent(sessionToken, "zip_downloaded", {
+      photo_count: slotCount,
+      extras_count: extrasCount,
+      print_option: padAll ? "all-on-4x6" : pad3 && has3x3 ? "pad-3x3-to-4x4" : "as-is",
+      book_product: getProductForTheme(bookTheme) ?? "memory_book",
+      download_number: nextDownloadNumber(sessionToken),
+    });
+  }
+
   // After save modal completes, auto-trigger the pending download
   useEffect(() => {
     if (!pendingDownload.current || !sessionToken || !bookTheme) return;
@@ -65,7 +85,10 @@ export default function ReviewPage() {
       babyName,
       notes,
     })
-      .then(() => setDownloaded(true))
+      .then(() => {
+        recordDownload(padAllTo4x6, pad3x3);
+        setDownloaded(true);
+      })
       .catch((err) => {
         console.error("Download error:", err);
         alert("Something went wrong creating the download. Please try again.");
@@ -118,6 +141,7 @@ export default function ReviewPage() {
         babyName,
         notes,
       });
+      recordDownload(padAllTo4x6, pad3x3);
       setDownloaded(true);
     } catch (err) {
       console.error("Download error:", err);
